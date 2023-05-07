@@ -1,0 +1,11 @@
+{
+  "app.title": "Chat",
+  "app.status": "Status",
+  "app.status.connected.online": "online",
+  "app.status.connected.offline": "offline",
+  "app.exit": "Exit",
+  "contacts.list.empty": "Contacts not found",
+  "chat.create.dialog.selected.contacts": "Selected Members",
+  "chat.content.empty": "Select a chat to start messaging",
+  "chat.header.info": "Last post on {date}"
+}

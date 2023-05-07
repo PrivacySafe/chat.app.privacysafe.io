@@ -1,0 +1,99 @@
+{
+  "name": "Apps Chats",
+  "appDomain": "chat.app.privacysafe.io",
+  "version": "0.4.6",
+  "components": {
+    "/index.html": {
+      "startedBy": "user",
+      "runtime": "web-gui",
+      "capsRequested": {
+        "apps": "opener",
+        "logout": "all",
+        "log": "all",
+        "mailerid": true,
+        "shell": {
+          "fileDialog": "all",
+          "userNotifications": true
+        },
+        "storage": {
+          "appFS": [
+            {
+              "domain": "chat.app.privacysafe.io",
+              "storage": "synced-n-local"
+            }
+          ],
+          "userFS": "all",
+          "sysFS": "all"
+        },
+        "mail": {
+          "sendingTo": "all",
+          "receivingFrom": "all"
+        },
+        "appRPC": {
+          "serviceComponents": ["AppChatsInternal", "ChatDeliveryService"]
+        },
+        "otherAppsRPC": {
+          "callable": [
+            {
+              "app": "launcher.app.privacysafe.io",
+              "component": "AppConfigs"
+            },
+            {
+              "app": "contacts.app.privacysafe.io",
+              "component": "AppContacts"
+            }
+          ]
+        },
+        "connectivity": "check"
+      },
+      "windowOpts": {
+        "width": 1200,
+        "height": 600,
+        "minWidth": 700,
+        "minHeight": 512,
+        "maxWidth": 1440
+      }
+    },
+    "/chatsDenoServices.js": {
+      "startedBy": {
+        "thisAppComponents": "*",
+        "otherApps": "*"
+      },
+      "services": ["AppChatsInternal"],
+      "runtime": "deno",
+      "capsRequested": {
+        "log": "all",
+        "mailerid": true,
+        "storage": {
+          "appFS": "default"
+        }
+      }
+    },
+    "/deliveryDenoServices.js": {
+      "startedBy": {
+        "thisAppComponents": "*",
+        "otherApps": "*"
+      },
+      "services": ["ChatDeliveryService"],
+      "runtime": "deno",
+      "capsRequested": {
+        "log": "all",
+        "mail": {
+          "sendingTo": "all",
+          "receivingFrom": "all"
+        },
+        "mailerid": true,
+        "storage": {
+          "appFS": [
+            {
+              "domain": "chat.app.privacysafe.io",
+              "storage": "local"
+            }
+          ],
+          "userFS": "all",
+          "sysFS": "all"
+        }
+      }
+    }
+  }
+}

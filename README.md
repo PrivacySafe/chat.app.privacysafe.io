@@ -1,1 +1,1 @@
-# chat.app.privacysafe.io
+# Chat app for 3NWeb platform (Vue3)
