@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
-import Chats from '@/components/chats.vue'
-import Chat from '@/components/chat.vue'
+import Chats from '@/components/chat/chats.vue'
+import Chat from '@/components/chat/chat.vue'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/chats' },

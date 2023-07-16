@@ -11,23 +11,24 @@ import { MultiConnectionIPCWrap } from './ipc-service.js'
 // @ts-ignore
 import { chatValueToSqlInsertParams, messageValueToSqlInsertParams, objectFromQueryExecResult } from './helpers/chats.helpers.ts'
 // @ts-ignore
-import { randomStr } from './helpers/random.ts'
+import { getRandomId } from './helpers/common.helpers.ts'
 
 type SqlValue = number | string | Blob | Uint8Array | null
 
 const chatByIdQuery = 'SELECT * FROM chats WHERE chatId=$chatId'
 const chatByMembersQuery = 'SELECT * FROM chats WHERE members=$members'
 const chatsWithMessagesQuery = 'SELECT * FROM chats, messages WHERE chats.chatId=messages.chatId AND messages.timestamp=(SELECT Max(timestamp) FROM messages WHERE messages.chatId=chats.chatId)'
-const chatsUnreadMessagesCountQuery = 'SELECT chatId, COUNT(*) AS unread FROM messages WHERE status="received" AND messageType="incoming" GROUP BY chatId'
+const chatsUnreadMessagesCountQuery = 'SELECT chatId, COUNT(*) AS unread FROM messages WHERE status="received" AND messageType="incoming" AND chatMessageType="regular" GROUP BY chatId'
 const chatsWithoutMessagesQuery = 'SELECT * FROM chats WHERE NOT EXISTS (SELECT msgId FROM messages WHERE messages.chatId=chats.chatId)'
-const insertChatQuery = 'INSERT INTO chats(chatId, name, members, createdAt) VALUES ($chatId, $name, $members, $createdAt)'
-const upsertChatQuery = 'INSERT INTO chats(chatId, name, members, createdAt) VALUES ($chatId, $name, $members, $createdAt) ON CONFLICT(chatId) DO UPDATE SET chatId=$chatId, name=$name, members=$members, createdAt=$createdAt'
-const deleteChatQuery = 'DELETE FROM chats WHERE chatId=$chatId'
+const insertChatQuery = 'INSERT INTO chats(chatId, name, members, admins, createdAt) VALUES ($chatId, $name, $members, $admins, $createdAt)'
+const upsertChatQuery = 'INSERT INTO chats(chatId, name, members, admins, createdAt) VALUES ($chatId, $name, $members, $admins, $createdAt) ON CONFLICT(chatId) DO UPDATE SET chatId=$chatId, name=$name, members=$members, admins=$admins, createdAt=$createdAt'
+const deleteChatQuery = 'PRAGMA foreign_keys=ON; DELETE FROM chats WHERE chatId=$chatId'
 const clearChatQuery = 'DELETE FROM messages WHERE chatId=$chatId'
 
 const messagesByChatQuery = 'SELECT * FROM messages WHERE chatId=$chatId'
 const messageByMsgIdQuery = 'SELECT * FROM messages WHERE msgId=$msgId'
 const messageByChatMsgIdQuery = 'SELECT * FROM messages WHERE chatMessageId=$chatMessageId'
+// const deleteMessageByChatId = 'DELETE FROM messages WHERE chatId=$chatId'
 const deleteMessageByMsgId = 'DELETE FROM messages WHERE msgId=$msgId'
 const deleteMessageByChatMsgId = 'DELETE FROM messages WHERE chatMessageId=$chatMessageId'
 const insertMessageQuery = 'INSERT INTO messages(msgId, messageType, sender, body, attachments, chatId, chatMessageType, chatMessageId, initialMessageId, status, timestamp) VALUES ($msgId, $messageType, $sender, $body, $attachments, $chatId, $chatMessageType, $chatMessageId, $initialMessageId, $status, $timestamp)'
@@ -43,15 +44,15 @@ class ChatService {
   }
 
   static async initialization(): Promise<ChatService> {
-    console.log('\n--- START CHAT SERVICE INITIALIZATION ---\n')
     const fs = await w3n.storage!.getAppSyncedFS()
     const file = await fs.writableFile('chats-db')
     const sqlite = await SQLiteOn3NStorage.makeAndStart(file)
 
     sqlite.db.exec(`CREATE TABLE IF NOT EXISTS chats (
       chatId TEXT PRIMARY KEY UNIQUE,
-      name TEXT NOT NULL,
+      name TEXT,
       members TEXT NOT NULL,
+      admins TEXT NOT NULL,
       createdAt INTEGER NOT NULL
     ) STRICT`)
 
@@ -61,7 +62,7 @@ class ChatService {
       messageType TEXT NOT NULL,
       sender TEXT,
       body TEXT NOT NULL,
-      attachments BLOB,
+      attachments TEXT,
       chatMessageType TEXT NOT NULL,
       initialMessageId TEXT,
       status TEXT,
@@ -74,24 +75,29 @@ class ChatService {
     return new ChatService(sqlite)
   }
 
-  async createChat({ chatId, members, name }: { chatId?: string, members: string[], name: string }): Promise<string> {
+  async saveDbFile() {
+    const countModifiedRow = this.sqlite.db.getRowsModified()
+    if (countModifiedRow > 0) {
+      await this.sqlite.saveToFile({ skipUpload: true })
+    }
+  }
+
+  async createChat({ chatId, members, admins, name }: { chatId?: string, members: string[], admins: string[], name: string }): Promise<string> {
     const membersAsString = JSON.stringify(members.sort())
     const [sqlValue] = this.sqlite.db.exec(chatByMembersQuery, { $members: membersAsString })
     if (!sqlValue) {
       try {
-        const newChatId = chatId || randomStr(10)
+        const newChatId = chatId || getRandomId(10)
         const params = chatValueToSqlInsertParams({
           chatId: newChatId,
           name,
           members,
+          admins,
           createdAt: Date.now(),
         })
 
         this.sqlite.db.exec(insertChatQuery, params as any)
-        const countModifiedRow = this.sqlite.db.getRowsModified()
-        if (countModifiedRow > 0) {
-          await this.sqlite.saveToFile({ skipUpload: true })
-        }
+        await this.saveDbFile()
         return newChatId
       } catch (e) {
         console.error('\nCreate chat error: ', e)
@@ -104,31 +110,42 @@ class ChatService {
     }
   }
 
-  async getChatList(): Promise<Array<ChatView & ChatMessageViewForDB<MessageType>>> {
+  async updateChat(value: ChatView): Promise<void> {
+    try {
+      const params = chatValueToSqlInsertParams(value)
+      this.sqlite.db.exec(upsertChatQuery, params as any)
+      await this.saveDbFile()
+    } catch (e) {
+      console.error('\nUpdate chat error: ', e)
+      throw e
+    }
+  }
+
+  async getChatList(): Promise<Array<ChatView & ChatMessageView<MessageType>>> {
     const [sqlValue1] = this.sqlite.db.exec(chatsWithMessagesQuery)
     const [sqlValue2] = this.sqlite.db.exec(chatsWithoutMessagesQuery)
     const chatsWithMessages = sqlValue1
-      ? objectFromQueryExecResult(sqlValue1)
+      ? objectFromQueryExecResult<ChatView & ChatMessageView<MessageType> & { members: string, admins: string, attachments: string }>(sqlValue1)
         .map(item => (
           {
-            // @ts-ignore
             ...item,
-            // @ts-ignore
             members: JSON.parse(item.members),
+            admins: JSON.parse(item.admins),
+            attachments: item.attachments ? JSON.parse(item.attachments) : [],
           }
-        )) as Array<ChatView & ChatMessageViewForDB<MessageType>>
-      : [] as Array<ChatView & ChatMessageViewForDB<MessageType>>
+        )) as Array<ChatView & ChatMessageView<MessageType>>
+      : [] as Array<ChatView & ChatMessageView<MessageType>>
     const chatsWithoutMessages = sqlValue2
-      ? objectFromQueryExecResult(sqlValue2)
+      ? objectFromQueryExecResult<ChatView & ChatMessageView<MessageType> & { members: string, admins: string, attachments: string }>(sqlValue2)
         .map(item => (
           {
-            // @ts-ignore
             ...item,
-            // @ts-ignore
             members: JSON.parse(item.members),
+            admins: JSON.parse(item.admins),
+            attachments: item.attachments ? JSON.parse(item.attachments) : [],
           }
-        )) as Array<ChatView & ChatMessageViewForDB<MessageType>>
-      : [] as Array<ChatView & ChatMessageViewForDB<MessageType>>
+        )) as Array<ChatView & ChatMessageView<MessageType>>
+      : [] as Array<ChatView & ChatMessageView<MessageType>>
 
     return [...chatsWithMessages, ...chatsWithoutMessages]
   }
@@ -155,36 +172,36 @@ class ChatService {
     return {
       ...chatData,
       members: JSON.parse(chatData.members),
+      admins: JSON.parse(chatData.admins),
     }
   }
 
   async deleteChat(chatId: string): Promise<void> {
     if (chatId) {
       this.sqlite.db.exec(deleteChatQuery, { $chatId: chatId })
+      await this.saveDbFile()
     }
   }
 
   async clearChat(chatId: string): Promise<void> {
     if (chatId) {
       this.sqlite.db.exec(clearChatQuery, { $chatId: chatId })
+      await this.saveDbFile()
     }
   }
 
-  async upsertMessage(value: ChatMessageViewForDB<MessageType>): Promise<void> {
+  async upsertMessage(value: ChatMessageView<MessageType>): Promise<void> {
     try {
       const params = messageValueToSqlInsertParams(value)
       this.sqlite.db.exec(upsertMessageQuery, params as any)
-      const countModifiedRow = this.sqlite.db.getRowsModified()
-      if (countModifiedRow > 0) {
-        await this.sqlite.saveToFile({ skipUpload: true })
-      }
+      await this.saveDbFile()
     } catch (e) {
       console.error('\nUpsert message error: ', e)
       throw e
     }
   }
 
-  async getMessage({ msgId, chatMsgId }: { msgId?: string, chatMsgId?: string }): Promise<ChatMessageViewForDB<MessageType>|null> {
+  async getMessage({ msgId, chatMsgId }: { msgId?: string, chatMsgId?: string }): Promise<ChatMessageView<MessageType>|null> {
     if (!msgId && !chatMsgId)
       return null
 
@@ -194,6 +211,11 @@ class ChatService {
 
     const message = objectFromQueryExecResult<ChatMessageViewForDB<MessageType>>(sqlValue)[0]
     return message
+      ? {
+        ...message,
+        attachments: message.attachments ? JSON.parse(message.attachments) : null,
+      }
+    : null
   }
 
   async deleteMessage({ msgId, chatMsgId }: { msgId?: string, chatMsgId?: string }): Promise<void> {
@@ -205,15 +227,19 @@ class ChatService {
     } else {
       this.sqlite.db.exec(deleteMessageByMsgId, { $msgId: msgId! })
     }
+    await this.saveDbFile()
   }
 
-  async getMessagesByChat(chatId: string): Promise<ChatMessageViewForDB<MessageType>[]> {
+  async getMessagesByChat(chatId: string): Promise<ChatMessageView<MessageType>[]> {
     const [sqlValue] = this.sqlite.db.exec(messagesByChatQuery, { $chatId: chatId })
     if (!sqlValue)
       return []
 
     const messages = objectFromQueryExecResult(sqlValue) as ChatMessageViewForDB<MessageType>[]
-    return messages
+    return messages.map(m => ({
+      ...m,
+      attachments: m.attachments ? JSON.parse(m.attachments) : null,
+    }))
   }
 }
 
@@ -222,6 +248,7 @@ ChatService.initialization()
     const srvWrapInternal = new MultiConnectionIPCWrap('AppChatsInternal')
     srvWrapInternal.exposeReqReplyMethods(srv, [
       'createChat',
+      'updateChat',
       'getChatList',
       'getChatsUnreadMessagesCount',
       'getChat',

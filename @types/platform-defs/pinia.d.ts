@@ -10,5 +10,10 @@ declare module 'pinia' {
       once: (type: string|symbol, handler: Function) => void;
       clear: () => void;
     }
+    $i18n: {
+      locale: string;
+      changeLocale: (lang: string) => void;
+      tr: (key: string, placeholders?: Record<string, string>) => string;
+    }
   }
 }

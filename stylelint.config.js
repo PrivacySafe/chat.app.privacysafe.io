@@ -6,6 +6,7 @@ module.exports = {
     'stylelint-config-recommended-vue',
     'stylelint-rscss/config'
   ],
+  ignoreFiles: ['/app/assets/**/*.css'],
 
   rules: {
     'length-zero-no-unit': null,
@@ -16,14 +17,13 @@ module.exports = {
         'after-same-name'
       ]
     }],
-    "color-hex-case": null,
     "no-empty-source": null,
-    "block-closing-brace-newline-after": null,
     "no-descending-specificity": null,
     "color-function-notation": null,
     "rscss/class-format": null,
     "selector-class-pattern": null,
     "alpha-value-notation": "number",
+    "import-notation": "string",
     "media-feature-name-no-unknown": [
       true,
       {

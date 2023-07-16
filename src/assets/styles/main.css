@@ -1,5 +1,17 @@
 @font-face {
   font-family: OpenSans;
+  src: url("../fonts/OpenSans-Light.woff") format("woff");
+  font-weight: 300;
+  font-style: normal;
+}
+@font-face {
+  font-family: OpenSans;
+  src: url("../fonts/OpenSans-LightItalic.woff") format("woff");
+  font-weight: 300;
+  font-style: italic;
+}
+@font-face {
+  font-family: OpenSans;
   src: url("../fonts/OpenSans-Regular.woff") format("woff");
   font-weight: 400;
   font-style: normal;
@@ -35,6 +47,14 @@
   font-style: italic;
 }
 
+:root {
+  --menu-bacgground-color: transparent;
+  --dialog-border-radius: 8px !important;
+  --dialog-title-padding: 0 !important;
+  --dialog-message-padding: 0 !important;
+  --dialog-actions-padding: 0 !important;
+}
+
 html {
   --half-size: 4px;
   --base-size: 8px;
@@ -42,6 +62,7 @@ html {
   --font-8: 8px;
   --font-9: 9px;
   --font-10: 10px;
+  --font-11: 11px;
   --font-12: 12px;
   --font-13: 13px;
   --font-14: 14px;
@@ -50,7 +71,6 @@ html {
   --font-20: 20px;
   --font-24: 24px;
   --font-32: 32px;
-  --dialog-border-radius: 8px !important;
 
   overflow: hidden;
   font-family: OpenSans, sans-serif;
@@ -102,6 +122,18 @@ div {
   width: 4px;
 }
 
+/* overwriting CSS VARLET styles */
+.var-menu__menu {
+  border-radius: var(--half-size);
+}
+
+.var-dialog__popup {
+  position: relative;
+  max-height: 95%;
+  overflow: hidden;
+}
+
+/* other CSS style classes */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;

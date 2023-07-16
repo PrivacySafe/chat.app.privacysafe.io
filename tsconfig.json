@@ -8,6 +8,7 @@
     "useDefineForClassFields": true,
     "strictNullChecks": true,
     "moduleResolution": "node",
+    "isolatedModules": true,
     "jsx": "preserve",
     "importHelpers": true,
     "sourceMap": true,

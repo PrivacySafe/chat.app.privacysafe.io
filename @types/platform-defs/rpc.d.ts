@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022 - 2023 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,18 +17,21 @@
 
 declare namespace web3n.rpc {
 
-	interface PassedDatum {
-		bytes?: Uint8Array;
-		/**
-		 * Transferables are objects that are object in core passed from one rpc
-		 * side to another.
-		 */
-		transferables?: ObjectReference[];
+	interface RPC {
+		thisApp?: client.AppRPC;
+		otherAppsRPC?: client.OtherAppsRPC;
+		exposeService?: service.ExposeService;
 	}
 
-	interface ObjectReference {
-		objType: ExposedObjType;
-		path: string[];
+	interface ObjProxyMember {
+		isObj: boolean;
+		name: string;
+		members?: ObjProxyMember[];
+	}
+
+	interface PassedDatum {
+		bytes?: Uint8Array;
+		passedByReference?: any[];
 	}
 
 	type ExposedObjType = 'FileByteSink' | 'FileByteSource' |

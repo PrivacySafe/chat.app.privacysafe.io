@@ -37,9 +37,7 @@ declare namespace web3n.caps {
 		apps?: apps.Apps;
 		logout?: Logout;
 		shell?: shell.ShellCAPs;
-		appRPC?: rpc.client.AppRPC;
-		otherAppsRPC?: rpc.client.OtherAppsRPC;
-		exposeService?: rpc.service.ExposeService;
+		rpc?: rpc.RPC;
 		connectivity?: connectivity.Connectivity;
 	}
 

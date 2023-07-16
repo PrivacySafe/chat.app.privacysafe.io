@@ -22,6 +22,7 @@ declare namespace web3n.files {
 		type: 'file';
 		code: string|undefined;
 		path: string;
+		fsEtityType?: 'file' | 'link' | 'folder';
 	}
 
 	interface FileExceptionFlag {
@@ -256,7 +257,7 @@ declare namespace web3n.files {
 		/**
 		 * This truncates file to a given size. If size is reduced, bytes are cut.
 		 * If size grows, empty section is added up to new end of file.
-		 * @param size 
+		 * @param size
 		 */
 		truncate(size: number): Promise<void>;
 
@@ -286,7 +287,7 @@ declare namespace web3n.files {
 	 * In unix file systems there are both symbolic and hard links. We do not
 	 * have hard links here, but we need to highlight that nature of links here
 	 * is symbolic. For example, when a target is deleted, symbolic link becomes
-	 * broken. 
+	 * broken.
 	 */
 	interface SymLink {
 
@@ -338,7 +339,7 @@ declare namespace web3n.files {
 		/**
 		 * This returns an extended attribute value. Undefined is returned when
 		 * attribute is not known.
-		 * @param xaName 
+		 * @param xaName
 		 */
 		getXAttr(xaName: string): Promise<any>;
 
@@ -443,11 +444,11 @@ declare namespace web3n.files {
 		getXAttr(
 			xaName: string, flags?: VersionedReadFlags
 		): Promise<{ attr: any; version: number; }>;
-	
+
 		listXAttrs(
 			flags?: VersionedReadFlags
 		): Promise<{ lst: string[]; version: number; }>;
-	
+
 		/**
 		 * This returns a promise, resolvable to either non-empty byte array, or
 		 * undefined.
@@ -510,7 +511,7 @@ declare namespace web3n.files {
 		 * explicit changes of extended attributes, not an implicit replacement.
 		 */
 		updateXAttrs(changes: XAttrsChanges): Promise<number>;
-		
+
 		/**
 		 * This returns a promise, resolvable to new file's version when file is
 		 * written
@@ -613,7 +614,7 @@ declare namespace web3n.files {
 		type: FSType;
 
 		v?: ReadonlyFSVersionedAPI;
-		
+
 		writable: boolean;
 
 		/**
@@ -621,7 +622,7 @@ declare namespace web3n.files {
 		 * may not, be the same as an actual folder name. It may also be null.
 		 */
 		name: string;
-		
+
 		/**
 		 * This returns a promise, resolvable to true, if folder exists, and to
 		 * false, if folder is not found.
@@ -633,7 +634,7 @@ declare namespace web3n.files {
 		checkFolderPresence(
 			path: string, throwIfMissing?: boolean
 		): Promise<boolean>;
-		
+
 		/**
 		 * This returns a promise, resolvable to true, if file exists, and to
 		 * false, if file is not found.
@@ -645,7 +646,7 @@ declare namespace web3n.files {
 		checkFilePresence(
 			path: string, throwIfMissing?: boolean
 		): Promise<boolean>;
-		
+
 		/**
 		 * This returns a promise, resolvable to true, if link exists, and to
 		 * false, if link is not found.
@@ -657,7 +658,7 @@ declare namespace web3n.files {
 		checkLinkPresence(
 			path: string, throwIfMissing?: boolean
 		): Promise<boolean>;
-		
+
 		/**
 		 * This returns a promise, resolvable to stats of an entity at a given
 		 * path.
@@ -669,7 +670,7 @@ declare namespace web3n.files {
 		 * This returns an extended attribute value. Undefined is returned when
 		 * attribute is not known.
 		 * @param path
-		 * @param xaName 
+		 * @param xaName
 		 */
 		getXAttr(path: string, xaName: string): Promise<any>;
 
@@ -758,8 +759,8 @@ declare namespace web3n.files {
 		 * eventually be placed, and a completion promise, that resolves when
 		 * selection/search process completes.
 		 * Note that collection can be watched for changes as they happen.
-		 * @param path 
-		 * @param criteria 
+		 * @param path
+		 * @param criteria
 		 */
 		select(
 			path: string, criteria: SelectCriteria
@@ -818,7 +819,7 @@ declare namespace web3n.files {
 			storageType?: storage.StorageType;
 		};
 	}
-	
+
 	interface FSCollection {
 		get(name: string): Promise<FSItem|undefined>;
 		getAll(): Promise<[ string, FSItem ][]>;
@@ -1037,7 +1038,7 @@ declare namespace web3n.files {
 		getXAttr(
 			path: string, xaName: string, flags?: VersionedReadFlags
 		): Promise<{ attr: any; version: number; }>;
-	
+
 		listXAttrs(
 			path: string, flags?: VersionedReadFlags
 		): Promise<{ lst: string[]; version: number; }>;

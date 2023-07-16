@@ -26,8 +26,8 @@ interface SendingError {
 type ChatMessageType = 'regular' | 'system';
 type MessageType = 'incoming' | 'outgoing';
 
-type ChatSystemEventBase = 'add' | 'delete' | 'update' | 'send';
-type ChatSystemEventEntity = 'status' | 'chatName' | 'members';
+type ChatSystemEventBase = 'add' | 'delete' | 'remove' | 'update' | 'send';
+type ChatSystemEventEntity = 'status' | 'chatName' | 'members' | 'admins' | 'message';
 type ChatSystemEvent = `${Partial<ChatSystemEventBase>}:${Partial<ChatSystemEventEntity>}`;
 
 type ChatMessageLocalMeta = `chat:${string}:${string}` // 'chat:${chatId}:${msgId}'
@@ -44,6 +44,7 @@ interface ChatMessageJsonBody {
   chatMessageType?: ChatMessageType;
   chatMessageId: string;
   members: string[];
+  admins: string[];
   initialMessageId?: string;
   chatSystemData?: ChatSystemMessageData;
 }
@@ -61,19 +62,23 @@ interface ChatView {
   chatId: string;
   name: string;
   members: string[];
+  admins: string[];
   createdAt: number;
 }
 
-type ChatViewForDB = Omit<ChatView, 'members'> & { members: string }
+type ChatViewForDB = Omit<ChatView, 'members'|'admins'> & { members: string, admins: string }
 
-type ChatMessageAttachments<T> = T extends 'incoming' ? ReadonlyFS : AttachmentsContainer;
+interface ChatMessageAttachmentsInfo {
+  id?: string;
+  name: string;
+  size: number;
+}
 
-interface ChatMessageViewForDB<T extends MessageType> {
+interface ChatMessageViewBase<T extends MessageType> {
   msgId: string;
   messageType: T;
   sender: string;
   body: string;
-  attachments: ChatMessageAttachments<T>|null;
   chatId: string;
   chatMessageType: ChatMessageType;
   chatMessageId: string;
@@ -82,6 +87,32 @@ interface ChatMessageViewForDB<T extends MessageType> {
   timestamp: number;
 }
 
+interface ChatMessageView<T extends MessageType> extends ChatMessageViewBase<T> {
+  attachments: ChatMessageAttachmentsInfo[] | null;
+}
+
+interface ChatMessageViewForDB<T extends MessageType> extends ChatMessageViewBase<T> {
+  attachments: string | null;
+}
+
 interface DeliveryServiceData {
   lastReceivedMessageTimestamp: number;
 }
+
+type ChatMessageActionType = 'reply' | 'copy' | 'forward' | 'download' | 'resend' | 'delete_message' | 'cancel_sending'
+
+interface ChatMessageAction {
+  id: ChatMessageActionType;
+  icon: {
+    name: string;
+    horizontalFlip?: boolean;
+    rotateIcon?: 1 | 2 | 3,
+  };
+  title: string;
+  conditions: string[];
+  blockStart?: boolean;
+  accent?: string;
+  disabled?: boolean;
+}
+
+type ChatListItemView = ChatView & { unread: number } & ChatMessageView<MessageType>;

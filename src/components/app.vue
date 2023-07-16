@@ -1,19 +1,31 @@
 <script lang="ts" setup>
-  import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref } from 'vue'
+  import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref, toRefs } from 'vue'
+  import { get, size } from 'lodash'
   import prLogo from '@/assets/images/privacysafe-logo.png'
   import { makeServiceCaller } from '@/libs/ipc-service-caller'
   import { appDeliverySrvProxy } from '@/services/services-provider'
-  import { useAppStore } from '@/store/app.store'
-  import { useChatsStore } from '@/store/chats.store'
+  import { useAppStore, useContactsStore, useChatsStore } from '@/store'
   import { getAppConfig } from '@/helpers/app.helper'
-  import ContactIcon from '@/components/contact-icon.vue'
+  import { getDeliveryErrors } from '@/helpers/common.helper'
+  import ContactIcon from '@/components/contacts/contact-icon.vue'
 
   const isMenuOpen = ref(false)
   const appElement = ref<Element|null>(null)
-  const appStore = useAppStore()
-  const chatsStore = useChatsStore()
-  const user = computed<string>(() => appStore.user)
-  const connectivityStatus = computed(() => appStore.connectivityStatus === 'online'
+
+  const { user: me, connectivityStatus } = toRefs(useAppStore())
+  const {
+    setAppWindowSize,
+    setColorTheme,
+    setConnectivityStatus,
+    setLang,
+    setUser,
+  } = useAppStore()
+  const { fetchContactList } = useContactsStore()
+  const { currentChatId, chatList } = toRefs(useChatsStore())
+  const { getChatList, receiveMessage, handleUpdateMessageStatus } = useChatsStore()
+
+
+  const connectivityStatusText = computed(() => connectivityStatus.value === 'online'
     ? 'app.status.connected.online'
     : 'app.status.connected.offline'
   )
@@ -24,7 +36,7 @@
   const getConnectivityStatus = async () => {
     const status = await w3n.connectivity!.isOnline()
     if (status) {
-      appStore.setConnectivityStatus(status)
+      setConnectivityStatus(status)
     }
   }
 
@@ -34,44 +46,58 @@
       const { className } = target
       const { width, height } = contentRect
       if (className === 'app') {
-        appStore.setAppWindowSize({ width, height })
+        setAppWindowSize({ width, height })
       }
     }
   })
 
   onBeforeMount(async () => {
     try {
-      const user = await w3n.mailerid!.getUserId()
-      appStore.setUser(user)
+      await fetchContactList()
+      const currentUser = await w3n.mailerid!.getUserId()
+      setUser(currentUser)
 
       await getAppConfig()
       await getConnectivityStatus()
       connectivityTimerId.value = setInterval(getConnectivityStatus, 60000)
 
-      const configSrvConnection = await w3n.otherAppsRPC!('launcher.app.privacysafe.io', 'AppConfigs')
+      const configSrvConnection = await w3n.rpc!.otherAppsRPC!('launcher.app.privacysafe.io', 'AppConfigs')
       const configSrv = makeServiceCaller<AppConfigs>(configSrvConnection, [], ['watchConfig']) as AppConfigs
-      await chatsStore.getChatList()
+      await getChatList()
 
       configSrv.watchConfig({
         next: ({ lang, currentTheme, colors }) => {
-          appStore.setLang(lang)
-          appStore.setColorTheme({ theme: currentTheme, colors })
+          setLang(lang)
+          setColorTheme({ theme: currentTheme, colors })
         },
         error: e => console.error(e),
         complete: () => configSrvConnection.close(),
       })
 
-      const deliverySrvConnection = await w3n.appRPC!('ChatDeliveryService')
+      const deliverySrvConnection = await w3n.rpc!.thisApp!('ChatDeliveryService')
       const deliverSrv = makeServiceCaller(deliverySrvConnection, [], [
         'watchIncomingMessages', 'watchOutgoingMessages',
       ]) as AppDeliveryService
 
       deliverSrv.watchIncomingMessages({
         next: msg => {
-          const { jsonBody } = msg
-          const { chatMessageType } = jsonBody
-          console.log('\n(CLIENT) NEW INCOMING MESSAGE (-',chatMessageType, '-) ',  jsonBody.chatMessageId, msg.plainTxtBody || msg.htmlTxtBody || jsonBody.chatSystemData?.event)
-          chatsStore.receiveMessage(user, msg, chatsStore.currentChatId)
+          const { jsonBody, msgId } = msg
+          const { chatMessageType, chatId, members = [] } = jsonBody
+
+          const membersFromDb = get(chatList.value, [chatId, 'members'])
+          const realMembers = membersFromDb || members
+          if (
+            chatMessageType === 'system'
+            || (chatMessageType === 'regular' && realMembers.includes(currentUser))
+          ) {
+            receiveMessage({
+              me: currentUser,
+              msg,
+              currentChatId: currentChatId.value,
+            })
+          } else {
+            appDeliverySrvProxy.removeMessageFromInbox([msgId])
+          }
         },
         error: e => console.error(e),
         complete: () => deliverySrvConnection.close(),
@@ -79,11 +105,22 @@
 
       deliverSrv.watchOutgoingMessages({
         next: val => {
-          const { id, progress } =val
-          const { allDone } = progress
+          const { id, progress } = val
+          const { allDone, recipients } = progress
           if (allDone) {
-            console.log('\n(CLIENT) NEW OUTGOING MESSAGE STATUS. REMOVE MSG FROM DELIVERY LIST: ', id)
-            appDeliverySrvProxy.removeMessageFromDeliveryList(id)
+            appDeliverySrvProxy.removeMessageFromDeliveryList([id])
+            const errors = getDeliveryErrors(progress)
+            const { localMeta = {} } = progress
+            const { path } = localMeta
+
+            if (!path.includes('system')) {
+              // TODO it's necessary to change when we will add new delivery status (not only 'sent' or 'error')
+              const status = size(errors) === 0 || (size(recipients) > size(errors))
+                ? 'sent'
+                : 'error'
+
+              handleUpdateMessageStatus({ msgId: id, value: status })
+            }
           }
         },
         error: e => console.error(e),
@@ -99,8 +136,8 @@
   onMounted(() => {
     if (appElement.value) {
       const { width, height } = appElement.value?.getBoundingClientRect()
-      appStore.setAppWindowSize({ width, height })
-      resizeObserver.observe(appElement.value!)
+      setAppWindowSize({ width, height })
+      resizeObserver.observe(appElement.value as Element)
     }
   })
 
@@ -132,12 +169,12 @@
       <div class="app__toolbar-user">
         <div class="app__toolbar-user-info">
           <span class="app__toolbar-user-mail">
-            {{ user }}
+            {{ me }}
           </span>
           <span class="app__toolbar-user-connection">
             {{ $tr('app.status') }}:
-            <span :class="{'app__toolbar-user-connectivity': connectivityStatus === 'app.status.connected.online'}">
-              {{ $tr(connectivityStatus) }}
+            <span :class="{'app__toolbar-user-connectivity': connectivityStatusText === 'app.status.connected.online'}">
+              {{ $tr(connectivityStatusText) }}
             </span>
           </span>
         </div>
@@ -151,7 +188,7 @@
             @click="isMenuOpen = true"
           >
             <contact-icon
-              :name="user"
+              :name="me"
               :size="36"
               :readonly="true"
             />

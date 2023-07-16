@@ -2709,5 +2709,100 @@ async function readFileContent(file) {
         }
     }
 }
+function objectFromQueryExecResult(sqlResult) {
+    const { columns, values: rows } = sqlResult;
+    return rows.map(row => row.reduce((obj, cellValue, index) => {
+        const field = columns[index];
+        obj[field] = cellValue;
+        return obj;
+    }, {}));
+}
+class TableColumnsAndParams {
+    constructor(name, columnDefs) {
+        this.name = name;
+        this.columnDefs = columnDefs;
+        this.c = {};
+        this.cReversed = {};
+        this.p = {};
+        this.q = {};
+        for (const cName of Object.keys(this.columnDefs)) {
+            const snakedColName = toSnakeCaseName(cName);
+            this.c[cName] = snakedColName;
+            this.cReversed[snakedColName] = cName;
+            this.p[cName] = `$${cName}`;
+            this.q[cName] = `${this.name}.${snakedColName}`;
+        }
+        Object.freeze(this.c);
+        Object.freeze(this.p);
+        Object.freeze(this.q);
+    }
+    toC(cName) {
+        const snakedColName = this.c[cName];
+        if (snakedColName === undefined) {
+            throw new Error(`Column ${cName} is not found among columns of table ${this.name}`);
+        }
+        return snakedColName;
+    }
+    toParams(value, throwOnUnknownField = true) {
+        const params = {};
+        for (const [cName, columnValue] of Object.entries(value)) {
+            this.toC(cName); // does implicit check for column existence
+            params[this.p[cName]] = columnValue;
+        }
+        for (const paramName of Object.values(this.p)) {
+            if (params[paramName] === undefined) {
+                params[paramName] = null;
+            }
+        }
+        return params;
+    }
+    getFromQueryExecResult(sqlResult) {
+        const { columns, values: rows } = sqlResult;
+        return rows.map(row => row.reduce((obj, cellValue, index) => {
+            const tabColumn = columns[index];
+            let field = this.cReversed[tabColumn];
+            if (field === undefined) {
+                field = tabColumn;
+            }
+            obj[field] = cellValue;
+            return obj;
+        }, {}));
+    }
+    get insertQuery() {
+        const colAndParamNames = Object.entries(this.p);
+        return `INSERT INTO ${this.name} (${colAndParamNames.map(([cName]) => this.toC(cName)).join(', ')}) VALUES (${colAndParamNames.map(([n, colParam]) => colParam).join(', ')})`;
+    }
+    updateQuery(withTabName, columns = undefined, skipColumns = false) {
+        let colAndParamNames = Object.entries(this.p);
+        if (columns) {
+            if (skipColumns) {
+                colAndParamNames = colAndParamNames.filter(([cName]) => !columns.includes(cName));
+            }
+            else {
+                colAndParamNames = colAndParamNames.filter(([cName]) => columns.includes(cName));
+            }
+        }
+        return `UPDATE ${withTabName ? `${this.name} ` : ''}SET ${colAndParamNames
+            .map(([cName, pName]) => `${this.toC(cName)}=${pName}`)
+            .join(', ')}`;
+    }
+    get columnsCreateSection() {
+        return Object.entries(this.columnDefs)
+            .map(([cName, columnDef]) => `${this.toC(cName)} ${columnDef}`)
+            .join(`,\n`);
+    }
+    selectQuery(columnsToSelect, ...whereAndColEqual) {
+        const whereClause = (whereAndColEqual.length > 0) ?
+            ` WHERE ${whereAndColEqual.map(n => `${n}=$${n}`).join(' AND ')}` : '';
+        return `SELECT ${(typeof columnsToSelect === 'string') ?
+            this.toC(columnsToSelect) :
+            columnsToSelect.map(cName => this.toC(cName)).join(', ')} FROM ${this.name}${whereClause}`;
+    }
+}
+Object.freeze(TableColumnsAndParams.prototype);
+Object.freeze(TableColumnsAndParams);
+function toSnakeCaseName(str) {
+    return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
 
-export { SQLiteOn3NStorage };
+export { SQLiteOn3NStorage, TableColumnsAndParams, objectFromQueryExecResult };

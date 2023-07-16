@@ -1,14 +1,29 @@
-/* eslint-disable @typescript-eslint/triple-slash-reference */
+/* eslint-disable @typescript-eslint/triple-slash-reference, @typescript-eslint/no-explicit-any */
 /// <reference path="../../@types/chat.d.ts" />
 
-function getErrorText(address: string, error: web3n.asmail.ASMailSendException): string {
-  const { unknownRecipient, inboxIsFull, msgCancelled } = error
+function getErrorText(address: string, error: any): string {
+  const {
+    domainNotFound,
+    noServiceRecord,
+    unknownRecipient,
+    inboxIsFull,
+    msgCancelled,
+  } = error
+
+  if (domainNotFound) {
+    return `Unknown domain in the address ${address}`
+  }
+
+  if (noServiceRecord) {
+    return `The address ${address} is not 3NWeb`
+  }
+
   if (unknownRecipient) {
-    return `Unknown recipient ${address}!`
+    return `Unknown recipient ${address}.`
   }
 
   if (inboxIsFull) {
-    return `Mailbox of ${address} is full!`
+    return `Mailbox of ${address} is full.`
   }
 
   if (msgCancelled) {

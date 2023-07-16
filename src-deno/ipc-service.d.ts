@@ -8,9 +8,22 @@ export interface TransformOpts {
     unpackRequest?: ((req: PassedDatum | undefined) => any[]) | 'noop';
     packReply?: ((reply: any) => PassedDatum | undefined) | 'noop';
 }
+declare class ConnectionState {
+    private readonly disconnect;
+    private readonly calls;
+    private isRunning;
+    constructor(disconnect: () => void);
+    acceptsMsgs(): boolean;
+    stop(): void;
+    hasCall(callNum: number): boolean;
+    cancelCall(callNum: number): void;
+    completeCall(callNum: number): void;
+    registerReqReplyCall(callNum: number): void;
+    registerObservableCall(callNum: number, cancel: () => void): void;
+}
 export declare abstract class IPCWrap {
     readonly srvName: string;
-    private readonly calls;
+    protected readonly connections: Map<web3n.rpc.service.IncomingConnection, ConnectionState>;
     private readonly methods;
     constructor(srvName: string);
     addReqReplyMethod(method: string, srv: object | undefined, func: HandleReqReplyCall, transforms?: TransformOpts): void;
@@ -25,31 +38,24 @@ export declare abstract class IPCWrap {
     private callReqReplyHandler;
     private callObsHandler;
     startIPC(): () => void;
-    abstract stopIPC(): void;
-    protected abstract onConnection(connection: IncomingConnection, disconnect: () => void): Promise<void>;
-    protected abstract onConnectionCompletion(connection: IncomingConnection): Promise<void>;
-    protected abstract onConnectionError(connection: IncomingConnection, err: any): Promise<void>;
+    stopIPC(): void;
+    protected onConnection(connection: IncomingConnection): Promise<void>;
+    protected onConnectionCompletion(connection: IncomingConnection, connectionState: ConnectionState): Promise<void>;
+    protected onConnectionError(connection: IncomingConnection, connectionState: ConnectionState, err: any): Promise<void>;
     protected abstract onListeningCompletion(): Promise<void>;
     protected abstract onListeningError(err: any): Promise<void>;
 }
 export declare class SingleConnectionIPCWrap extends IPCWrap {
-    private disconnectConnection;
     constructor(srvName: string);
-    stopIPC(): void;
     protected onListeningCompletion(): Promise<void>;
     protected onListeningError(err: any): Promise<void>;
-    protected onConnection(connection: IncomingConnection, disconnect: () => void): Promise<void>;
-    protected onConnectionCompletion(connection: IncomingConnection): Promise<void>;
-    protected onConnectionError(connection: IncomingConnection, err: any): Promise<void>;
+    protected onConnectionCompletion(connection: IncomingConnection, connectionState: ConnectionState): Promise<void>;
+    protected onConnectionError(connection: IncomingConnection, connectionState: ConnectionState, err: any): Promise<void>;
 }
 export declare class MultiConnectionIPCWrap extends IPCWrap {
-    protected readonly connections: Map<web3n.rpc.service.IncomingConnection, () => void>;
     constructor(srvName: string);
-    stopIPC(): void;
     protected onListeningCompletion(): Promise<void>;
     protected onListeningError(err: any): Promise<void>;
-    protected onConnection(connection: IncomingConnection, disconnect: () => void): Promise<void>;
-    protected onConnectionCompletion(connection: IncomingConnection): Promise<void>;
-    protected onConnectionError(connection: IncomingConnection, err: any): Promise<void>;
+    protected onConnectionError(connection: IncomingConnection, connectionState: ConnectionState, err: any): Promise<void>;
 }
 export {};

@@ -3,9 +3,11 @@ import { createPinia } from 'pinia'
 import { router } from './router'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
-import { vueBusPlugin } from './store/vue-bus-plugin'
+import { vueBusPlugin } from './store/plugins/vue-bus-plugin'
+import { i18nPlugin } from './store/plugins/i18n-plugin'
 import { iconsInitialization } from './icons'
 import { initializationServices } from '@/services/services-provider'
+import PHtml from '@/directives/p-html'
 import App from '@/components/app.vue'
 
 import '@varlet/touch-emulator'
@@ -25,6 +27,8 @@ const init = () => {
     .then(() => {
       const pinia = createPinia()
       pinia.use(vueBusPlugin)
+      pinia.use(i18nPlugin)
+
       const app = createApp(App)
 
       app.config.globalProperties.$router = router
@@ -36,6 +40,7 @@ const init = () => {
         .use(bus)
         .use(router)
         .provide('$dayjs', dayjs)
+        .directive('phtml', PHtml)
         .mount('#main')
     })
 }

@@ -15,12 +15,17 @@ type FSCollection = web3n.files.FSCollection
 type FSItem = web3n.files.FSItem
 type ListingEntry = web3n.files.ListingEntry
 type ReadonlyFile = web3n.files.ReadonlyFile
+type WritableFile = web3n.files.WritableFile
 type SymLink = web3n.files.SymLink
 
 type ByteSource = web3n.files.FileByteSource
 type ByteSink = web3n.files.FileByteSink
 type FolderEvent = web3n.files.FolderEvent
 type SelectCriteria = web3n.files.SelectCriteria
+
+interface FileWithId extends ReadonlyFile {
+  fileId: string;
+}
 
 interface EventBus {
   on: (type: string|symbol, handler: Function) => void;
@@ -50,11 +55,11 @@ interface AppConfigs {
   watchConfig(obs: web3n.Observer<AppConfig>): () => void;
 }
 
-interface DeliveryServiceData {
-  lastReceivedMessageTimestamp: number;
-}
-
-interface AppDeliveryService {
-  watchIncomingMessages(obs: web3n.Observer<ChatIncomingMessage>): () => void;
-  watchOutgoingMessages(obs: web3n.Observer<{id: string, progress: web3n.asmail.DeliveryProgress}>): () => void;
+type SystemMessageHandlerParams = {
+  msgId?: string;
+  chatId?: string;
+  sender?: string;
+  chatMessageId?: string;
+  value?: any;
+  displayable?: boolean;
 }

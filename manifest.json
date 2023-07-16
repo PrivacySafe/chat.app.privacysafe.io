@@ -1,7 +1,7 @@
 {
   "name": "Apps Chats",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "components": {
     "/index.html": {
       "startedBy": "user",
@@ -52,7 +52,8 @@
         "minWidth": 700,
         "minHeight": 512,
         "maxWidth": 1440
-      }
+      },
+      "icon": "logo.png"
     },
     "/chatsDenoServices.js": {
       "startedBy": {

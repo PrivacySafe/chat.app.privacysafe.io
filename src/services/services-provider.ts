@@ -15,23 +15,28 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { makeServiceCaller } from '@/libs/ipc-service-caller'
+import { outgoingFileLinkStore } from '@/services/outgoing-file-link-store'
 
 export let appContactsSrvProxy: AppContacts
 export let appChatsSrvProxy: AppChatsSrv
 export let appDeliverySrvProxy: AppDeliverySrv
 
+export let fileLinkStoreSrv: FileLinkStoreService
+
 export async function initializationServices() {
 
   try {
-    const srvConn = await w3n.otherAppsRPC!( 'contacts.app.privacysafe.io', 'AppContacts')
+    fileLinkStoreSrv = await outgoingFileLinkStore()
+    const srvConn = await w3n.rpc!.otherAppsRPC!( 'contacts.app.privacysafe.io', 'AppContacts')
     appContactsSrvProxy = makeServiceCaller<AppContacts>(
       srvConn, ['getContact',  'getContactList']
     ) as AppContacts
 
-    const chatsSrvInternalConn = await w3n.appRPC!('AppChatsInternal')
+    const chatsSrvInternalConn = await w3n.rpc!.thisApp!('AppChatsInternal')
     appChatsSrvProxy = makeServiceCaller<AppChatsSrv>(chatsSrvInternalConn, [
       'getChatList',
       'createChat',
+      'updateChat',
       'getChatsUnreadMessagesCount',
       'getChat',
       'deleteChat',
@@ -42,13 +47,14 @@ export async function initializationServices() {
       'upsertMessage',
     ]) as AppChatsSrv
 
-    const deliverySrvConn = await w3n.appRPC!('ChatDeliveryService')
+    const deliverySrvConn = await w3n.rpc!.thisApp!('ChatDeliveryService')
     appDeliverySrvProxy = makeServiceCaller<AppDeliverySrv>(deliverySrvConn, [
       'start',
       'addMessageToDeliveryList',
       'removeMessageFromDeliveryList',
       'getMessage',
       'getDeliveryList',
+      'removeMessageFromInbox',
     ]) as AppDeliverySrv
     await appDeliverySrvProxy.start()
 

@@ -2,4 +2,6 @@ src/libs/**/*.js
 src/libs/**/*.d.ts
 src-deno/**/*.js
 src-deno/**/*.d.ts
-/doc/chat.dbs.bak
+/doc/**/*.*
+/app/**/*.*
+

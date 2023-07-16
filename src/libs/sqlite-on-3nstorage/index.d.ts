@@ -19,4 +19,31 @@ export declare abstract class SQLiteOn3NStorage {
     sync<T>(action: Action<T>): Promise<T>;
     listTables(): string[];
 }
+export declare function objectFromQueryExecResult<T>(sqlResult: QueryExecResult): Array<T>;
+export declare class TableColumnsAndParams<ColumnDefs extends object> {
+    readonly name: string;
+    private readonly columnDefs;
+    readonly c: {
+        [columnName in keyof ColumnDefs]: string;
+    };
+    readonly cReversed: {
+        [snakedColName: string]: keyof ColumnDefs;
+    };
+    readonly p: {
+        [columnName in keyof ColumnDefs]: string;
+    };
+    readonly q: {
+        [columnName in keyof ColumnDefs]: string;
+    };
+    constructor(name: string, columnDefs: ColumnDefs);
+    private toC;
+    toParams<T extends {
+        [columnName in keyof ColumnDefs]: any;
+    }>(value: Partial<T>, throwOnUnknownField?: boolean): any;
+    getFromQueryExecResult<T>(sqlResult: QueryExecResult): Array<T>;
+    get insertQuery(): string;
+    updateQuery(withTabName: boolean, columns?: (keyof ColumnDefs)[] | undefined, skipColumns?: boolean): string;
+    get columnsCreateSection(): string;
+    selectQuery(columnsToSelect: (keyof ColumnDefs)[] | string, ...whereAndColEqual: (keyof ColumnDefs)[]): string;
+}
 export {};

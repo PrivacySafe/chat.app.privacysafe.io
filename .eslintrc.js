@@ -41,6 +41,7 @@ module.exports = {
     'arrow-parens': ['error', 'as-needed'],
     'object-curly-newline': ['error', { 'consistent': true }],
 
+    '@typescript-eslint/triple-slash-reference': 'off',
     '@typescript-eslint/no-inferrable-types': [
       'error',
       { ignoreProperties: false, ignoreParameters: false },
@@ -51,6 +52,15 @@ module.exports = {
     ],
     '@typescript-eslint/no-non-null-assertion': 'off',
     '@typescript-eslint/ban-ts-comment': 'off',
+    '@typescript-eslint/ban-types': [
+      'error',
+      {
+        'types': {
+          'Function': false,
+        },
+        'extendDefaults': true,
+      },
+    ],
 
     'vue/no-v-model-argument': 'off',
     'vue/multi-word-component-names': 'off',

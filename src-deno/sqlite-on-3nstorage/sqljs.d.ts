@@ -6,7 +6,7 @@
 
 // This file has been simplified to not need node or emscrypten
 
-export type SqlValue = number | string | Uint8Array | Blob | null;
+export type SqlValue = number | string | Uint8Array | null;
 export type ParamsObject = Record<string, SqlValue>;
 export type ParamsCallback = (obj: ParamsObject) => void;
 export type BindParams = SqlValue[] | ParamsObject | null;
@@ -61,9 +61,9 @@ export declare class Database {
     create_function(name: string, func: (...args: any[]) => any): Database;
 
     /**
-     * Execute a sql statement, and call a callback for each row of result.
+     * Execute an sql statement, and call a callback for each row of result.
      *
-     * Currently, this method is synchronous, it will not return until the
+     * Currently this method is synchronous, it will not return until the
      * callback has been called on every row of the result. But this might
      * change.
      * @see [https://sql.d.ts.org/documentation/Database.html#["each"]](https://sql.js.org/documentation/Database.html#%5B%22each%22%5D)
@@ -119,7 +119,7 @@ export declare class Database {
 
     /**
      * Iterate over multiple SQL statements in a SQL string. This function
-     * returns an iterator over Statement objects. You can use a `for...of`
+     * returns an iterator over Statement objects. You can use a `for..of`
      * loop to execute the returned statements one by one.
      * @see [https://sql.d.ts.org/documentation/Database.html#["iterateStatements"]](https://sql.js.org/documentation/Database.html#%5B%22iterateStatements%22%5D)
      *
@@ -245,7 +245,7 @@ export declare class Statement {
     run(values?: BindParams): void;
 
     /**
-     * Execute the statement, fetching the next line of result, that can
+     * Execute the statement, fetching the the next line of result, that can
      * be retrieved with `Statement.get`.
      * @see [https://sql.d.ts.org/documentation/Statement.html#["step"]](https://sql.js.org/documentation/Statement.html#%5B%22step%22%5D)
      */

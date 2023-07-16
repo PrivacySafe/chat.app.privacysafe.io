@@ -1,18 +1,26 @@
-import { Comment, Text, Slot, VNode } from 'vue'
+import { isEmpty } from 'lodash'
 
-export function hasSlotContent(slot?: Slot, slotProps = {} ) {
-  if (!slot) return false
+export function getDeliveryErrors(progress: web3n.asmail.DeliveryProgress) {
+  const { recipients } = progress
+  return Object.keys(recipients).reduce((res, recipient) => {
+    const { err } = recipients[recipient]
+    if (!isEmpty(err) && 'runtimeException' in err ) {
+      const { type } = err
+      res[recipient] = type!
+    }
+    return res
+  }, {} as Record<string, string>)
+}
 
-  return slot(slotProps).some((vnode: VNode) => {
-    if (vnode.type === Comment)
-      return false
+export function getRandomId(numOfChars: number): string {
+  if (numOfChars < 1) { throw new Error(`number of chars is less than one`); }
 
-    if (Array.isArray(vnode.children) && !vnode.children.length)
-      return false
-
-    return (
-      vnode.type !== Text
-      || (typeof vnode.children === 'string' && vnode.children.trim() !== '')
-    )
-  })
+  const possibleCharacters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  const array = new Uint8Array(numOfChars * 2);
+  crypto.getRandomValues(array)
+  let result = ''
+  for (let i = 0; i < array.length; i++) {
+    result += possibleCharacters.charAt(array[i] % 62)
+  }
+  return result.slice(0, numOfChars)
 }

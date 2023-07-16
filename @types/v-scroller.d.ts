@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Type definitions for vue-virtual-scroller
 // Project: https://github.com/Akryum/vue-virtual-scroller/
-declare module "vue-virtual-scroller" {
+declare module 'vue-virtual-scroller' {
   // @ts-ignore
-  import Vue, { ComponentOptions, PluginObject, Component } from "vue";
+  import Vue, { ComponentOptions, PluginObject, Component } from 'vue'
   interface PluginOptions {
     installComponents?: boolean;
     componentsPrefix?: string;
@@ -16,5 +17,5 @@ declare module "vue-virtual-scroller" {
   // @ts-ignore
   export function IdState(options?: { idProp?: (vm: any) => any; }): ComponentOptions<Vue> | typeof Vue;
 
-  export default plugin;
+  export default plugin
 }

@@ -2746,22 +2746,22 @@ $root.json_ipc = (function () {
      * @namespace
      */
     var json_ipc = {};
-    json_ipc.ValuesInJSON = (function () {
+    json_ipc.ValuesSequence = (function () {
         /**
-         * Properties of a ValuesInJSON.
+         * Properties of a ValuesSequence.
          * @memberof json_ipc
-         * @interface IValuesInJSON
-         * @property {Array.<json_ipc.ValuesInJSON.IValue>|null} [values] ValuesInJSON values
+         * @interface IValuesSequence
+         * @property {Array.<json_ipc.ValuesSequence.IValue>|null} [values] ValuesSequence values
          */
         /**
-         * Constructs a new ValuesInJSON.
+         * Constructs a new ValuesSequence.
          * @memberof json_ipc
-         * @classdesc Represents a ValuesInJSON.
-         * @implements IValuesInJSON
+         * @classdesc Represents a ValuesSequence.
+         * @implements IValuesSequence
          * @constructor
-         * @param {json_ipc.IValuesInJSON=} [properties] Properties to set
+         * @param {json_ipc.IValuesSequence=} [properties] Properties to set
          */
-        function ValuesInJSON(properties) {
+        function ValuesSequence(properties) {
             this.values = [];
             if (properties)
                 for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -2769,74 +2769,74 @@ $root.json_ipc = (function () {
                         this[keys[i]] = properties[keys[i]];
         }
         /**
-         * ValuesInJSON values.
-         * @member {Array.<json_ipc.ValuesInJSON.IValue>} values
-         * @memberof json_ipc.ValuesInJSON
+         * ValuesSequence values.
+         * @member {Array.<json_ipc.ValuesSequence.IValue>} values
+         * @memberof json_ipc.ValuesSequence
          * @instance
          */
-        ValuesInJSON.prototype.values = $util.emptyArray;
+        ValuesSequence.prototype.values = $util.emptyArray;
         /**
-         * Creates a new ValuesInJSON instance using the specified properties.
+         * Creates a new ValuesSequence instance using the specified properties.
          * @function create
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @static
-         * @param {json_ipc.IValuesInJSON=} [properties] Properties to set
-         * @returns {json_ipc.ValuesInJSON} ValuesInJSON instance
+         * @param {json_ipc.IValuesSequence=} [properties] Properties to set
+         * @returns {json_ipc.ValuesSequence} ValuesSequence instance
          */
-        ValuesInJSON.create = function create(properties) {
-            return new ValuesInJSON(properties);
+        ValuesSequence.create = function create(properties) {
+            return new ValuesSequence(properties);
         };
         /**
-         * Encodes the specified ValuesInJSON message. Does not implicitly {@link json_ipc.ValuesInJSON.verify|verify} messages.
+         * Encodes the specified ValuesSequence message. Does not implicitly {@link json_ipc.ValuesSequence.verify|verify} messages.
          * @function encode
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @static
-         * @param {json_ipc.IValuesInJSON} message ValuesInJSON message or plain object to encode
+         * @param {json_ipc.IValuesSequence} message ValuesSequence message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        ValuesInJSON.encode = function encode(message, writer) {
+        ValuesSequence.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
             if (message.values != null && message.values.length)
                 for (var i = 0; i < message.values.length; ++i)
-                    $root.json_ipc.ValuesInJSON.Value.encode(message.values[i], writer.uint32(/* id 1, wireType 2 =*/ 10).fork()).ldelim();
+                    $root.json_ipc.ValuesSequence.Value.encode(message.values[i], writer.uint32(/* id 1, wireType 2 =*/ 10).fork()).ldelim();
             return writer;
         };
         /**
-         * Encodes the specified ValuesInJSON message, length delimited. Does not implicitly {@link json_ipc.ValuesInJSON.verify|verify} messages.
+         * Encodes the specified ValuesSequence message, length delimited. Does not implicitly {@link json_ipc.ValuesSequence.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @static
-         * @param {json_ipc.IValuesInJSON} message ValuesInJSON message or plain object to encode
+         * @param {json_ipc.IValuesSequence} message ValuesSequence message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        ValuesInJSON.encodeDelimited = function encodeDelimited(message, writer) {
+        ValuesSequence.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
         /**
-         * Decodes a ValuesInJSON message from the specified reader or buffer.
+         * Decodes a ValuesSequence message from the specified reader or buffer.
          * @function decode
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {json_ipc.ValuesInJSON} ValuesInJSON
+         * @returns {json_ipc.ValuesSequence} ValuesSequence
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        ValuesInJSON.decode = function decode(reader, length) {
+        ValuesSequence.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            var end = length === undefined ? reader.len : reader.pos + length, message = new $root.json_ipc.ValuesInJSON();
+            var end = length === undefined ? reader.len : reader.pos + length, message = new $root.json_ipc.ValuesSequence();
             while (reader.pos < end) {
                 var tag = reader.uint32();
                 switch (tag >>> 3) {
                     case 1: {
                         if (!(message.values && message.values.length))
                             message.values = [];
-                        message.values.push($root.json_ipc.ValuesInJSON.Value.decode(reader, reader.uint32()));
+                        message.values.push($root.json_ipc.ValuesSequence.Value.decode(reader, reader.uint32()));
                         break;
                     }
                     default:
@@ -2847,36 +2847,36 @@ $root.json_ipc = (function () {
             return message;
         };
         /**
-         * Decodes a ValuesInJSON message from the specified reader or buffer, length delimited.
+         * Decodes a ValuesSequence message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {json_ipc.ValuesInJSON} ValuesInJSON
+         * @returns {json_ipc.ValuesSequence} ValuesSequence
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        ValuesInJSON.decodeDelimited = function decodeDelimited(reader) {
+        ValuesSequence.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
         /**
-         * Verifies a ValuesInJSON message.
+         * Verifies a ValuesSequence message.
          * @function verify
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        ValuesInJSON.verify = function verify(message) {
+        ValuesSequence.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.values != null && message.hasOwnProperty("values")) {
                 if (!Array.isArray(message.values))
                     return "values: array expected";
                 for (var i = 0; i < message.values.length; ++i) {
-                    var error = $root.json_ipc.ValuesInJSON.Value.verify(message.values[i]);
+                    var error = $root.json_ipc.ValuesSequence.Value.verify(message.values[i]);
                     if (error)
                         return "values." + error;
                 }
@@ -2884,39 +2884,39 @@ $root.json_ipc = (function () {
             return null;
         };
         /**
-         * Creates a ValuesInJSON message from a plain object. Also converts values to their respective internal types.
+         * Creates a ValuesSequence message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {json_ipc.ValuesInJSON} ValuesInJSON
+         * @returns {json_ipc.ValuesSequence} ValuesSequence
          */
-        ValuesInJSON.fromObject = function fromObject(object) {
-            if (object instanceof $root.json_ipc.ValuesInJSON)
+        ValuesSequence.fromObject = function fromObject(object) {
+            if (object instanceof $root.json_ipc.ValuesSequence)
                 return object;
-            var message = new $root.json_ipc.ValuesInJSON();
+            var message = new $root.json_ipc.ValuesSequence();
             if (object.values) {
                 if (!Array.isArray(object.values))
-                    throw TypeError(".json_ipc.ValuesInJSON.values: array expected");
+                    throw TypeError(".json_ipc.ValuesSequence.values: array expected");
                 message.values = [];
                 for (var i = 0; i < object.values.length; ++i) {
                     if (typeof object.values[i] !== "object")
-                        throw TypeError(".json_ipc.ValuesInJSON.values: object expected");
-                    message.values[i] = $root.json_ipc.ValuesInJSON.Value.fromObject(object.values[i]);
+                        throw TypeError(".json_ipc.ValuesSequence.values: object expected");
+                    message.values[i] = $root.json_ipc.ValuesSequence.Value.fromObject(object.values[i]);
                 }
             }
             return message;
         };
         /**
-         * Creates a plain object from a ValuesInJSON message. Also converts values to other types if specified.
+         * Creates a plain object from a ValuesSequence message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @static
-         * @param {json_ipc.ValuesInJSON} message ValuesInJSON
+         * @param {json_ipc.ValuesSequence} message ValuesSequence
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        ValuesInJSON.toObject = function toObject(message, options) {
+        ValuesSequence.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             var object = {};
@@ -2925,49 +2925,49 @@ $root.json_ipc = (function () {
             if (message.values && message.values.length) {
                 object.values = [];
                 for (var j = 0; j < message.values.length; ++j)
-                    object.values[j] = $root.json_ipc.ValuesInJSON.Value.toObject(message.values[j], options);
+                    object.values[j] = $root.json_ipc.ValuesSequence.Value.toObject(message.values[j], options);
             }
             return object;
         };
         /**
-         * Converts this ValuesInJSON to JSON.
+         * Converts this ValuesSequence to JSON.
          * @function toJSON
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        ValuesInJSON.prototype.toJSON = function toJSON() {
+        ValuesSequence.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
         /**
-         * Gets the default type url for ValuesInJSON
+         * Gets the default type url for ValuesSequence
          * @function getTypeUrl
-         * @memberof json_ipc.ValuesInJSON
+         * @memberof json_ipc.ValuesSequence
          * @static
          * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
          * @returns {string} The default type url
          */
-        ValuesInJSON.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+        ValuesSequence.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
             if (typeUrlPrefix === undefined) {
                 typeUrlPrefix = "type.googleapis.com";
             }
-            return typeUrlPrefix + "/json_ipc.ValuesInJSON";
+            return typeUrlPrefix + "/json_ipc.ValuesSequence";
         };
-        ValuesInJSON.BinaryValue = (function () {
+        ValuesSequence.BinaryValue = (function () {
             /**
              * Properties of a BinaryValue.
-             * @memberof json_ipc.ValuesInJSON
+             * @memberof json_ipc.ValuesSequence
              * @interface IBinaryValue
              * @property {Uint8Array|null} [arr] BinaryValue arr
              * @property {Array.<string>|null} [objLocation] BinaryValue objLocation
              */
             /**
              * Constructs a new BinaryValue.
-             * @memberof json_ipc.ValuesInJSON
+             * @memberof json_ipc.ValuesSequence
              * @classdesc Represents a BinaryValue.
              * @implements IBinaryValue
              * @constructor
-             * @param {json_ipc.ValuesInJSON.IBinaryValue=} [properties] Properties to set
+             * @param {json_ipc.ValuesSequence.IBinaryValue=} [properties] Properties to set
              */
             function BinaryValue(properties) {
                 this.objLocation = [];
@@ -2979,34 +2979,34 @@ $root.json_ipc = (function () {
             /**
              * BinaryValue arr.
              * @member {Uint8Array} arr
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @instance
              */
             BinaryValue.prototype.arr = $util.newBuffer([]);
             /**
              * BinaryValue objLocation.
              * @member {Array.<string>} objLocation
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @instance
              */
             BinaryValue.prototype.objLocation = $util.emptyArray;
             /**
              * Creates a new BinaryValue instance using the specified properties.
              * @function create
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @static
-             * @param {json_ipc.ValuesInJSON.IBinaryValue=} [properties] Properties to set
-             * @returns {json_ipc.ValuesInJSON.BinaryValue} BinaryValue instance
+             * @param {json_ipc.ValuesSequence.IBinaryValue=} [properties] Properties to set
+             * @returns {json_ipc.ValuesSequence.BinaryValue} BinaryValue instance
              */
             BinaryValue.create = function create(properties) {
                 return new BinaryValue(properties);
             };
             /**
-             * Encodes the specified BinaryValue message. Does not implicitly {@link json_ipc.ValuesInJSON.BinaryValue.verify|verify} messages.
+             * Encodes the specified BinaryValue message. Does not implicitly {@link json_ipc.ValuesSequence.BinaryValue.verify|verify} messages.
              * @function encode
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @static
-             * @param {json_ipc.ValuesInJSON.IBinaryValue} message BinaryValue message or plain object to encode
+             * @param {json_ipc.ValuesSequence.IBinaryValue} message BinaryValue message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
@@ -3021,11 +3021,11 @@ $root.json_ipc = (function () {
                 return writer;
             };
             /**
-             * Encodes the specified BinaryValue message, length delimited. Does not implicitly {@link json_ipc.ValuesInJSON.BinaryValue.verify|verify} messages.
+             * Encodes the specified BinaryValue message, length delimited. Does not implicitly {@link json_ipc.ValuesSequence.BinaryValue.verify|verify} messages.
              * @function encodeDelimited
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @static
-             * @param {json_ipc.ValuesInJSON.IBinaryValue} message BinaryValue message or plain object to encode
+             * @param {json_ipc.ValuesSequence.IBinaryValue} message BinaryValue message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
@@ -3035,18 +3035,18 @@ $root.json_ipc = (function () {
             /**
              * Decodes a BinaryValue message from the specified reader or buffer.
              * @function decode
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @static
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
              * @param {number} [length] Message length if known beforehand
-             * @returns {json_ipc.ValuesInJSON.BinaryValue} BinaryValue
+             * @returns {json_ipc.ValuesSequence.BinaryValue} BinaryValue
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
             BinaryValue.decode = function decode(reader, length) {
                 if (!(reader instanceof $Reader))
                     reader = $Reader.create(reader);
-                var end = length === undefined ? reader.len : reader.pos + length, message = new $root.json_ipc.ValuesInJSON.BinaryValue();
+                var end = length === undefined ? reader.len : reader.pos + length, message = new $root.json_ipc.ValuesSequence.BinaryValue();
                 while (reader.pos < end) {
                     var tag = reader.uint32();
                     switch (tag >>> 3) {
@@ -3070,10 +3070,10 @@ $root.json_ipc = (function () {
             /**
              * Decodes a BinaryValue message from the specified reader or buffer, length delimited.
              * @function decodeDelimited
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @static
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-             * @returns {json_ipc.ValuesInJSON.BinaryValue} BinaryValue
+             * @returns {json_ipc.ValuesSequence.BinaryValue} BinaryValue
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
@@ -3085,7 +3085,7 @@ $root.json_ipc = (function () {
             /**
              * Verifies a BinaryValue message.
              * @function verify
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @static
              * @param {Object.<string,*>} message Plain object to verify
              * @returns {string|null} `null` if valid, otherwise the reason why it is not
@@ -3108,15 +3108,15 @@ $root.json_ipc = (function () {
             /**
              * Creates a BinaryValue message from a plain object. Also converts values to their respective internal types.
              * @function fromObject
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @static
              * @param {Object.<string,*>} object Plain object
-             * @returns {json_ipc.ValuesInJSON.BinaryValue} BinaryValue
+             * @returns {json_ipc.ValuesSequence.BinaryValue} BinaryValue
              */
             BinaryValue.fromObject = function fromObject(object) {
-                if (object instanceof $root.json_ipc.ValuesInJSON.BinaryValue)
+                if (object instanceof $root.json_ipc.ValuesSequence.BinaryValue)
                     return object;
-                var message = new $root.json_ipc.ValuesInJSON.BinaryValue();
+                var message = new $root.json_ipc.ValuesSequence.BinaryValue();
                 if (object.arr != null)
                     if (typeof object.arr === "string")
                         $util.base64.decode(object.arr, message.arr = $util.newBuffer($util.base64.length(object.arr)), 0);
@@ -3124,7 +3124,7 @@ $root.json_ipc = (function () {
                         message.arr = object.arr;
                 if (object.objLocation) {
                     if (!Array.isArray(object.objLocation))
-                        throw TypeError(".json_ipc.ValuesInJSON.BinaryValue.objLocation: array expected");
+                        throw TypeError(".json_ipc.ValuesSequence.BinaryValue.objLocation: array expected");
                     message.objLocation = [];
                     for (var i = 0; i < object.objLocation.length; ++i)
                         message.objLocation[i] = String(object.objLocation[i]);
@@ -3134,9 +3134,9 @@ $root.json_ipc = (function () {
             /**
              * Creates a plain object from a BinaryValue message. Also converts values to other types if specified.
              * @function toObject
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @static
-             * @param {json_ipc.ValuesInJSON.BinaryValue} message BinaryValue
+             * @param {json_ipc.ValuesSequence.BinaryValue} message BinaryValue
              * @param {$protobuf.IConversionOptions} [options] Conversion options
              * @returns {Object.<string,*>} Plain object
              */
@@ -3166,7 +3166,7 @@ $root.json_ipc = (function () {
             /**
              * Converts this BinaryValue to JSON.
              * @function toJSON
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @instance
              * @returns {Object.<string,*>} JSON object
              */
@@ -3176,7 +3176,7 @@ $root.json_ipc = (function () {
             /**
              * Gets the default type url for BinaryValue
              * @function getTypeUrl
-             * @memberof json_ipc.ValuesInJSON.BinaryValue
+             * @memberof json_ipc.ValuesSequence.BinaryValue
              * @static
              * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
              * @returns {string} The default type url
@@ -3185,29 +3185,259 @@ $root.json_ipc = (function () {
                 if (typeUrlPrefix === undefined) {
                     typeUrlPrefix = "type.googleapis.com";
                 }
-                return typeUrlPrefix + "/json_ipc.ValuesInJSON.BinaryValue";
+                return typeUrlPrefix + "/json_ipc.ValuesSequence.BinaryValue";
             };
             return BinaryValue;
         })();
-        ValuesInJSON.Value = (function () {
+        ValuesSequence.TransferredObj = (function () {
+            /**
+             * Properties of a TransferredObj.
+             * @memberof json_ipc.ValuesSequence
+             * @interface ITransferredObj
+             * @property {number|null} [indexInPassed] TransferredObj indexInPassed
+             * @property {Array.<string>|null} [objLocation] TransferredObj objLocation
+             */
+            /**
+             * Constructs a new TransferredObj.
+             * @memberof json_ipc.ValuesSequence
+             * @classdesc Represents a TransferredObj.
+             * @implements ITransferredObj
+             * @constructor
+             * @param {json_ipc.ValuesSequence.ITransferredObj=} [properties] Properties to set
+             */
+            function TransferredObj(properties) {
+                this.objLocation = [];
+                if (properties)
+                    for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                        if (properties[keys[i]] != null)
+                            this[keys[i]] = properties[keys[i]];
+            }
+            /**
+             * TransferredObj indexInPassed.
+             * @member {number} indexInPassed
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @instance
+             */
+            TransferredObj.prototype.indexInPassed = 0;
+            /**
+             * TransferredObj objLocation.
+             * @member {Array.<string>} objLocation
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @instance
+             */
+            TransferredObj.prototype.objLocation = $util.emptyArray;
+            /**
+             * Creates a new TransferredObj instance using the specified properties.
+             * @function create
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @static
+             * @param {json_ipc.ValuesSequence.ITransferredObj=} [properties] Properties to set
+             * @returns {json_ipc.ValuesSequence.TransferredObj} TransferredObj instance
+             */
+            TransferredObj.create = function create(properties) {
+                return new TransferredObj(properties);
+            };
+            /**
+             * Encodes the specified TransferredObj message. Does not implicitly {@link json_ipc.ValuesSequence.TransferredObj.verify|verify} messages.
+             * @function encode
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @static
+             * @param {json_ipc.ValuesSequence.ITransferredObj} message TransferredObj message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            TransferredObj.encode = function encode(message, writer) {
+                if (!writer)
+                    writer = $Writer.create();
+                if (message.indexInPassed != null && Object.hasOwnProperty.call(message, "indexInPassed"))
+                    writer.uint32(/* id 1, wireType 0 =*/ 8).uint32(message.indexInPassed);
+                if (message.objLocation != null && message.objLocation.length)
+                    for (var i = 0; i < message.objLocation.length; ++i)
+                        writer.uint32(/* id 2, wireType 2 =*/ 18).string(message.objLocation[i]);
+                return writer;
+            };
+            /**
+             * Encodes the specified TransferredObj message, length delimited. Does not implicitly {@link json_ipc.ValuesSequence.TransferredObj.verify|verify} messages.
+             * @function encodeDelimited
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @static
+             * @param {json_ipc.ValuesSequence.ITransferredObj} message TransferredObj message or plain object to encode
+             * @param {$protobuf.Writer} [writer] Writer to encode to
+             * @returns {$protobuf.Writer} Writer
+             */
+            TransferredObj.encodeDelimited = function encodeDelimited(message, writer) {
+                return this.encode(message, writer).ldelim();
+            };
+            /**
+             * Decodes a TransferredObj message from the specified reader or buffer.
+             * @function decode
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @param {number} [length] Message length if known beforehand
+             * @returns {json_ipc.ValuesSequence.TransferredObj} TransferredObj
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            TransferredObj.decode = function decode(reader, length) {
+                if (!(reader instanceof $Reader))
+                    reader = $Reader.create(reader);
+                var end = length === undefined ? reader.len : reader.pos + length, message = new $root.json_ipc.ValuesSequence.TransferredObj();
+                while (reader.pos < end) {
+                    var tag = reader.uint32();
+                    switch (tag >>> 3) {
+                        case 1: {
+                            message.indexInPassed = reader.uint32();
+                            break;
+                        }
+                        case 2: {
+                            if (!(message.objLocation && message.objLocation.length))
+                                message.objLocation = [];
+                            message.objLocation.push(reader.string());
+                            break;
+                        }
+                        default:
+                            reader.skipType(tag & 7);
+                            break;
+                    }
+                }
+                return message;
+            };
+            /**
+             * Decodes a TransferredObj message from the specified reader or buffer, length delimited.
+             * @function decodeDelimited
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @static
+             * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+             * @returns {json_ipc.ValuesSequence.TransferredObj} TransferredObj
+             * @throws {Error} If the payload is not a reader or valid buffer
+             * @throws {$protobuf.util.ProtocolError} If required fields are missing
+             */
+            TransferredObj.decodeDelimited = function decodeDelimited(reader) {
+                if (!(reader instanceof $Reader))
+                    reader = new $Reader(reader);
+                return this.decode(reader, reader.uint32());
+            };
+            /**
+             * Verifies a TransferredObj message.
+             * @function verify
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @static
+             * @param {Object.<string,*>} message Plain object to verify
+             * @returns {string|null} `null` if valid, otherwise the reason why it is not
+             */
+            TransferredObj.verify = function verify(message) {
+                if (typeof message !== "object" || message === null)
+                    return "object expected";
+                if (message.indexInPassed != null && message.hasOwnProperty("indexInPassed"))
+                    if (!$util.isInteger(message.indexInPassed))
+                        return "indexInPassed: integer expected";
+                if (message.objLocation != null && message.hasOwnProperty("objLocation")) {
+                    if (!Array.isArray(message.objLocation))
+                        return "objLocation: array expected";
+                    for (var i = 0; i < message.objLocation.length; ++i)
+                        if (!$util.isString(message.objLocation[i]))
+                            return "objLocation: string[] expected";
+                }
+                return null;
+            };
+            /**
+             * Creates a TransferredObj message from a plain object. Also converts values to their respective internal types.
+             * @function fromObject
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @static
+             * @param {Object.<string,*>} object Plain object
+             * @returns {json_ipc.ValuesSequence.TransferredObj} TransferredObj
+             */
+            TransferredObj.fromObject = function fromObject(object) {
+                if (object instanceof $root.json_ipc.ValuesSequence.TransferredObj)
+                    return object;
+                var message = new $root.json_ipc.ValuesSequence.TransferredObj();
+                if (object.indexInPassed != null)
+                    message.indexInPassed = object.indexInPassed >>> 0;
+                if (object.objLocation) {
+                    if (!Array.isArray(object.objLocation))
+                        throw TypeError(".json_ipc.ValuesSequence.TransferredObj.objLocation: array expected");
+                    message.objLocation = [];
+                    for (var i = 0; i < object.objLocation.length; ++i)
+                        message.objLocation[i] = String(object.objLocation[i]);
+                }
+                return message;
+            };
+            /**
+             * Creates a plain object from a TransferredObj message. Also converts values to other types if specified.
+             * @function toObject
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @static
+             * @param {json_ipc.ValuesSequence.TransferredObj} message TransferredObj
+             * @param {$protobuf.IConversionOptions} [options] Conversion options
+             * @returns {Object.<string,*>} Plain object
+             */
+            TransferredObj.toObject = function toObject(message, options) {
+                if (!options)
+                    options = {};
+                var object = {};
+                if (options.arrays || options.defaults)
+                    object.objLocation = [];
+                if (options.defaults)
+                    object.indexInPassed = 0;
+                if (message.indexInPassed != null && message.hasOwnProperty("indexInPassed"))
+                    object.indexInPassed = message.indexInPassed;
+                if (message.objLocation && message.objLocation.length) {
+                    object.objLocation = [];
+                    for (var j = 0; j < message.objLocation.length; ++j)
+                        object.objLocation[j] = message.objLocation[j];
+                }
+                return object;
+            };
+            /**
+             * Converts this TransferredObj to JSON.
+             * @function toJSON
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @instance
+             * @returns {Object.<string,*>} JSON object
+             */
+            TransferredObj.prototype.toJSON = function toJSON() {
+                return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+            };
+            /**
+             * Gets the default type url for TransferredObj
+             * @function getTypeUrl
+             * @memberof json_ipc.ValuesSequence.TransferredObj
+             * @static
+             * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+             * @returns {string} The default type url
+             */
+            TransferredObj.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                if (typeUrlPrefix === undefined) {
+                    typeUrlPrefix = "type.googleapis.com";
+                }
+                return typeUrlPrefix + "/json_ipc.ValuesSequence.TransferredObj";
+            };
+            return TransferredObj;
+        })();
+        ValuesSequence.Value = (function () {
             /**
              * Properties of a Value.
-             * @memberof json_ipc.ValuesInJSON
+             * @memberof json_ipc.ValuesSequence
              * @interface IValue
              * @property {string|null} [json] Value json
-             * @property {Uint8Array|null} [arr] Value arr
-             * @property {Array.<json_ipc.ValuesInJSON.IBinaryValue>|null} [binaryInJson] Value binaryInJson
+             * @property {Array.<json_ipc.ValuesSequence.IBinaryValue>|null} [binaryInJson] Value binaryInJson
+             * @property {Array.<json_ipc.ValuesSequence.ITransferredObj>|null} [transferredInJson] Value transferredInJson
+             * @property {json_ipc.ValuesSequence.IBinaryValue|null} [arr] Value arr
+             * @property {json_ipc.ValuesSequence.ITransferredObj|null} [transferred] Value transferred
              */
             /**
              * Constructs a new Value.
-             * @memberof json_ipc.ValuesInJSON
+             * @memberof json_ipc.ValuesSequence
              * @classdesc Represents a Value.
              * @implements IValue
              * @constructor
-             * @param {json_ipc.ValuesInJSON.IValue=} [properties] Properties to set
+             * @param {json_ipc.ValuesSequence.IValue=} [properties] Properties to set
              */
             function Value(properties) {
                 this.binaryInJson = [];
+                this.transferredInJson = [];
                 if (properties)
                     for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                         if (properties[keys[i]] != null)
@@ -3216,41 +3446,55 @@ $root.json_ipc = (function () {
             /**
              * Value json.
              * @member {string} json
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @instance
              */
             Value.prototype.json = "";
             /**
-             * Value arr.
-             * @member {Uint8Array} arr
-             * @memberof json_ipc.ValuesInJSON.Value
-             * @instance
-             */
-            Value.prototype.arr = $util.newBuffer([]);
-            /**
              * Value binaryInJson.
-             * @member {Array.<json_ipc.ValuesInJSON.IBinaryValue>} binaryInJson
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @member {Array.<json_ipc.ValuesSequence.IBinaryValue>} binaryInJson
+             * @memberof json_ipc.ValuesSequence.Value
              * @instance
              */
             Value.prototype.binaryInJson = $util.emptyArray;
             /**
+             * Value transferredInJson.
+             * @member {Array.<json_ipc.ValuesSequence.ITransferredObj>} transferredInJson
+             * @memberof json_ipc.ValuesSequence.Value
+             * @instance
+             */
+            Value.prototype.transferredInJson = $util.emptyArray;
+            /**
+             * Value arr.
+             * @member {json_ipc.ValuesSequence.IBinaryValue|null|undefined} arr
+             * @memberof json_ipc.ValuesSequence.Value
+             * @instance
+             */
+            Value.prototype.arr = null;
+            /**
+             * Value transferred.
+             * @member {json_ipc.ValuesSequence.ITransferredObj|null|undefined} transferred
+             * @memberof json_ipc.ValuesSequence.Value
+             * @instance
+             */
+            Value.prototype.transferred = null;
+            /**
              * Creates a new Value instance using the specified properties.
              * @function create
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @static
-             * @param {json_ipc.ValuesInJSON.IValue=} [properties] Properties to set
-             * @returns {json_ipc.ValuesInJSON.Value} Value instance
+             * @param {json_ipc.ValuesSequence.IValue=} [properties] Properties to set
+             * @returns {json_ipc.ValuesSequence.Value} Value instance
              */
             Value.create = function create(properties) {
                 return new Value(properties);
             };
             /**
-             * Encodes the specified Value message. Does not implicitly {@link json_ipc.ValuesInJSON.Value.verify|verify} messages.
+             * Encodes the specified Value message. Does not implicitly {@link json_ipc.ValuesSequence.Value.verify|verify} messages.
              * @function encode
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @static
-             * @param {json_ipc.ValuesInJSON.IValue} message Value message or plain object to encode
+             * @param {json_ipc.ValuesSequence.IValue} message Value message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
@@ -3259,19 +3503,24 @@ $root.json_ipc = (function () {
                     writer = $Writer.create();
                 if (message.json != null && Object.hasOwnProperty.call(message, "json"))
                     writer.uint32(/* id 1, wireType 2 =*/ 10).string(message.json);
-                if (message.arr != null && Object.hasOwnProperty.call(message, "arr"))
-                    writer.uint32(/* id 2, wireType 2 =*/ 18).bytes(message.arr);
                 if (message.binaryInJson != null && message.binaryInJson.length)
                     for (var i = 0; i < message.binaryInJson.length; ++i)
-                        $root.json_ipc.ValuesInJSON.BinaryValue.encode(message.binaryInJson[i], writer.uint32(/* id 3, wireType 2 =*/ 26).fork()).ldelim();
+                        $root.json_ipc.ValuesSequence.BinaryValue.encode(message.binaryInJson[i], writer.uint32(/* id 2, wireType 2 =*/ 18).fork()).ldelim();
+                if (message.transferredInJson != null && message.transferredInJson.length)
+                    for (var i = 0; i < message.transferredInJson.length; ++i)
+                        $root.json_ipc.ValuesSequence.TransferredObj.encode(message.transferredInJson[i], writer.uint32(/* id 3, wireType 2 =*/ 26).fork()).ldelim();
+                if (message.arr != null && Object.hasOwnProperty.call(message, "arr"))
+                    $root.json_ipc.ValuesSequence.BinaryValue.encode(message.arr, writer.uint32(/* id 4, wireType 2 =*/ 34).fork()).ldelim();
+                if (message.transferred != null && Object.hasOwnProperty.call(message, "transferred"))
+                    $root.json_ipc.ValuesSequence.TransferredObj.encode(message.transferred, writer.uint32(/* id 5, wireType 2 =*/ 42).fork()).ldelim();
                 return writer;
             };
             /**
-             * Encodes the specified Value message, length delimited. Does not implicitly {@link json_ipc.ValuesInJSON.Value.verify|verify} messages.
+             * Encodes the specified Value message, length delimited. Does not implicitly {@link json_ipc.ValuesSequence.Value.verify|verify} messages.
              * @function encodeDelimited
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @static
-             * @param {json_ipc.ValuesInJSON.IValue} message Value message or plain object to encode
+             * @param {json_ipc.ValuesSequence.IValue} message Value message or plain object to encode
              * @param {$protobuf.Writer} [writer] Writer to encode to
              * @returns {$protobuf.Writer} Writer
              */
@@ -3281,18 +3530,18 @@ $root.json_ipc = (function () {
             /**
              * Decodes a Value message from the specified reader or buffer.
              * @function decode
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @static
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
              * @param {number} [length] Message length if known beforehand
-             * @returns {json_ipc.ValuesInJSON.Value} Value
+             * @returns {json_ipc.ValuesSequence.Value} Value
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
             Value.decode = function decode(reader, length) {
                 if (!(reader instanceof $Reader))
                     reader = $Reader.create(reader);
-                var end = length === undefined ? reader.len : reader.pos + length, message = new $root.json_ipc.ValuesInJSON.Value();
+                var end = length === undefined ? reader.len : reader.pos + length, message = new $root.json_ipc.ValuesSequence.Value();
                 while (reader.pos < end) {
                     var tag = reader.uint32();
                     switch (tag >>> 3) {
@@ -3301,13 +3550,23 @@ $root.json_ipc = (function () {
                             break;
                         }
                         case 2: {
-                            message.arr = reader.bytes();
+                            if (!(message.binaryInJson && message.binaryInJson.length))
+                                message.binaryInJson = [];
+                            message.binaryInJson.push($root.json_ipc.ValuesSequence.BinaryValue.decode(reader, reader.uint32()));
                             break;
                         }
                         case 3: {
-                            if (!(message.binaryInJson && message.binaryInJson.length))
-                                message.binaryInJson = [];
-                            message.binaryInJson.push($root.json_ipc.ValuesInJSON.BinaryValue.decode(reader, reader.uint32()));
+                            if (!(message.transferredInJson && message.transferredInJson.length))
+                                message.transferredInJson = [];
+                            message.transferredInJson.push($root.json_ipc.ValuesSequence.TransferredObj.decode(reader, reader.uint32()));
+                            break;
+                        }
+                        case 4: {
+                            message.arr = $root.json_ipc.ValuesSequence.BinaryValue.decode(reader, reader.uint32());
+                            break;
+                        }
+                        case 5: {
+                            message.transferred = $root.json_ipc.ValuesSequence.TransferredObj.decode(reader, reader.uint32());
                             break;
                         }
                         default:
@@ -3320,10 +3579,10 @@ $root.json_ipc = (function () {
             /**
              * Decodes a Value message from the specified reader or buffer, length delimited.
              * @function decodeDelimited
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @static
              * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-             * @returns {json_ipc.ValuesInJSON.Value} Value
+             * @returns {json_ipc.ValuesSequence.Value} Value
              * @throws {Error} If the payload is not a reader or valid buffer
              * @throws {$protobuf.util.ProtocolError} If required fields are missing
              */
@@ -3335,7 +3594,7 @@ $root.json_ipc = (function () {
             /**
              * Verifies a Value message.
              * @function verify
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @static
              * @param {Object.<string,*>} message Plain object to verify
              * @returns {string|null} `null` if valid, otherwise the reason why it is not
@@ -3346,57 +3605,88 @@ $root.json_ipc = (function () {
                 if (message.json != null && message.hasOwnProperty("json"))
                     if (!$util.isString(message.json))
                         return "json: string expected";
-                if (message.arr != null && message.hasOwnProperty("arr"))
-                    if (!(message.arr && typeof message.arr.length === "number" || $util.isString(message.arr)))
-                        return "arr: buffer expected";
                 if (message.binaryInJson != null && message.hasOwnProperty("binaryInJson")) {
                     if (!Array.isArray(message.binaryInJson))
                         return "binaryInJson: array expected";
                     for (var i = 0; i < message.binaryInJson.length; ++i) {
-                        var error = $root.json_ipc.ValuesInJSON.BinaryValue.verify(message.binaryInJson[i]);
+                        var error = $root.json_ipc.ValuesSequence.BinaryValue.verify(message.binaryInJson[i]);
                         if (error)
                             return "binaryInJson." + error;
                     }
+                }
+                if (message.transferredInJson != null && message.hasOwnProperty("transferredInJson")) {
+                    if (!Array.isArray(message.transferredInJson))
+                        return "transferredInJson: array expected";
+                    for (var i = 0; i < message.transferredInJson.length; ++i) {
+                        var error = $root.json_ipc.ValuesSequence.TransferredObj.verify(message.transferredInJson[i]);
+                        if (error)
+                            return "transferredInJson." + error;
+                    }
+                }
+                if (message.arr != null && message.hasOwnProperty("arr")) {
+                    var error = $root.json_ipc.ValuesSequence.BinaryValue.verify(message.arr);
+                    if (error)
+                        return "arr." + error;
+                }
+                if (message.transferred != null && message.hasOwnProperty("transferred")) {
+                    var error = $root.json_ipc.ValuesSequence.TransferredObj.verify(message.transferred);
+                    if (error)
+                        return "transferred." + error;
                 }
                 return null;
             };
             /**
              * Creates a Value message from a plain object. Also converts values to their respective internal types.
              * @function fromObject
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @static
              * @param {Object.<string,*>} object Plain object
-             * @returns {json_ipc.ValuesInJSON.Value} Value
+             * @returns {json_ipc.ValuesSequence.Value} Value
              */
             Value.fromObject = function fromObject(object) {
-                if (object instanceof $root.json_ipc.ValuesInJSON.Value)
+                if (object instanceof $root.json_ipc.ValuesSequence.Value)
                     return object;
-                var message = new $root.json_ipc.ValuesInJSON.Value();
+                var message = new $root.json_ipc.ValuesSequence.Value();
                 if (object.json != null)
                     message.json = String(object.json);
-                if (object.arr != null)
-                    if (typeof object.arr === "string")
-                        $util.base64.decode(object.arr, message.arr = $util.newBuffer($util.base64.length(object.arr)), 0);
-                    else if (object.arr.length >= 0)
-                        message.arr = object.arr;
                 if (object.binaryInJson) {
                     if (!Array.isArray(object.binaryInJson))
-                        throw TypeError(".json_ipc.ValuesInJSON.Value.binaryInJson: array expected");
+                        throw TypeError(".json_ipc.ValuesSequence.Value.binaryInJson: array expected");
                     message.binaryInJson = [];
                     for (var i = 0; i < object.binaryInJson.length; ++i) {
                         if (typeof object.binaryInJson[i] !== "object")
-                            throw TypeError(".json_ipc.ValuesInJSON.Value.binaryInJson: object expected");
-                        message.binaryInJson[i] = $root.json_ipc.ValuesInJSON.BinaryValue.fromObject(object.binaryInJson[i]);
+                            throw TypeError(".json_ipc.ValuesSequence.Value.binaryInJson: object expected");
+                        message.binaryInJson[i] = $root.json_ipc.ValuesSequence.BinaryValue.fromObject(object.binaryInJson[i]);
                     }
+                }
+                if (object.transferredInJson) {
+                    if (!Array.isArray(object.transferredInJson))
+                        throw TypeError(".json_ipc.ValuesSequence.Value.transferredInJson: array expected");
+                    message.transferredInJson = [];
+                    for (var i = 0; i < object.transferredInJson.length; ++i) {
+                        if (typeof object.transferredInJson[i] !== "object")
+                            throw TypeError(".json_ipc.ValuesSequence.Value.transferredInJson: object expected");
+                        message.transferredInJson[i] = $root.json_ipc.ValuesSequence.TransferredObj.fromObject(object.transferredInJson[i]);
+                    }
+                }
+                if (object.arr != null) {
+                    if (typeof object.arr !== "object")
+                        throw TypeError(".json_ipc.ValuesSequence.Value.arr: object expected");
+                    message.arr = $root.json_ipc.ValuesSequence.BinaryValue.fromObject(object.arr);
+                }
+                if (object.transferred != null) {
+                    if (typeof object.transferred !== "object")
+                        throw TypeError(".json_ipc.ValuesSequence.Value.transferred: object expected");
+                    message.transferred = $root.json_ipc.ValuesSequence.TransferredObj.fromObject(object.transferred);
                 }
                 return message;
             };
             /**
              * Creates a plain object from a Value message. Also converts values to other types if specified.
              * @function toObject
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @static
-             * @param {json_ipc.ValuesInJSON.Value} message Value
+             * @param {json_ipc.ValuesSequence.Value} message Value
              * @param {$protobuf.IConversionOptions} [options] Conversion options
              * @returns {Object.<string,*>} Plain object
              */
@@ -3404,33 +3694,37 @@ $root.json_ipc = (function () {
                 if (!options)
                     options = {};
                 var object = {};
-                if (options.arrays || options.defaults)
+                if (options.arrays || options.defaults) {
                     object.binaryInJson = [];
+                    object.transferredInJson = [];
+                }
                 if (options.defaults) {
                     object.json = "";
-                    if (options.bytes === String)
-                        object.arr = "";
-                    else {
-                        object.arr = [];
-                        if (options.bytes !== Array)
-                            object.arr = $util.newBuffer(object.arr);
-                    }
+                    object.arr = null;
+                    object.transferred = null;
                 }
                 if (message.json != null && message.hasOwnProperty("json"))
                     object.json = message.json;
-                if (message.arr != null && message.hasOwnProperty("arr"))
-                    object.arr = options.bytes === String ? $util.base64.encode(message.arr, 0, message.arr.length) : options.bytes === Array ? Array.prototype.slice.call(message.arr) : message.arr;
                 if (message.binaryInJson && message.binaryInJson.length) {
                     object.binaryInJson = [];
                     for (var j = 0; j < message.binaryInJson.length; ++j)
-                        object.binaryInJson[j] = $root.json_ipc.ValuesInJSON.BinaryValue.toObject(message.binaryInJson[j], options);
+                        object.binaryInJson[j] = $root.json_ipc.ValuesSequence.BinaryValue.toObject(message.binaryInJson[j], options);
                 }
+                if (message.transferredInJson && message.transferredInJson.length) {
+                    object.transferredInJson = [];
+                    for (var j = 0; j < message.transferredInJson.length; ++j)
+                        object.transferredInJson[j] = $root.json_ipc.ValuesSequence.TransferredObj.toObject(message.transferredInJson[j], options);
+                }
+                if (message.arr != null && message.hasOwnProperty("arr"))
+                    object.arr = $root.json_ipc.ValuesSequence.BinaryValue.toObject(message.arr, options);
+                if (message.transferred != null && message.hasOwnProperty("transferred"))
+                    object.transferred = $root.json_ipc.ValuesSequence.TransferredObj.toObject(message.transferred, options);
                 return object;
             };
             /**
              * Converts this Value to JSON.
              * @function toJSON
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @instance
              * @returns {Object.<string,*>} JSON object
              */
@@ -3440,7 +3734,7 @@ $root.json_ipc = (function () {
             /**
              * Gets the default type url for Value
              * @function getTypeUrl
-             * @memberof json_ipc.ValuesInJSON.Value
+             * @memberof json_ipc.ValuesSequence.Value
              * @static
              * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
              * @returns {string} The default type url
@@ -3449,11 +3743,11 @@ $root.json_ipc = (function () {
                 if (typeUrlPrefix === undefined) {
                     typeUrlPrefix = "type.googleapis.com";
                 }
-                return typeUrlPrefix + "/json_ipc.ValuesInJSON.Value";
+                return typeUrlPrefix + "/json_ipc.ValuesSequence.Value";
             };
             return Value;
         })();
-        return ValuesInJSON;
+        return ValuesSequence;
     })();
     return json_ipc;
 })();
@@ -5546,7 +5840,7 @@ function copyJSON(orig, excludeTopFields) {
 }
 
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022 - 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -5561,65 +5855,100 @@ function copyJSON(orig, excludeTopFields) {
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-const valuesType = ProtoType.for(jsonIpc_proto.json_ipc.ValuesInJSON);
+const valuesType = ProtoType.for(jsonIpc_proto.json_ipc.ValuesSequence);
 function serializeArgs(args) {
-    return valuesType.pack(argsToValuesInJSON(args));
+    const { seq, passedByReference } = argsToValuesSequence(args);
+    return { bytes: valuesType.pack(seq), passedByReference };
 }
-function argsToValuesInJSON(args) {
-    const values = { values: [] };
+function argsToValuesSequence(args) {
+    const seq = { values: [] };
+    const passedByReference = [];
     for (const arg of args) {
         if (arg && (typeof arg === 'object')) {
             if (ArrayBuffer.isView(arg)) {
-                values.values.push({
-                    arr: arg
+                seq.values.push({
+                    arr: { arr: arg, objLocation: [] }
+                });
+            }
+            else if (arg._isObjectFromCore) {
+                const indexInPassed = addToArray(passedByReference, arg);
+                seq.values.push({
+                    transferred: { indexInPassed, objLocation: [] }
                 });
             }
             else {
-                const { json, binaryInJson } = turnToJsonExtractingBinary(arg);
-                values.values.push({ json, binaryInJson });
+                seq.values.push(turnToJsonExtractingBinaryAndTransferable(arg, passedByReference));
             }
         }
         else {
-            values.values.push({
+            seq.values.push({
                 json: JSON.stringify(arg)
             });
         }
     }
-    return values;
+    return {
+        seq,
+        passedByReference: ((passedByReference.length > 0) ?
+            passedByReference : undefined)
+    };
 }
-function turnToJsonExtractingBinary(arg) {
-    const parts = extractBinaryFrom(arg);
+function addToArray(arr, o) {
+    let foundIndex = arr.indexOf(o);
+    if (foundIndex < 0) {
+        arr.push(o);
+        return arr.length - 1;
+    }
+    else {
+        return foundIndex;
+    }
+}
+function turnToJsonExtractingBinaryAndTransferable(arg, passedByReference) {
+    const parts = extractNonJsonableFrom(arg, passedByReference);
     if (parts) {
-        const { copy, binaryInJson } = parts;
-        return { json: JSON.stringify(copy), binaryInJson };
+        const { copy, binaryInJson, transferredInJson } = parts;
+        return {
+            json: JSON.stringify(copy),
+            binaryInJson: ((binaryInJson.length > 0) ? binaryInJson : undefined),
+            transferredInJson: ((transferredInJson.length > 0) ?
+                transferredInJson : undefined)
+        };
     }
     else {
         return { json: JSON.stringify(arg) };
     }
 }
-function extractBinaryFrom(arg) {
-    const binLocations = findAllBinaryArrays(arg);
-    if (!binLocations) {
+function extractNonJsonableFrom(arg, passedByReference) {
+    const nonJsonLocations = findAllNonJsonable(arg);
+    if (!nonJsonLocations) {
         return;
     }
     const copy = copyJSON(arg);
     const binaryInJson = [];
-    for (const objLocation of binLocations) {
-        const arr = getInitAndSetNewValueAt(copy, objLocation, null);
-        binaryInJson.push({ arr, objLocation });
+    const transferredInJson = [];
+    for (const objLocation of nonJsonLocations) {
+        const nonJson = getValueAtObjLocation(arg, objLocation);
+        setNewValueAtObjLocation(copy, objLocation, null);
+        if (nonJson._isObjectFromCore) {
+            const indexInPassed = addToArray(passedByReference, nonJson);
+            transferredInJson.push({ indexInPassed, objLocation });
+        }
+        else {
+            binaryInJson.push({ arr: nonJson, objLocation });
+        }
     }
-    return { copy, binaryInJson };
+    return { copy, binaryInJson, transferredInJson };
 }
-function findAllBinaryArrays(o) {
+function findAllNonJsonable(o) {
     const foundObjLocations = [];
-    if (ArrayBuffer.isView(o)) {
+    if (ArrayBuffer.isView(o)
+        || o._isObjectFromCore) {
         return [[]];
     }
     if (Array.isArray(o)) {
         for (let i = 0; i < o.length; i += 1) {
             const child = o[i];
             if (child && (typeof child === 'object')) {
-                const inChild = findAllBinaryArrays(child);
+                const inChild = findAllNonJsonable(child);
                 if (inChild) {
                     for (const objLocation of inChild) {
                         foundObjLocations.push([`${i}`, ...objLocation]);
@@ -5631,7 +5960,7 @@ function findAllBinaryArrays(o) {
     else {
         for (const [field, child] of Object.entries(o)) {
             if (child && (typeof child === 'object')) {
-                const inChild = findAllBinaryArrays(child);
+                const inChild = findAllNonJsonable(child);
                 if (inChild) {
                     for (const objLocation of inChild) {
                         foundObjLocations.push([field, ...objLocation]);
@@ -5642,42 +5971,74 @@ function findAllBinaryArrays(o) {
     }
     return ((foundObjLocations.length > 0) ? foundObjLocations : undefined);
 }
-function getInitAndSetNewValueAt(o, objLocation, newValue) {
+function getValueAtObjLocation(o, objLocation) {
     const value = o[objLocation[0]];
     if (objLocation.length > 1) {
-        return getInitAndSetNewValueAt(value, objLocation.slice(1), newValue);
+        return getValueAtObjLocation(value, objLocation.slice(1));
     }
     else {
-        o[objLocation[0]] = newValue;
         return value;
     }
 }
-function deserializeArgs(bytes) {
+function setNewValueAtObjLocation(o, objLocation, newValue) {
+    const value = o[objLocation[0]];
+    if (objLocation.length > 1) {
+        setNewValueAtObjLocation(value, objLocation.slice(1), newValue);
+    }
+    else {
+        o[objLocation[0]] = newValue;
+    }
+}
+function deserializeArgs(bytes, passedByReference) {
     const values = valuesType.unpack(bytes);
     const args = [];
     for (const val of values.values) {
-        const { arr, json, binaryInJson } = val;
-        if ((typeof json === 'string') && (json.length > 0)) {
+        const { json, binaryInJson, transferredInJson, arr, transferred } = val;
+        if (arr) {
+            args.push(arr.arr);
+        }
+        else if (transferred) {
+            args.push(getTransferred(transferred.indexInPassed, passedByReference));
+        }
+        else if ((typeof json === 'string') && (json.length > 0)) {
             const arg = JSON.parse(json);
             if (binaryInJson) {
                 attachBinaryArrays(arg, binaryInJson);
             }
+            if (transferredInJson) {
+                attachTransferred(arg, transferredInJson, passedByReference);
+            }
             args.push(arg);
         }
-        else {
-            args.push(arr);
-        }
+        else ;
     }
     return args;
 }
 function attachBinaryArrays(arg, binaryInJson) {
     for (const { arr, objLocation } of binaryInJson) {
-        getInitAndSetNewValueAt(arg, objLocation, arr);
+        setNewValueAtObjLocation(arg, objLocation, arr);
+    }
+}
+function getTransferred(indexInPassed, passedByReference) {
+    if (!passedByReference) {
+        // XXX throw error here
+        throw new Error(`need better error`);
+    }
+    const o = passedByReference[indexInPassed];
+    if (!o || !o._isObjectFromCore) {
+        // XXX throw error here
+        throw new Error(`need better error`);
+    }
+    return o;
+}
+function attachTransferred(arg, transferredInJson, passedByReference) {
+    for (const { indexInPassed, objLocation } of transferredInJson) {
+        setNewValueAtObjLocation(arg, objLocation, getTransferred(indexInPassed, passedByReference));
     }
 }
 
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022 - 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -5705,10 +6066,8 @@ function replyFromPassedDatum(data, unpack) {
         }
     }
     else {
-        if (!data.bytes) {
-            return;
-        }
-        return deserializeArgs(data.bytes)[0];
+        const { bytes, passedByReference } = data;
+        return (bytes ? deserializeArgs(bytes, passedByReference)[0] : undefined);
     }
 }
 function argsToPassedDatum(args, pack) {
@@ -5725,7 +6084,7 @@ function argsToPassedDatum(args, pack) {
         return pack(args);
     }
     else {
-        return { bytes: serializeArgs(args) };
+        return serializeArgs(args);
     }
 }
 function makeReqRepMethodCaller(connection, method, transforms) {
