@@ -30,6 +30,7 @@ declare module '@vue/runtime-core' {
     ContactIcon: typeof import('./src/components/contacts/contact-icon.vue')['default']
     ContactList: typeof import('./src/components/contacts/contact-list.vue')['default']
     ContactListItem: typeof import('./src/components/contacts/contact-list-item.vue')['default']
+    EmoticonsDialog: typeof import('./src/components/dialogs/emoticons-dialog.vue')['default']
     MessageDeleteDialog: typeof import('./src/components/dialogs/message-delete-dialog.vue')['default']
     MessageForwardDialog: typeof import('./src/components/dialogs/message-forward-dialog.vue')['default']
     PDialog: typeof import('./src/components/ui/p-dialog.vue')['default']

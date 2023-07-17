@@ -10,7 +10,7 @@
   import ChatMessages from '@/components/messages/chat-messages.vue'
   import ChatAttachment from '@/components/chat/chat-attachment.vue'
   import PText from '@/components/ui/p-text.vue'
-
+  import EmoticonsDialog from '@/components/dialogs/emoticons-dialog.vue'
 
   const route = useRoute()
   const { $tr } = inject<I18nPlugin>('i18n')!
@@ -33,6 +33,7 @@
   const attachmentsInfo = ref<ChatMessageAttachmentsInfo[] | null>(null)
   const initialMessage = ref<ChatMessageView<MessageType> | null>(null)
   const initialMessageType = ref<'reply'|'forward'>('reply')
+  const isEmoticonsDialogOpen = ref(false)
 
   const sendBtnDisabled = computed<boolean>(() => {
     return !(msgText.value.trim() || attachmentsInfo.value) || disabled.value
@@ -46,6 +47,10 @@
     const attachmentsText = (attachments || []).map(a => a.name).join(', ')
     return body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`
   })
+
+  const onEmoticonSelect = ({ emoticon }: { id: string, emoticon: string }) => {
+    msgText.value += emoticon
+  }
 
   const prepareInfoFromForwardingMessage = async (initialMsgId?: string) => {
     if (initialMsgId) {
@@ -166,18 +171,27 @@
     </section>
 
     <div class="chat__input">
-      <var-button
-        round
-        class="chat__input-emoji"
-        :disabled="disabled || readonly"
-      >
-        <icon
-          icon="baseline-emoticon"
-          width="20"
-          height="20"
-          color="#b3b3b3"
+      <div style="position: relative">
+        <var-button
+          round
+          class="chat__input-emoji"
+          :disabled="disabled || readonly"
+          @click="isEmoticonsDialogOpen = true"
+        >
+          <icon
+            icon="baseline-emoticon"
+            width="20"
+            height="20"
+            color="#b3b3b3"
+          />
+        </var-button>
+
+        <emoticons-dialog
+          :open="isEmoticonsDialogOpen"
+          @close="isEmoticonsDialogOpen = false"
+          @select="onEmoticonSelect"
         />
-      </var-button>
+      </div>
 
       <var-button
         round

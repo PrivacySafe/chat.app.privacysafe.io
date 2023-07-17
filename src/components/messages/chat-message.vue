@@ -155,17 +155,17 @@
       border-left: 2px solid var(--black-90);
       padding-left: var(--half-size);
       font-size: var(--font-12);
+      line-height: var(--font-14);
       color: var(--black-90);
 
       &-sender {
         display: block;
-        line-height: var(--font-14);
+        font-style: italic;
+        font-weight: 500;
       }
 
       &-text {
         display: block;
-        font-style: italic;
-        line-height: var(--font-14);
       }
     }
 
