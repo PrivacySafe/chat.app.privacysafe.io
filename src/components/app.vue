@@ -127,8 +127,9 @@
         complete: () => deliverySrvConnection.close(),
       })
 
+      await appDeliverySrvProxy.start()
     } catch (e) {
-      console.error('\ERR-MOUNTED: ', e)
+      console.error('\nERR-MOUNTED: ', e)
       throw e
     }
   })

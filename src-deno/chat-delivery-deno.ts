@@ -85,9 +85,11 @@ class ChatDeliveryService {
     }
   }
 
+  public initialization() {
+    this.completeAllWatchers()
+  }
   public async start(): Promise<void> {
     this.userId = await w3n.mail?.getUserId()
-    this.completeAllWatchers()
 
     await this.handleMissedInboxMessages()
 
@@ -101,6 +103,7 @@ class ChatDeliveryService {
             this.data.lastReceivedMessageTimestamp = deliveryTS
             await this.saveServiceDataFile(this.data)
             for (const obs of this.incomingChatMessageObservers) {
+
               if (obs.next) {
                 obs.next(value as ChatIncomingMessage)
               }
@@ -260,7 +263,7 @@ const deliverySrv = new ChatDeliveryService()
 const deliverySrvWrap = new ChatDeliveryServiceWrap('ChatDeliveryService', deliverySrv.fileProc)
 
 deliverySrvWrap.exposeReqReplyMethods(deliverySrv, [
-  'start', 'addMessageToDeliveryList', 'removeMessageFromDeliveryList', 'getMessage', 'getDeliveryList', 'removeMessageFromInbox',
+  'initialization', 'start', 'addMessageToDeliveryList', 'removeMessageFromDeliveryList', 'getMessage', 'getDeliveryList', 'removeMessageFromInbox',
 ])
 deliverySrvWrap.exposeObservableMethods(deliverySrv, ['watchIncomingMessages', 'watchOutgoingMessages'])
 

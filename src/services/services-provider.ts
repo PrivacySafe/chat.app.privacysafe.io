@@ -49,6 +49,7 @@ export async function initializationServices() {
 
     const deliverySrvConn = await w3n.rpc!.thisApp!('ChatDeliveryService')
     appDeliverySrvProxy = makeServiceCaller<AppDeliverySrv>(deliverySrvConn, [
+      'initialization',
       'start',
       'addMessageToDeliveryList',
       'removeMessageFromDeliveryList',
@@ -56,7 +57,7 @@ export async function initializationServices() {
       'getDeliveryList',
       'removeMessageFromInbox',
     ]) as AppDeliverySrv
-    await appDeliverySrvProxy.start()
+    appDeliverySrvProxy.initialization()
 
     console.info('\n--- initializationServices DONE---\n')
   } catch (e) {
