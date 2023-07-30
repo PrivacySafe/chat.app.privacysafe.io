@@ -29,7 +29,7 @@ export async function initializationServices() {
     fileLinkStoreSrv = await outgoingFileLinkStore()
     const srvConn = await w3n.rpc!.otherAppsRPC!( 'contacts.app.privacysafe.io', 'AppContacts')
     appContactsSrvProxy = makeServiceCaller<AppContacts>(
-      srvConn, ['getContact',  'getContactList']
+      srvConn, ['getContact',  'getContactList', 'upsertContact']
     ) as AppContacts
 
     const chatsSrvInternalConn = await w3n.rpc!.thisApp!('AppChatsInternal')

@@ -12,7 +12,7 @@
   const emit = defineEmits(['close'])
   const { user } = toRefs(useAppStore())
   const { contactList: allContacts } = toRefs(useContactsStore())
-  const { fetchContactList } = useContactsStore()
+  const { fetchContactList, addContact } = useContactsStore()
   const { createChat } = useChatsStore()
 
   const tabs = ref({
@@ -99,6 +99,10 @@
     }
   }
 
+  const addNewContact = async (mail: string) => {
+    await addContact(mail)
+  }
+
   const closeDialog = (chatId?: string) => {
     if (!props.withoutOverlay) {
       emit('close', chatId)
@@ -135,13 +139,12 @@
       >
         <div class="chat-create-dialog__content-header">
           <p-input
-            v-if="multipleModeStep === 1"
             v-model:value="searchText"
             icon="round-search"
             clearable
           />
 
-          <template v-if="selectedChatType === 'group' && multipleModeStep === 1">
+          <template v-if="selectedChatType === 'group'">
             <div class="chat-create-dialog__selected-info">
               {{ $tr('chat.create.dialog.selected.contacts') }}:
               {{ selectedContacts.length }}/{{ Object.values(allContacts).length }}
@@ -177,6 +180,7 @@
             :selected-contacts="selectedContacts"
             :non-selectable-contacts="nonSelectableContacts"
             @select="selectContacts"
+            @add:new="addNewContact"
           />
         </div>
       </div>

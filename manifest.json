@@ -1,7 +1,7 @@
 {
   "name": "Apps Chats",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.5.1",
+  "version": "0.5.3",
   "components": {
     "/index.html": {
       "startedBy": "user",

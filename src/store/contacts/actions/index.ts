@@ -1,6 +1,7 @@
 import { ContactsActions } from './types'
 import { get } from 'lodash'
 import { appContactsSrvProxy } from '@/services/services-provider'
+import { randomStr } from '@/services/base/random'
 
 export const actions: ContactsActions = {
   async fetchContactList(): Promise<Array<PersonView & { displayName: string }>> {
@@ -19,5 +20,17 @@ export const actions: ContactsActions = {
       .sort((a, b) => (a.displayName > b.displayName ? 1 : -1))
 
     return this.contactList
+  },
+
+  async addContact(this, mail: string): Promise<void> {
+    const person: Person = {
+      id: randomStr(6),
+      name: '',
+      mail,
+      notice: '',
+      phone: '',
+    }
+    await appContactsSrvProxy.upsertContact(person)
+    await this.fetchContactList()
   },
 }

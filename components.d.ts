@@ -46,8 +46,8 @@ declare module '@vue/runtime-core' {
     VarIndexAnchor: typeof import('@varlet/ui')['_IndexAnchorComponent']
     VarIndexBar: typeof import('@varlet/ui')['_IndexBarComponent']
     VarInput: typeof import('@varlet/ui')['_InputComponent']
+    VarLink: typeof import('@varlet/ui')['_LinkComponent']
     VarMenu: typeof import('@varlet/ui')['_MenuComponent']
-    VarSnackbar: typeof import('@varlet/ui')['_SnackbarComponent']
     VarTab: typeof import('@varlet/ui')['_TabComponent']
     VarTabs: typeof import('@varlet/ui')['_TabsComponent']
   }

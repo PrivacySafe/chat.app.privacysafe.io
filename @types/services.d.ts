@@ -1,6 +1,7 @@
 interface AppContacts {
   getContact(id: string): Promise<Person>;
   getContactList(): Promise<PersonView[]>;
+  upsertContact(value: Person): Promise<void>;
 }
 
 interface AppChatsSrv {

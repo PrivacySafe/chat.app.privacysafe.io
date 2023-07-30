@@ -12,7 +12,7 @@
   "btn.text.delete": "delete",
   "text.send.file": "file(s) sent",
   "text.receive.file": "file(s) received",
-  "contacts.list.empty": "Contacts not found",
+  "contacts.list.empty": "Contact not found",
   "chat.create.dialog.selected.contacts": "Selected Members",
   "chat.create.dialog.tab.chat": "Chat",
   "chat.create.dialog.tab.group": "Group Chat",

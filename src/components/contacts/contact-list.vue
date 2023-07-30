@@ -1,5 +1,6 @@
 <script lang="ts" setup>
   import { computed } from 'vue'
+  import { mailReg } from '@/constants'
   import ContactListItem from '@/components/contacts/contact-list-item.vue'
 
   const props = defineProps<{
@@ -10,7 +11,7 @@
     withoutAnchor?: boolean;
     readonly?: boolean;
   }>()
-  const emit = defineEmits(['select'])
+  const emit = defineEmits(['select', 'add:new'])
 
   const contactListProps = computed(() => {
     const {
@@ -38,19 +39,24 @@
       }, {} as Record<string, Array<PersonView & { displayName: string }>>)
   })
 
+  const isMailValid = computed<boolean>(() => mailReg.test(props.searchText || ''))
+
   const selectContact = (contactId: string) => {
     emit('select', contactId)
+  }
+
+  const addNewContact = () => {
+    if (isMailValid.value) {
+      emit('add:new', props.searchText as string)
+    }
   }
 </script>
 
 <template>
   <div class="contact-list">
-    <var-index-bar
+    <div
       v-if="Object.keys(contactListByLetters).length"
       class="contact-list__content"
-      duration="200"
-      hide-list
-      css-mode
     >
       <div
         v-for="(letter, index) in Object.keys(contactListByLetters)"
@@ -58,12 +64,12 @@
         class="contact-list__content-sublist"
         :class="{ 'contact-list__content-sublist--last': index === Object.keys(contactListByLetters).length -1 }"
       >
-        <var-index-anchor
+        <div
           v-if="letter !== 'one'"
-          :index="letter"
+          class="contact-list__content-sublist-title"
         >
           {{ letter }}
-        </var-index-anchor>
+        </div>
 
         <contact-list-item
           v-for="contact in contactListByLetters[letter]"
@@ -75,13 +81,20 @@
           @click="selectContact"
         />
       </div>
-    </var-index-bar>
+    </div>
 
     <div
       v-else
       class="contact-list__content-info"
     >
-      {{ $tr('contacts.list.empty') }}
+      <var-link
+        type="primary"
+        :disabled="!isMailValid"
+        class="contact-list__add-btn"
+        @click.prevent.stop="addNewContact"
+      >
+        Add {{ props.searchText }}
+      </var-link>
     </div>
   </div>
 </template>
@@ -95,18 +108,12 @@
       &-sublist {
         padding: calc(var(--base-size) / 2) 0;
 
-        .var-sticky {
-          padding-left: 2px;
-          width: calc(var(--base-size) * 2.5);
-          text-align: center;
-          margin-bottom: calc(var(--base-size) / 2);
-        }
-
-        .var-index-anchor {
+        &-title {
           font-size: 14px;
           font-weight: 600;
           color: var(--blue-main, #0090ec);
           line-height: 1;
+          margin-bottom: calc(var(--base-size) / 2);
         }
       }
 
@@ -116,6 +123,14 @@
         line-height: var(--font-24);
         color: var(--gray-90, #444);
       }
+    }
+
+    &__add-btn {
+      --link-primary-color: var(--blue-main);
+
+      text-decoration: none;
+      font-size: var(--font-12);
+      font-weight: 500;
     }
   }
 </style>
