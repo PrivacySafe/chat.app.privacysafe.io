@@ -23,7 +23,7 @@
     'click-overlay',
   ])
 
-  const component = defineAsyncComponent(() => import(props.component/* @vite-ignore */))
+  const component = defineAsyncComponent(() => import(`../dialogs/${props.component}.vue`/* @vite-ignore */))
   const dialogProps = computed(() => {
     const {
       title = 'dialog.title.default',

@@ -58,7 +58,7 @@
   }
 
   const runChatHistoryCleaning = async () => {
-    component.value = '../dialogs/confirmation-dialog.vue'
+    component.value = 'confirmation-dialog'
     dialogProps.value = {
       title: 'chat.history.clean.dialog.title',
       onConfirm: async () => {
@@ -69,7 +69,7 @@
   }
 
   const openChatInfoDialog = () => {
-    component.value = '../dialogs/chat-info-dialog.vue'
+    component.value = 'chat-info-dialog'
     componentProps.value = { chat: props.chat }
     dialogProps.value = {
       solo: true,
@@ -78,7 +78,7 @@
   }
 
   const runChatRenaming = () => {
-    component.value = '../dialogs/chat-rename-dialog.vue'
+    component.value = 'chat-rename-dialog'
     componentProps.value = { chatName: props.chat.name }
     dialogProps.value = {
       title: 'chat.rename.dialog.title',
@@ -99,7 +99,7 @@
   }
 
   const runChatDeleting = () => {
-    component.value = '../dialogs/confirmation-dialog.vue'
+    component.value = 'confirmation-dialog'
     dialogProps.value = {
       title: 'chat.delete.dialog.title',
       confirmButtonColor: 'var(--blue-main)',
@@ -120,7 +120,7 @@
   }
 
   const runChatLeave = () => {
-    component.value = '../dialogs/confirmation-dialog.vue'
+    component.value = 'confirmation-dialog'
     dialogProps.value = {
       title: 'chat.leave.dialog.title',
       confirmButtonText: 'chat.leave.dialog.button',

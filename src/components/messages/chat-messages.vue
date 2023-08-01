@@ -131,7 +131,7 @@
         cancelButtonBackground: 'var(--blue-main)',
         onConfirm: (deleteForEveryone?: boolean) => deleteMessage(chatMessageId, deleteForEveryone),
       },
-      component: '../dialogs/message-delete-dialog.vue',
+      component: 'message-delete-dialog',
       componentProps: {},
     }
   }
@@ -169,7 +169,7 @@
           router.push(`/chats/${chatId}?initialMsgId=${chatMessageId}`)
         },
       },
-      component: '../dialogs/message-forward-dialog.vue',
+      component: 'message-forward-dialog',
       componentProps: {},
     }
   }
