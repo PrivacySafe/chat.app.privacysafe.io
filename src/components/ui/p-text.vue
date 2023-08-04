@@ -2,7 +2,7 @@
   import { computed, onMounted, ref } from 'vue'
   import { patchTextareaMaxRowsSupport } from '@/libs/dom/textarea-max-rows'
 
-  const emit = defineEmits(['input', 'focus', 'blur', 'update:text', 'update:valid'])
+  const emit = defineEmits(['input', 'focus', 'blur', 'update:text', 'update:valid', 'init'])
   const props = defineProps<{
     text: string | undefined;
     rows?: number;
@@ -23,6 +23,7 @@
   onMounted(() => {
     if (textareaElement.value) {
       patchTextareaMaxRowsSupport(textareaElement.value!)
+      emit('init', textareaElement.value!)
     }
   })
 

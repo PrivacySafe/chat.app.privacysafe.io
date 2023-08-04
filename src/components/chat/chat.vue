@@ -27,6 +27,7 @@
     return !members.includes(user.value)
   })
 
+  const inputEl = ref<HTMLTextAreaElement | null>(null)
   const msgText = ref<string>('')
   const disabled = ref(false)
   let files: web3n.files.ReadonlyFile[] | undefined
@@ -58,6 +59,7 @@
       if (msg) {
         initialMessageType.value = 'forward'
         initialMessage.value = msg
+        inputEl.value!.focus()
       }
     }
   }
@@ -87,6 +89,7 @@
   const prepareReplyMessage = (msg: ChatMessageView<MessageType>) => {
     initialMessageType.value = 'reply'
     initialMessage.value = msg
+    inputEl.value!.focus()
   }
 
   const sendMessage = async (ev: Event|KeyboardEvent, force = false) => {
@@ -214,6 +217,7 @@
         :max-rows="3"
         :disabled="readonly"
         class="chat__input-field"
+        @init="inputEl = $event"
         @keydown.enter="sendMessage"
       />
 

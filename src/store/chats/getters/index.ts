@@ -14,10 +14,16 @@ export const getters: ChatsGetters = {
 
   namedChatList: function(this, state) {
     return () => {
-      return Object.values(state.chatList).map(c => ({
-        ...c,
-        displayName: getChatName(c),
-      }))
+      return Object.values(state.chatList)
+        .map(c => ({
+          ...c,
+          displayName: getChatName(c),
+        }))
+        .sort((a, b) => {
+          const tA = a.timestamp || a.createdAt
+          const tB = b.timestamp || b.createdAt
+          return tB - tA
+        })
     }
   },
 }
