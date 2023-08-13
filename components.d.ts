@@ -34,6 +34,7 @@ declare module '@vue/runtime-core' {
     MessageDeleteDialog: typeof import('./src/components/dialogs/message-delete-dialog.vue')['default']
     MessageForwardDialog: typeof import('./src/components/dialogs/message-forward-dialog.vue')['default']
     PDialog: typeof import('./src/components/ui/p-dialog.vue')['default']
+    PDropFiles: typeof import('./src/components/ui/p-drop-files.vue')['default']
     PInput: typeof import('./src/components/ui/p-input.vue')['default']
     PText: typeof import('./src/components/ui/p-text.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

@@ -3,6 +3,7 @@ node_modules
 /dist
 /app
 /test-user-creds.json
+/test-user-creds-alone.json
 /test-runner
 /test-data
 /temp

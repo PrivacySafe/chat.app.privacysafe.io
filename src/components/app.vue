@@ -4,6 +4,7 @@
   import prLogo from '@/assets/images/privacysafe-logo.png'
   import { makeServiceCaller } from '@/libs/ipc-service-caller'
   import { appDeliverySrvProxy } from '@/services/services-provider'
+  import { AppVersion } from '@/constants'
   import { useAppStore, useContactsStore, useChatsStore } from '@/store'
   import { getAppConfig } from '@/helpers/app.helper'
   import { getDeliveryErrors } from '@/helpers/common.helper'
@@ -164,6 +165,9 @@
         </div>
         <div class="app__toolbar-app">
           {{ $tr('app.title') }}
+          <div class="app__toolbar-app-version">
+            v {{ AppVersion }}
+          </div>
         </div>
       </div>
 
@@ -258,10 +262,23 @@
       }
 
       &-app {
+        position: relative;
         font-size: var(--font-20);
         font-weight: 500;
         color: var(--black-90, #212121);
         padding-bottom: 3px;
+
+        &-version {
+          position: absolute;
+          font-size: var(--font-11);
+          font-weight: 600;
+          color: var(--black-30);
+          line-height: var(--font-16);
+          left: 0;
+          width: 100%;
+          bottom: -10px;
+          text-align: center;
+        }
       }
 
       &-user {
@@ -306,9 +323,14 @@
         position: relative;
         background-color: var(--system-white, #fff);
         width: 80px;
+        border-radius: var(--half-size);
 
         &-item {
           cursor: pointer;
+
+          &:hover {
+            background-color: var(--blue-main-30);
+          }
         }
       }
     }

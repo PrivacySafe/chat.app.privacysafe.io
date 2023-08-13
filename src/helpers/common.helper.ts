@@ -24,3 +24,10 @@ export function getRandomId(numOfChars: number): string {
   }
   return result.slice(0, numOfChars)
 }
+
+export async function transformFileToWeb3NFile(file: File): Promise<web3n.files.File | undefined> {
+  const { path } = file as File & { path: string }
+  const fsItemCollection = await w3n.storage!.getSysFS!('device', path)
+  const { isFile, item } = fsItemCollection
+  return isFile && item ? item as web3n.files.File : undefined
+}

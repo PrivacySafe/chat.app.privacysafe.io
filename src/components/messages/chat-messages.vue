@@ -7,6 +7,7 @@
     nextTick,
     ref,
     toRefs,
+    watch,
   } from 'vue'
   import { useRouter } from 'vue-router'
   import { useAppStore, useChatsStore } from '@/store'
@@ -23,7 +24,8 @@
 
   const router = useRouter()
   const props = defineProps<{
-    messages: ChatMessageView<MessageType>[],
+    chat: ChatView & { unread: number } & ChatMessageView<MessageType>;
+    messages: ChatMessageView<MessageType>[];
   }>()
   const emit = defineEmits(['reply'])
 
@@ -111,7 +113,6 @@
     }
   }
 
-
   const copyMsgText = async (chatMessageId: string) => {
     const msg = getMessageFromCurrentChat({ chatMessageId })
     await copyMessageToClipboard(msg)
@@ -193,6 +194,18 @@
   onBeforeUnmount(() => {
     $emitter.off('send:message', scrollList)
   })
+
+  watch(
+    () => props.chat.chatId,
+    async (value, oldValue) => {
+      if (value !== oldValue) {
+        setTimeout(() => {
+          listElement.value!.scrollTop = 1e9
+        }, 50)
+      }
+    },
+    { immediate: true },
+  )
 </script>
 
 <template>

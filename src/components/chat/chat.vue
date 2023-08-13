@@ -3,12 +3,14 @@
   import { useRoute, onBeforeRouteUpdate } from 'vue-router'
   import { get, isEmpty, size, without } from 'lodash'
   import { useAppStore, useChatsStore } from '@/store'
+  import { transformFileToWeb3NFile } from '@/helpers/common.helper'
   import { getAttachmentFilesInfo, sendChatMessage } from '@/helpers/chats.helper'
   import { getContactName } from '@/helpers/contacts.helper'
   import { Icon } from '@iconify/vue'
   import ChatHeader from '@/components/chat/chat-header.vue'
   import ChatMessages from '@/components/messages/chat-messages.vue'
   import ChatAttachment from '@/components/chat/chat-attachment.vue'
+  import PDropFiles from '@/components/ui/p-drop-files.vue'
   import PText from '@/components/ui/p-text.vue'
   import EmoticonsDialog from '@/components/dialogs/emoticons-dialog.vue'
 
@@ -68,6 +70,20 @@
     files = await w3n.shell?.fileDialogs?.openFileDialog!('Select file(s)', '', true)
     if (!isEmpty(files)) {
       attachmentsInfo.value = await getAttachmentFilesInfo({ files })
+    }
+  }
+
+  const addFilesViaDnD = async (fileList: FileList): Promise<void> => {
+    files = []
+    // @ts-ignore
+    for (const f of [...fileList]) {
+      const file = await transformFileToWeb3NFile(f)
+      if (file) {
+        files.push(file)
+      }
+      if (!isEmpty(files)) {
+        attachmentsInfo.value = await getAttachmentFilesInfo({ files })
+      }
     }
   }
 
@@ -163,14 +179,17 @@
       :messages="currentChatMessages"
     />
 
-    <section
-      class="chat__messages"
-    >
-      <chat-messages
-        v-if="currentChatMessages"
-        :messages="currentChatMessages"
-        @reply="prepareReplyMessage"
-      />
+    <section class="chat__messages">
+      <p-drop-files
+        @select="addFilesViaDnD"
+      >
+        <chat-messages
+          v-if="currentChatMessages && currentChat()"
+          :chat="currentChat()!"
+          :messages="currentChatMessages"
+          @reply="prepareReplyMessage"
+        />
+      </p-drop-files>
     </section>
 
     <div class="chat__input">

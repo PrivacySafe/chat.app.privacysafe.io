@@ -50,5 +50,6 @@
   "delete.member.system.message": "was removed from this chat",
   "delete.members.system.message": "were removed from this chat",
   "add.members.system.message": "{user} added {members} to this chat",
-  "remove.members.system.message": "{user} removed {members} from this chat"
+  "remove.members.system.message": "{user} removed {members} from this chat",
+  "dropzone.default.title": "Upload"
 }

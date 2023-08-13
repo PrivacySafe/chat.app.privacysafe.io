@@ -81,7 +81,8 @@ function prepareOutgoingMessage(
 export async function sendChatMessage(
   { chatId, chatName, text, recipients, chatMembers, chatAdmins, files, initialMessageId  }:
     { chatId: string, chatName: string, text: string, recipients: string[],
-      chatMembers: string[], chatAdmins: string[], files?: ReadonlyFile[] | undefined, initialMessageId?: string },
+      chatMembers: string[], chatAdmins: string[],
+      files?: ReadonlyFile[] | undefined, initialMessageId?: string },
 ) {
   const { sendMessage } = useChatsStore()
   const messages = []

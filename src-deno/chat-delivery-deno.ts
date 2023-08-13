@@ -34,7 +34,7 @@ class ChatDeliveryService {
         () => fs.writeJSONFile(deliveryServiceDataFileName, data)
       )
     } catch (e) {
-      console.error('Error saving DeliveryService data file. ', e)
+      w3n.log!('error', 'Error saving DeliveryService data file. ', e)
     } finally {
       await fs.close()
     }
@@ -50,7 +50,7 @@ class ChatDeliveryService {
     } catch (e) {
       const { notFound, path } = e as web3n.files.FileException
       if (path !== deliveryServiceDataFileName || !notFound) {
-        console.error('Error reading DeliveryService data file. ', e)
+        w3n.log!('error', 'Error reading DeliveryService data file. ', e)
       }
       return {
         lastReceivedMessageTimestamp: 0,
@@ -77,7 +77,7 @@ class ChatDeliveryService {
               this.data.lastReceivedMessageTimestamp = Math.max(this.data.lastReceivedMessageTimestamp, deliveryTS || 0)
             }
           } catch (e) {
-            console.error(`GET MSG ${msgId} ERROR: `, e)
+            w3n.log!('error', `GET MSG ${msgId} ERROR: `, e)
           }
         }
       }
@@ -110,7 +110,7 @@ class ChatDeliveryService {
             }
           }
         },
-        error: err => console.error(`Inbox subscribe error: `, err),
+        error: err => w3n.log!('error', `Inbox subscribe error: `, err),
       },
     )
 
@@ -127,7 +127,7 @@ class ChatDeliveryService {
           }
         }
       },
-      error: err => console.error(`Send error: `, err),
+      error: err => w3n.log!('error', `Send error: `, err),
     })
   }
 
@@ -151,7 +151,7 @@ class ChatDeliveryService {
           )
         }
       } catch (e) {
-        console.error(`Error adding the ${systemMessage ? 'message ' : ''} ${msgId} to the delivery list. `, e)
+        await w3n.log!('error', `Error adding the ${systemMessage ? 'message ' : ''} ${msgId} to the delivery list. `, e)
         throw new Error(JSON.stringify(e))
       }
     }
@@ -164,7 +164,7 @@ class ChatDeliveryService {
           w3n.mail?.delivery.rmMsg(msgId)
         }
       } catch (e) {
-        console.error(`Error deleting the messages ${msgIds.join(', ')} from the delivery list. `, e)
+        w3n.log!('error', `Error deleting the messages ${msgIds.join(', ')} from the delivery list. `, e)
         throw new Error(JSON.stringify(e))
       }
     }
@@ -174,7 +174,7 @@ class ChatDeliveryService {
     try {
       return w3n.mail?.inbox.getMsg(msgId) as Promise<ChatIncomingMessage | undefined>
     } catch (e) {
-      console.error(`Error getting the message ${msgId}.`)
+      w3n.log!('error', `Error getting the message ${msgId}.`)
       throw new Error(JSON.stringify(e))
     }
   }
@@ -204,7 +204,7 @@ class ChatDeliveryService {
           w3n.mail?.inbox.removeMsg(msgId)
         }
       } catch (e) {
-        console.error(`Error deleting the messages ${msgIds.join(', ')} from INBOX. `, e)
+        w3n.log!('error', `Error deleting the messages ${msgIds.join(', ')} from INBOX. `, e)
         throw new Error(JSON.stringify(e))
       }
     }

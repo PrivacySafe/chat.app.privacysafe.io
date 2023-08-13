@@ -31,6 +31,7 @@ import outlineInfo from '@iconify-icons/ic/outline-info'
 import baselineReply from '@iconify-icons/ic/baseline-reply'
 import roundContentCopy from '@iconify-icons/ic/round-content-copy'
 import outlineDownloadForOffline from '@iconify-icons/ic/outline-download-for-offline'
+import outlineFileUpload from '@iconify-icons/ic/outline-file-upload'
 
 const icons: Record<string, IconifyIcon> = {
   'baseline-close': baselineClose,
@@ -64,6 +65,7 @@ const icons: Record<string, IconifyIcon> = {
   'baseline-reply': baselineReply,
   'round-content-copy': roundContentCopy,
   'outline-download-for-offline': outlineDownloadForOffline,
+  'file-upload': outlineFileUpload
 }
 
 export function iconsInitialization() {
