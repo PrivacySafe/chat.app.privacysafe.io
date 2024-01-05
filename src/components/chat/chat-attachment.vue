@@ -1,44 +1,30 @@
 <script lang="ts" setup>
-  import { Icon } from '@iconify/vue'
+  import { Ui3nChip, Ui3nIcon } from '@v1nt1248/3nclient-lib'
 
-  const props = defineProps<{
+  defineProps<{
     name: string;
     size: number;
     deletable?: boolean;
   }>()
 
-  const emit = defineEmits(['delete'])
+  const emits = defineEmits(['delete'])
 </script>
 
 <template>
-  <var-chip
+  <ui3n-chip
     class="chat-attachment"
-    size="small"
+    closeable
+    @close="emits('delete')"
   >
     <template #left>
-      <icon
-        icon="baseline-attach-file"
+      <ui3n-icon
+        icon="attach-file"
         width="12"
         height="12"
       />
     </template>
     {{ name }}
-    <template
-      v-if="props.deletable"
-      #right
-    >
-      <var-button
-        round
-        @click="emit('delete')"
-      >
-        <icon
-          icon="baseline-close"
-          width="12"
-          height="12"
-        />
-      </var-button>
-    </template>
-  </var-chip>
+  </ui3n-chip>
 </template>
 
 <style lang="scss" scoped>
@@ -47,9 +33,5 @@
 
     margin: 0 var(--half-size) var(--half-size) 0;
     cursor: pointer;
-
-    .var-button {
-      box-shadow: none;
-    }
   }
 </style>

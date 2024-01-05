@@ -2,19 +2,21 @@
   import { computed, inject, onMounted, ref, toRefs } from 'vue'
   import { get } from 'lodash'
   import { useChatsStore } from '@/store'
+  import { prepareDateAsSting, I18N_KEY, I18nPlugin, Ui3nHtml } from '@v1nt1248/3nclient-lib'
   import { getChatSystemMessageText } from '@/helpers/chat-ui.helper'
-  import { prepareDateAsSting } from '@/helpers/forUi'
   import { getContactName } from '@/helpers/contacts.helper'
+  import { getMessageFromCurrentChat } from '@/helpers/chat-message-actions.helpers'
   import ChatMessageStatus from '@/components/messages/chat-message-status.vue'
   import ChatMessageAttachments from '@/components/messages/chat-message-attachments.vue'
-  import { getMessageFromCurrentChat } from '@/helpers/chat-message-actions.helpers'
+
+  const vUi3nHtml = Ui3nHtml
 
   const props = defineProps<{
     msg: ChatMessageView<MessageType>;
     prevMsgSender: string|undefined;
   }>()
 
-  const { $tr } = inject<I18nPlugin>('i18n')!
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
   const { currentChat } = toRefs(useChatsStore())
   const { getChatList, handleUpdateMessageStatus } = useChatsStore()
 
@@ -89,12 +91,12 @@
               {{ getContactName(initialMessage.sender) }}
             </span>
             <span
-              v-phtml.sanitize.classes="initialMessageText"
+              v-ui3n-html.sanitize.classes="initialMessageText"
               class="chat-message__initial-msg-text"
             />
           </div>
           <pre
-            v-phtml.sanitize.classes="msgText"
+            v-ui3n-html.sanitize.classes="msgText"
             class="chat-message__text"
           />
           <chat-message-attachments

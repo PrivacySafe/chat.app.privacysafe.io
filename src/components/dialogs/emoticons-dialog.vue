@@ -1,56 +1,60 @@
 <script lang="ts" setup>
-  import { ref, watch } from 'vue'
-  import emoticons from '@/data/emoticons.json'
-  import { vOnClickOutside } from '@vueuse/components'
+  import { computed } from 'vue'
+  import { emoticons, Ui3nClickOutside, Ui3nEmoji } from "@v1nt1248/3nclient-lib";
 
-  const props = defineProps<{
+  const vOnClickOutside = Ui3nClickOutside
+
+  defineProps<{
     open: boolean;
   }>()
   const emit = defineEmits(['close', 'select'])
 
-  const visible = ref(false)
+  const emoticonsByGroups = computed(() => {
+    return Object.keys(emoticons).reduce((res, id) => {
+      const { group, value } = emoticons[id]
+      if (!res[group]) {
+        res[group] = []
+      }
+      res[group].push({ id, value })
 
-  watch(
-    () => props.open,
-    val => visible.value = val,
-    { immediate: true },
-  )
+      return res
+    }, {} as Record<string, { id: string, value: string }[]>)
+  })
 
   const closeDialog = () => {
-    visible.value = false
     emit('close')
   }
 
-  const selectEmoticon = ({ id, emoticon }: { id: string, emoticon: string }) => {
-    emit('select', { id, emoticon })
+  const selectEmoticon = ({ id, value }: { id: string, value: string }) => {
+    emit('select', { id, value })
     closeDialog()
   }
 </script>
 
 <template>
   <div
-    v-if="visible"
+    v-if="open"
     v-on-click-outside="closeDialog"
     class="emoticons-dialog"
   >
     <div class="emoticons-dialog__body">
       <div
-        v-for="(group, name) in emoticons"
-        :key="name"
+        v-for="group in Object.keys(emoticonsByGroups)"
+        :key="group"
         class="emoticons-dialog__group"
       >
         <h4 class="emoticons-dialog__group-name">
-          {{ name }}
+          {{ group }}
         </h4>
         <div class="emoticons-dialog__group-body">
-          <div
-            v-for="(emoticon, id) in group"
-            :key="id"
+          <ui3n-emoji
+            v-for="emoticon in emoticonsByGroups[group]"
+            :key="emoticon.id"
+            :emoji="emoticon.id"
+            :size="20"
             class="emoticons-dialog__emoji"
-            @click="selectEmoticon({ id, emoticon })"
-          >
-            {{ emoticon }}
-          </div>
+            @click="selectEmoticon({ id: emoticon.id, value: emoticon.value })"
+          />
         </div>
       </div>
     </div>
@@ -96,15 +100,9 @@
 
       &-body {
         display: grid;
-        grid-template-columns: repeat(6, 1fr);
+        grid-template-columns: repeat(5, 1fr);
+        grid-row-gap: var(--base-size);
       }
-    }
-
-    &__emoji {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      cursor: pointer;
     }
 
     &::before,

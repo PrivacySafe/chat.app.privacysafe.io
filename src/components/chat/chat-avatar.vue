@@ -1,6 +1,6 @@
 <script lang="ts" setup>
   import { computed, onMounted, ref } from 'vue'
-  import { getElementColor } from '@/helpers/forUi'
+  import { getElementColor } from '@v1nt1248/3nclient-lib'
 
   const props = defineProps<{
     name: string;

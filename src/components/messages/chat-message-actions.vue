@@ -1,8 +1,9 @@
 <script lang="ts" setup>
   import { computed, onBeforeMount, ref, watch } from 'vue'
-  import { vOnClickOutside } from '@vueuse/components'
+  import { Ui3nClickOutside, Ui3nIcon } from '@v1nt1248/3nclient-lib'
   import { chatMsgActionElementHeight } from '@/constants'
-  import { Icon } from '@iconify/vue'
+
+  const vUi3nClickOutside = Ui3nClickOutside
 
   const props = defineProps<{
     open: boolean;
@@ -57,7 +58,7 @@
 <template>
   <div
     v-if="visible"
-    v-on-click-outside="closeMenu"
+    v-ui3n-click-outside="closeMenu"
     :style="menuStyle"
     :class="[
       'chat-message-actions',
@@ -80,11 +81,11 @@
       ]"
       @click="handleAction(action.id)"
     >
-      <icon
+      <ui3n-icon
         :icon="action.icon.name"
         width="12"
         height="12"
-        :h-flip="!!action.icon.horizontalFlip"
+        :horizontal-flip="!!action.icon.horizontalFlip"
         :color="action.accent ? 'var(--pear-100)' : 'var(--base-90)'"
       />
       <span class="chat-message-actions__item-name">{{ action.title }}</span>

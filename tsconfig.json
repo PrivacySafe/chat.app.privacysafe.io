@@ -19,7 +19,6 @@
     "types": [
       "vite/client",
       "@types/node",
-      "@varlet/ui/types",
       "@types/lodash"
     ],
     "baseUrl": ".",

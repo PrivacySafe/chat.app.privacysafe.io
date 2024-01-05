@@ -1,17 +1,19 @@
 <script lang="ts" setup>
   import { computed, inject, toRefs } from 'vue'
   import { get, size } from 'lodash'
+  import { I18nPlugin, I18N_KEY, prepareDateAsSting, Ui3nBadge, Ui3nHtml } from '@v1nt1248/3nclient-lib'
   import { useChatsStore } from '@/store'
   import { getChatSystemMessageText } from '@/helpers/chat-ui.helper'
-  import { prepareDateAsSting } from '@/helpers/forUi'
   import ChatAvatar from '@/components/chat/chat-avatar.vue'
+
+  const vUi3nHtml = Ui3nHtml
 
   const emit = defineEmits(['click'])
   const props = defineProps<{
     data: ChatListItemView & { displayName: string };
   }>()
 
-  const { $tr } = inject<I18nPlugin>('i18n')!
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
   const { currentChat } = toRefs(useChatsStore())
 
   const selectedChatId = computed<string>(() => get(currentChat.value(), ['chatId'], ''))
@@ -61,7 +63,7 @@
         {{ props.data.displayName }}
       </div>
       <div
-        v-phtml.sanitize="message"
+        v-ui3n-html.sanitize="message"
         class="chat-list-item__message"
       />
     </div>
@@ -71,10 +73,9 @@
         {{ date }}
       </div>
       <div class="chat-list-item__status">
-        <var-badge
+        <ui3n-badge
           v-if="props.data.unread"
           :value="props.data.unread"
-          color="#0090EC"
         />
       </div>
     </div>

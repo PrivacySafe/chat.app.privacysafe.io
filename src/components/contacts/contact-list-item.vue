@@ -1,7 +1,7 @@
 <script lang="ts" setup>
   import ContactIcon from '@/components/contacts/contact-icon.vue'
 
-  const props = defineProps<{
+  defineProps<{
     contact: PersonView & { displayName: string };
     selected: boolean;
     withoutAnchor: boolean;
@@ -16,26 +16,26 @@
     :class="[
       'contact-list-item',
       {
-        'contact-list-item--selected': props.selected,
-        'contact-list-item--without-anchor': props.withoutAnchor,
-        'contact-list-item--readonly': props.readonly,
+        'contact-list-item--selected': selected,
+        'contact-list-item--without-anchor': withoutAnchor,
+        'contact-list-item--readonly': readonly,
       },
     ]"
-    v-on="props.readonly ? {} : { click: () => emit('click', props.contact.id) }"
+    v-on="readonly ? {} : { click: () => emit('click', contact.id) }"
   >
     <contact-icon
-      :name="props.contact.displayName"
+      :name="contact.displayName"
       :size="36"
-      :selected="props.selected"
+      :selected="selected"
       :readonly="true"
     />
     <span
       :class="[
         'contact-list-item__name',
-        { 'contact-list-item__name--selected': props.selected },
+        { 'contact-list-item__name--selected': selected },
       ]"
     >
-      {{ props.contact.displayName }}
+      {{ contact.displayName }}
     </span>
   </div>
 </template>

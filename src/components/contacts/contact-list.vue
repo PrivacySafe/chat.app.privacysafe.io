@@ -1,6 +1,6 @@
 <script lang="ts" setup>
   import { computed } from 'vue'
-  import { mailReg } from '@/constants'
+  import { mailReg } from '@v1nt1248/3nclient-lib'
   import ContactListItem from '@/components/contacts/contact-list-item.vue'
 
   const props = defineProps<{
@@ -45,7 +45,9 @@
     emit('select', contactId)
   }
 
-  const addNewContact = () => {
+  const addNewContact = (ev: Event) => {
+    ev.stopPropagation()
+    ev.preventDefault()
     if (isMailValid.value) {
       emit('add:new', props.searchText as string)
     }
@@ -87,14 +89,12 @@
       v-else
       class="contact-list__content-info"
     >
-      <var-link
-        type="primary"
-        :disabled="!isMailValid"
+      <h4
         class="contact-list__add-btn"
-        @click.prevent.stop="addNewContact"
+        v-on="!isMailValid ? {} : { click: (ev: Event) => addNewContact(ev) }"
       >
         Add {{ props.searchText }}
-      </var-link>
+      </h4>
     </div>
   </div>
 </template>

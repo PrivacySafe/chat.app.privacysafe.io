@@ -1,11 +1,10 @@
 <script lang="ts" setup>
-  import { computed, ref, toRefs } from 'vue'
+  import { computed, inject, ref, toRefs } from 'vue'
   import { cloneDeep, isEqual, size } from 'lodash'
   import { useAppStore, useContactsStore, useChatsStore } from '@/store'
   import { getChatName } from '@/helpers/chat-ui.helper'
-  import { Icon } from '@iconify/vue'
+  import { I18nPlugin, I18N_KEY, Ui3nButton, Ui3nIcon, Ui3nInput } from '@v1nt1248/3nclient-lib'
   import ChatAvatar from '@/components/chat/chat-avatar.vue'
-  import PInput from '@/components/ui/p-input.vue'
   import ContactList from '@/components/contacts/contact-list.vue'
 
   const props = defineProps<{
@@ -14,6 +13,7 @@
 
   const emit = defineEmits(['close'])
 
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
   const { contactList: allContact } = toRefs((useContactsStore()))
   const { user } = toRefs(useAppStore())
   const { updateMembers } = useChatsStore()
@@ -95,18 +95,14 @@
     <div class="chat-info-dialog__title">
       {{ $tr('chat.info.dialog.title') }}
 
-      <var-button
+      <ui3n-button
         round
-        size="mini"
+        color="transparent"
+        icon="close"
+        icon-size="16"
+        icon-color="#828282"
         @click="closeDialog"
-      >
-        <icon
-          icon="baseline-close"
-          width="16"
-          height="16"
-          color="#828282"
-        />
-      </var-button>
+      />
     </div>
 
     <div
@@ -141,27 +137,26 @@
           <div class="chat-info-dialog__users">
             <div class="chat-info-dialog__users-toolbar">
               <div class="chat-info-dialog__users-title">
-                <icon
-                  icon="outline-account-circle"
+                <ui3n-icon
+                  icon="account-circle"
                   width="20"
                   height="20"
                   color="var(--black-90)"
                 />
                 {{ $tr('chat.info.dialog.users') }}
               </div>
-              <var-button
+              <ui3n-button
                 v-if="isUserAdmin"
-                type="primary"
-                text
-                size="small"
+                color="transparent"
+                text-color="var(--blue-main, #0090ec)"
                 @click="openEditMode"
               >
                 {{ $tr('chat.info.dialog.update.members.btn.text') }}
-              </var-button>
+              </ui3n-button>
             </div>
-            <p-input
+            <ui3n-input
               v-model:value="memberSearch"
-              icon="round-search"
+              icon="search"
               clearable
               :placeholder="$tr('chat.info.dialog.search.input.placeholder')"
               @focus="showAvatar = false"
@@ -182,8 +177,8 @@
           <div class="chat-info-dialog__users">
             <div class="chat-info-dialog__users-toolbar">
               <div class="chat-info-dialog__users-title">
-                <icon
-                  icon="round-person-outline"
+                <ui3n-icon
+                  icon="person"
                   width="20"
                   height="20"
                   color="var(--black-90)"
@@ -191,7 +186,7 @@
                 {{ $tr('chat.info.dialog.update.members.btn.text') }}
               </div>
             </div>
-            <p-input
+            <ui3n-input
               v-model:value="userSearch"
               icon="round-search"
               clearable
@@ -215,37 +210,31 @@
     </div>
 
     <div class="chat-info-dialog__actions">
-      <var-button
-        :class="{
-          'chat-info-dialog__btn--hidden' : showAvatar,
-        }"
-        type="primary"
-        text
-        size="small"
+      <ui3n-button
+        color="transparent"
+        text-color="var(--blue-main, #0090ec)"
+        :class="{ 'chat-info-dialog__btn--hidden' : showAvatar }"
         @click="back"
       >
         {{ $tr('chat.info.dialog.btn.back.text') }}
-      </var-button>
+      </ui3n-button>
 
-      <var-button
+      <ui3n-button
         v-if="!editMembersMode"
-        type="primary"
-        text
-        size="small"
+        color="transparent"
+        text-color="var(--blue-main, #0090ec)"
         @click="closeDialog"
       >
         {{ $tr('chat.info.dialog.btn.close.text') }}
-      </var-button>
+      </ui3n-button>
 
-      <var-button
+      <ui3n-button
         v-else
-        type="primary"
-        size="small"
         :disabled="addBtnDisable"
         @click="_updateMembers"
       >
         {{ $tr('chat.info.dialog.btn.update.text') }}
-      </var-button>
+      </ui3n-button>
     </div>
   </div>
 </template>
@@ -279,11 +268,10 @@
       line-height: var(--font-16);
       border-bottom: 1px solid var(--gray-50);
 
-      .var-button {
+      .ui3n-button {
         position: absolute;
         right: var(--half-size);
         padding: 2px;
-        @include reset-button-back;
       }
     }
 
@@ -349,10 +337,6 @@
         justify-content: space-between;
         align-items: center;
         margin-bottom: var(--base-size);
-
-        :deep(.var-button) {
-          font-weight: 600;
-        }
       }
 
       &-title {
@@ -389,12 +373,8 @@
       border-top: 1px solid var(--gray-50);
       padding: 0 calc(var(--base-size) * 2);
 
-      :deep(.var-button) {
-        font-weight: 600;
-
-        .var-button__content {
-          text-transform: capitalize;
-        }
+      .ui3n-button {
+        text-transform: capitalize;
       }
     }
 

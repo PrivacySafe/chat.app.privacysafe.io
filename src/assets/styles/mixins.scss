@@ -1,7 +1,3 @@
-@mixin reset-button-back {
-  background-color: transparent;
-  box-shadow: none;
-}
 @mixin text-overflow-ellipsis($width: 100%) {
   max-width: $width;
   overflow: hidden;

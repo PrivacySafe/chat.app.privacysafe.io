@@ -8,10 +8,21 @@
     ref,
     toRefs,
     watch,
+    defineAsyncComponent,
   } from 'vue'
   import { useRouter } from 'vue-router'
   import { useAppStore, useChatsStore } from '@/store'
-  import { createSnackbar } from '@/helpers/forUi'
+  import {
+    VueBusPlugin,
+    VUEBUS_KEY,
+    NOTIFICATIONS_KEY,
+    NotificationsPlugin,
+    I18N_KEY,
+    I18nPlugin,
+    DialogsPlugin,
+    DIALOGS_KEY,
+    capitalize,
+  } from '@v1nt1248/3nclient-lib'
   import { getMessageActions } from '@/helpers/chats.helper'
   import {
     getMessageFromCurrentChat,
@@ -20,7 +31,6 @@
   } from '@/helpers/chat-message-actions.helpers'
   import ChatMessage from './chat-message.vue'
   import ChatMessageActions from '@/components/messages/chat-message-actions.vue'
-  import PDialog from '@/components/ui/p-dialog.vue'
 
   const router = useRouter()
   const props = defineProps<{
@@ -29,23 +39,16 @@
   }>()
   const emit = defineEmits(['reply'])
 
-  const $emitter = inject<EventBus>('event-bus')!
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
+  const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)
+  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!
+
+  const bus = inject<VueBusPlugin>(VUEBUS_KEY)!
 
   const { user } = toRefs(useAppStore())
   const { currentChatId } = toRefs(useChatsStore())
   const { createChat, deleteMessage } = useChatsStore()
   const listElement = ref<HTMLDivElement|null>(null)
-  const dialogParams = ref<{
-    isOpen: boolean;
-    props: PDialogProps|null;
-    component: string;
-    componentProps?: Record<string, any>;
-  }>({
-    isOpen: false,
-    props: null,
-    component: '',
-    componentProps: {},
-  })
 
   const msgActionsMenuProps = ref<{
     open: boolean;
@@ -104,46 +107,40 @@
     }
   }
 
-  const closeDialog = () => {
-    dialogParams.value = {
-      isOpen: false,
-      props: null,
-      component: '',
-      componentProps: {},
-    }
-  }
-
   const copyMsgText = async (chatMessageId: string) => {
     const msg = getMessageFromCurrentChat({ chatMessageId })
     await copyMessageToClipboard(msg)
-    createSnackbar({ content: 'The message content was copied to clipboard' })
+    notifications?.$createNotice({
+      type: 'success',
+      content: $tr('chat.message.clipboard.copy.text'),
+    })
   }
 
   const deleteMsg = (chatMessageId: string) => {
-    dialogParams.value = {
-      isOpen: true,
-      props: {
-        wrapperCssClass: 'message-delete-dialog__wrapper',
-        title: 'chat.message.delete.dialog.title',
-        confirmButtonText: 'btn.text.delete',
+    const messageDeleteDialog = defineAsyncComponent(() => import('../dialogs/message-delete-dialog.vue'))
+    dialog.$openDialog({
+      component: messageDeleteDialog,
+      componentProps: {},
+      dialogProps: {
+        title: $tr('chat.message.delete.dialog.title'),
+        cssClass: 'message-delete-dialog__wrapper',
+        confirmButtonText: capitalize($tr('btn.text.delete')),
         confirmButtonColor: 'var(--blue-main)',
         confirmButtonBackground: 'var(--system-white)',
         cancelButtonColor: 'var(--system-white)',
         cancelButtonBackground: 'var(--blue-main)',
         onConfirm: (deleteForEveryone?: boolean) => deleteMessage(chatMessageId, deleteForEveryone),
       },
-      component: 'message-delete-dialog',
-      componentProps: {},
-    }
+    })
   }
 
   const downloadAttachment = async (chatMessageId: string) => {
     const msg = getMessageFromCurrentChat({ chatMessageId })
     const res = await downloadFile(msg)
     if (res === false) {
-      createSnackbar({
+      notifications?.$createNotice({
         type: 'error',
-        content: 'The downloaded file may have been deleted or moved',
+        content: $tr('chat.message.file.download.error'),
       })
     }
   }
@@ -154,11 +151,13 @@
   }
 
   const forwardMsg = (chatMessageId: string) => {
-    dialogParams.value = {
-      isOpen: true,
-      props: {
-        wrapperCssClass: 'message-forward-dialog__wrapper',
-        title: 'chat.message.forward.dialog.title',
+    const messageForwardDialog = defineAsyncComponent(() => import('../dialogs/message-forward-dialog.vue'))
+    dialog.$openDialog({
+      component: messageForwardDialog,
+      componentProps: {},
+      dialogProps: {
+        cssClass: 'message-forward-dialog__wrapper',
+        title: $tr('chat.message.forward.dialog.title'),
         confirmButton: false,
         cancelButton: false,
         onConfirm: async ({ type, data }: { type: 'chat' | 'contact', data: string }) => {
@@ -170,9 +169,7 @@
           router.push(`/chats/${chatId}?initialMsgId=${chatMessageId}`)
         },
       },
-      component: 'message-forward-dialog',
-      componentProps: {},
-    }
+    })
   }
 
   const messageActions: Partial<Record<ChatMessageActionType, Function>> = {
@@ -188,11 +185,11 @@
   }
 
   onBeforeMount(() => {
-    $emitter.on('send:message', scrollList)
+    bus.$emitter.on('send:message', scrollList)
   })
 
   onBeforeUnmount(() => {
-    $emitter.off('send:message', scrollList)
+    bus.$emitter.off('send:message', scrollList)
   })
 
   watch(
@@ -236,14 +233,6 @@
         @select:action="handleAction"
       />
     </teleport>
-
-    <p-dialog
-      v-if="dialogParams.props && dialogParams.component && dialogParams.isOpen"
-      :component="dialogParams.component"
-      :component-props="dialogParams.componentProps!"
-      :dialog-props="dialogParams.props"
-      @closed="closeDialog"
-    />
   </div>
 </template>
 

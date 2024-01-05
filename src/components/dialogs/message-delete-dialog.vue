@@ -1,10 +1,11 @@
 <script lang="ts" setup>
   import { ref } from 'vue'
+  import { Ui3nCheckbox } from '@v1nt1248/3nclient-lib'
 
-  const emit = defineEmits(['select'])
+  const emits = defineEmits(['select'])
   const deleteForEveryone = ref(false)
 
-  const onFlagChange = (val: boolean) => emit('select', val)
+  const onFlagChange = (val: boolean | string | number) => emits('select', val)
 </script>
 
 <template>
@@ -12,30 +13,20 @@
     <div class="message-delete-dialog__text">
       {{ $tr('chat.message.delete.dialog.text') }}
     </div>
-    <var-checkbox
+    <ui3n-checkbox
       v-model="deleteForEveryone"
       class="message-delete-dialog__checkbox"
       @change="onFlagChange"
     >
       {{ $tr('chat.message.delete.dialog.additional') }}
-    </var-checkbox>
+    </ui3n-checkbox>
   </div>
 </template>
 
-<style lang="scss">
-  .message-delete-dialog__wrapper {
-    .var-dialog__actions {
-      .var-dialog__confirm-button {
-        .var-button__content {
-          text-transform: capitalize;
-        }
-      }
-    }
-  }
-</style>
-
 <style lang="scss" scoped>
   .message-delete-dialog {
+    padding: 32px 16px;
+
     &__text {
       font-size: var(--font-12);
       font-weight: 400;
@@ -45,22 +36,7 @@
     }
 
     &__checkbox {
-      --checkbox-icon-size: var(--font-20);
-      --checkbox-checked-color: var(--blue-main);
-
-      :deep(.var-checkbox) {
-        .var-checkbox__text {
-          font-size: var(--font-12);
-          font-weight: 500;
-          color: var(--system-black);
-        }
-
-        .var-checkbox__action {
-          .var-icon {
-            line-height: var(--font-20);
-          }
-        }
-      }
+      left: -5px;
     }
   }
 </style>

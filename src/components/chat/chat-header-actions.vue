@@ -1,12 +1,11 @@
 <script lang="ts" setup>
-  import { computed, ref, toRefs } from 'vue'
+  import { computed, toRefs } from 'vue'
   import { size } from 'lodash'
   import { useChatsStore } from '@/store'
   import { chatMenuItems } from '@/constants'
-  import { Icon } from '@iconify/vue'
+  import { Ui3nButton, Ui3nMenu, Ui3nIcon } from '@v1nt1248/3nclient-lib'
 
   const emit = defineEmits(['select:action'])
-  const menu = ref()
   const { currentChat } = toRefs(useChatsStore())
 
   const chatType = computed(() => {
@@ -18,26 +17,28 @@
 
   const selectAction = (compositeAction: string) => {
     emit('select:action', compositeAction)
-    menu.value.close()
   }
 </script>
 
 <template>
   <div class="chat-header-actions">
-    <var-menu
-      ref="menu"
-      placement="bottom-end"
-      offset-y="4px"
+    <ui3n-menu
+      :offset-y="4"
+      :offset-x="-40"
     >
-      <var-button>
+      <ui3n-button
+        color="var(--gray-50)"
+        text-color="var(--black-90)"
+        class="chat-header-actions-btn"
+      >
         Actions
-        <icon
-          icon="baseline-arrow-drop-down"
+        <ui3n-icon
+          icon="arrow-drop-down"
           width="16"
           height="16"
           color="var(--black-90)"
         />
-      </var-button>
+      </ui3n-button>
 
       <template #menu>
         <div class="chat-header-actions__menu">
@@ -54,7 +55,7 @@
             ]"
             v-on="item.disabled ? {} : { click: () => selectAction(item.action) }"
           >
-            <icon
+            <ui3n-icon
               :icon="item.icon"
               width="12"
               height="12"
@@ -63,7 +64,7 @@
           </div>
         </div>
       </template>
-    </var-menu>
+    </ui3n-menu>
   </div>
 </template>
 
@@ -74,14 +75,12 @@
     --button-default-color: var(--gray-50);
     --button-normal-padding: 0 var(--base-size);
 
-    .var-button {
+    .ui3n-button {
       box-shadow: none;
 
-      :deep(.var-button__content) {
-        line-height: var(--font-16);
-      }
-
       .iconify {
+        position: relative;
+        top: 2px;
         margin-left: var(--base-size);
       }
     }
@@ -93,6 +92,7 @@
     background-color: var(--gray-50);
     border-radius: var(--half-size);
     padding: var(--half-size);
+    width: 145px;
 
     &-item {
       position: relative;

@@ -1,7 +1,6 @@
 import { without } from 'lodash'
 import { useAppStore } from '@/store'
 import { ChatsActions } from './types'
-import { createSnackbar } from '@/helpers/forUi'
 import { deleteChatMessage } from '../../helpers/delete-chat-message.helper'
 
 export const deleteMessage: ChatsActions['deleteMessage'] = async function (this, chatMsgId, deleteForEveryone) {
@@ -9,12 +8,13 @@ export const deleteMessage: ChatsActions['deleteMessage'] = async function (this
     return
   }
 
+  const appStore = useAppStore()
   const message = this.currentChatMessages.find(m => m.chatMessageId === chatMsgId)
- 
+
   if (!message) {
-    createSnackbar({
+    appStore.$createNotice({
       type: 'error',
-      content: 'An error occured while deleting the selected message',
+      content: appStore.$i18n.tr('chat.message.delete.error.text'),
     })
     return
   }
@@ -27,7 +27,6 @@ export const deleteMessage: ChatsActions['deleteMessage'] = async function (this
     return
   }
 
-  const appStore = useAppStore()
   const recipients = without(members, appStore.user)
   this.sendSystemMessage({
     chatId,

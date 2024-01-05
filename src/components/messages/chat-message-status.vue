@@ -1,6 +1,6 @@
 <script lang="ts" setup>
   import { computed } from 'vue'
-  import { Icon } from '@iconify/vue'
+  import { Ui3nIcon } from '@v1nt1248/3nclient-lib'
   import { messageDeliveryStatuses } from '@/constants'
 
   const props = defineProps<{
@@ -22,7 +22,7 @@
 </script>
 
 <template>
-  <icon
+  <ui3n-icon
     v-if="statusUiInfo"
     :icon="statusUiInfo.icon"
     :width="iconSize"

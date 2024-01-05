@@ -2,20 +2,28 @@
   import { computed, inject, onBeforeMount, ref, toRefs } from 'vue'
   import { useRoute, onBeforeRouteUpdate } from 'vue-router'
   import { get, isEmpty, size, without } from 'lodash'
+  import {
+    I18nPlugin,
+    I18N_KEY,
+    transformFileToWeb3NFile,
+    Ui3nButton,
+    Ui3nIcon,
+    Ui3nDropFiles,
+    Ui3nText,
+    Ui3nHtml,
+  } from '@v1nt1248/3nclient-lib'
   import { useAppStore, useChatsStore } from '@/store'
-  import { transformFileToWeb3NFile } from '@/helpers/common.helper'
   import { getAttachmentFilesInfo, sendChatMessage } from '@/helpers/chats.helper'
   import { getContactName } from '@/helpers/contacts.helper'
-  import { Icon } from '@iconify/vue'
   import ChatHeader from '@/components/chat/chat-header.vue'
   import ChatMessages from '@/components/messages/chat-messages.vue'
   import ChatAttachment from '@/components/chat/chat-attachment.vue'
-  import PDropFiles from '@/components/ui/p-drop-files.vue'
-  import PText from '@/components/ui/p-text.vue'
   import EmoticonsDialog from '@/components/dialogs/emoticons-dialog.vue'
 
+  const vUi3nHtml = Ui3nHtml
+
   const route = useRoute()
-  const { $tr } = inject<I18nPlugin>('i18n')!
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
   const { user } = toRefs(useAppStore())
   const { currentChat, currentChatMessages } = toRefs(useChatsStore())
   const { getChat, getChatMessage } = useChatsStore()
@@ -51,8 +59,8 @@
     return body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`
   })
 
-  const onEmoticonSelect = ({ emoticon }: { id: string, emoticon: string }) => {
-    msgText.value += emoticon
+  const onEmoticonSelect = (emoticon: { id: string, value: string }) => {
+    msgText.value += emoticon.value
   }
 
   const prepareInfoFromForwardingMessage = async (initialMsgId?: string) => {
@@ -180,7 +188,7 @@
     />
 
     <section class="chat__messages">
-      <p-drop-files
+      <ui3n-drop-files
         @select="addFilesViaDnD"
       >
         <chat-messages
@@ -189,24 +197,21 @@
           :messages="currentChatMessages"
           @reply="prepareReplyMessage"
         />
-      </p-drop-files>
+      </ui3n-drop-files>
     </section>
 
     <div class="chat__input">
       <div style="position: relative">
-        <var-button
+        <ui3n-button
           round
+          color="transparent"
+          icon="emoticon"
+          icon-size="20"
+          icon-color="#b3b3b3"
           class="chat__input-emoji"
           :disabled="disabled || readonly"
-          @click="isEmoticonsDialogOpen = true"
-        >
-          <icon
-            icon="baseline-emoticon"
-            width="20"
-            height="20"
-            color="#b3b3b3"
-          />
-        </var-button>
+          @click.stop.prevent="isEmoticonsDialogOpen = true"
+        />
 
         <emoticons-dialog
           :open="isEmoticonsDialogOpen"
@@ -215,21 +220,18 @@
         />
       </div>
 
-      <var-button
+      <ui3n-button
         round
+        color="transparent"
+        icon="attach-file"
+        icon-size="20"
+        icon-color="#b3b3b3"
         class="chat__input-file"
         :disabled="disabled || readonly"
         @click="addFiles"
-      >
-        <icon
-          icon="baseline-attach-file"
-          width="20"
-          height="20"
-          color="#b3b3b3"
-        />
-      </var-button>
+      />
 
-      <p-text
+      <ui3n-text
         v-model:text="msgText"
         type="textarea"
         :rows="1"
@@ -240,19 +242,16 @@
         @keydown.enter="sendMessage"
       />
 
-      <var-button
+      <ui3n-button
         round
+        color="transparent"
+        icon="send"
+        icon-size="20"
+        :icon-color="!sendBtnDisabled ? '#0090ec' : '#b3b3b3'"
         class="chat__input-send"
         :disabled="sendBtnDisabled"
         @click="sendMessage($event, true)"
-      >
-        <icon
-          icon="baseline-send"
-          width="20"
-          height="20"
-          :color="!sendBtnDisabled ? '#0090ec' : '#b3b3b3'"
-        />
-      </var-button>
+      />
 
       <div class="chat__input-additional">
         <div
@@ -260,8 +259,8 @@
           class="chat__input-initial"
         >
           <div class="chat__input-initial-icon">
-            <icon
-              icon="baseline-reply"
+            <ui3n-icon
+              icon="reply"
               width="24"
               height="24"
               :h-flip="initialMessageType === 'forward'"
@@ -274,24 +273,19 @@
               {{ getContactName(initialMessage.sender) }}
             </div>
             <div
-              v-phtml.sanitize="textOfInitialMessage"
+              v-ui3n-html.sanitize="textOfInitialMessage"
               class="chat__input-initial-text"
             />
           </div>
 
-          <var-button
+          <ui3n-button
             class="chat__input-initial-clear"
             round
-            size="mini"
+            icon="close"
+            icon-size="16"
+            icon-color="#828282"
             @click="clearInitialInfo"
-          >
-            <icon
-              icon="baseline-close"
-              width="16"
-              height="16"
-              color="#828282"
-            />
-          </var-button>
+          />
         </div>
 
         <div
@@ -307,19 +301,15 @@
             @delete="deleteAttachment(index)"
           />
 
-          <var-button
+          <ui3n-button
             class="chat__input-attachments-clear"
+            color="transparent"
             round
-            size="mini"
+            icon="close"
+            icon-size="16"
+            icon-color="#828282"
             @click="clearAttachments"
-          >
-            <icon
-              icon="baseline-close"
-              width="16"
-              height="16"
-              color="#828282"
-            />
-          </var-button>
+          />
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 <script lang="ts" setup>
   import { onBeforeMount, ref } from 'vue'
   import { useRouter } from 'vue-router'
+  import { Ui3nButton } from '@v1nt1248/3nclient-lib'
   import { useContactsStore, useChatsStore } from '@/store'
   import ChatCreateDialog from '@/components/dialogs/chat-create-dialog.vue'
   import ChatList from '@/components/chat/chat-list.vue'
@@ -35,13 +36,12 @@
   <div class="chats">
     <div class="chats__aside">
       <div class="chats__aside-toolbar">
-        <var-button
-          type="primary"
+        <ui3n-button
           class="chats__aside-add-btn"
           @click="addNewChat"
         >
           {{ $tr('btn.text.new') }}
-        </var-button>
+        </ui3n-button>
       </div>
       <chat-list
         class="chats__aside-list"

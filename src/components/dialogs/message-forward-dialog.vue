@@ -1,17 +1,18 @@
 <script lang="ts" setup>
   import { computed, inject, ref } from 'vue'
+  import { I18nPlugin, I18N_KEY, Ui3nInput } from '@v1nt1248/3nclient-lib'
   import { useContactsStore, useChatsStore } from '@/store'
   import { readonlyContactIds } from '@/constants'
   import ChatAvatar from '@/components/chat/chat-avatar.vue'
   import ContactIcon from '@/components/contacts/contact-icon.vue'
 
-  const { $tr } = inject<I18nPlugin>('i18n')!
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
   const emit = defineEmits(['select', 'confirm'])
 
   const searchText = ref('')
   const { contactList } = useContactsStore()
   const { namedChatList, currentChatId } = useChatsStore()
-  
+
   const filteredContactList = computed(() => contactList
     .filter(c => ( c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
       && !readonlyContactIds.includes(c.id) )))
@@ -27,9 +28,9 @@
 
 <template>
   <div class="message-forward-dialog">
-    <p-input
+    <ui3n-input
       v-model:value="searchText"
-      icon="round-search"
+      icon="search"
       clearable
     />
     <div class="message-forward-dialog__body">
@@ -94,8 +95,9 @@
   .message-forward-dialog {
     position: relative;
     max-height: 380px;
+    padding: 16px;
 
-    .p-input {
+    .ui3n-input {
       margin-bottom: calc(var(--base-size) * 2);
     }
 
@@ -146,14 +148,6 @@
       font-style: italic;
       color: var(--black-30);
       margin-bottom: var(--base-size);
-    }
-  }
-</style>
-
-<style lang="scss">
-  .message-forward-dialog__wrapper {
-    .var-dialog__actions {
-      --p-dialog-padding: 0;
     }
   }
 </style>

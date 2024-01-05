@@ -1,7 +1,7 @@
 import { ChatsActions } from './types'
 import { appChatsSrvProxy, appDeliverySrvProxy } from '@/services/services-provider'
 import { msgIdLength } from '@/constants'
-import { getRandomId } from '@/helpers/common.helper'
+import { getRandomId } from '@v1nt1248/3nclient-lib'
 
 export const sendSystemMessage: ChatsActions['sendSystemMessage'] = async function (this, { chatId, chatMessageId, recipients, event, value, displayable = false }) {
   const chat = await appChatsSrvProxy.getChat(chatId)

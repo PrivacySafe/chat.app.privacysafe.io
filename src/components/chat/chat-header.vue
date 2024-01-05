@@ -1,30 +1,40 @@
 <script lang="ts" setup>
   /* eslint-disable @typescript-eslint/no-explicit-any */
   import { get, size } from 'lodash'
-  import { computed, ref, toRefs } from 'vue'
+  import { computed, defineAsyncComponent, inject, toRefs } from 'vue'
   import { useRouter } from 'vue-router'
+  import {
+    Ui3nHtml,
+    I18nPlugin,
+    I18N_KEY,
+    DialogsPlugin,
+    DIALOGS_KEY,
+    NotificationsPlugin,
+    NOTIFICATIONS_KEY,
+    prepareDateAsSting,
+  } from '@v1nt1248/3nclient-lib'
   import { useAppStore, useChatsStore } from '@/store'
   import { exportChatMessages } from '@/helpers/chats.helper'
   import { getChatName } from '@/helpers/chat-ui.helper'
-  import { createSnackbar, prepareDateAsSting } from '@/helpers/forUi'
   import ChatAvatar from '@/components/chat/chat-avatar.vue'
   import ChatHeaderActions from '@/components/chat/chat-header-actions.vue'
-  import PDialog from '@/components/ui/p-dialog.vue'
+
+  const vUi3nHtml = Ui3nHtml
 
   const props = defineProps<{
     chat: ChatView & { unread: number } & ChatMessageView<MessageType>;
     messages: ChatMessageView<MessageType>[];
   }>()
 
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
+  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!
+  const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!
+
   const router = useRouter()
   const { user } = toRefs(useAppStore())
   const { currentChatId } = toRefs(useChatsStore())
   const { getChat, deleteChat, leaveChat, clearChat, renameChat, getChatList } = useChatsStore()
 
-  const isOpenDialog = ref(false)
-  const component = ref<string>('')
-  const componentProps = ref<Record<string, any>>({})
-  const dialogProps = ref<PDialogProps>({} as PDialogProps)
   const text = computed<string>(() => {
     if (!props.chat.msgId)
       return ''
@@ -33,16 +43,6 @@
   })
   const isGroupChat = computed<boolean>(() => size(props.chat.members) > 2)
 
-  const clearDialogProps = () => {
-    component.value = ''
-    componentProps.value = {}
-    dialogProps.value = {} as PDialogProps
-  }
-  const closeDialog = () => {
-    isOpenDialog.value = false
-    clearDialogProps()
-  }
-
   const runChatHistoryExporting = async () => {
     const result = await exportChatMessages({
       chatName: props.chat.name,
@@ -50,95 +50,107 @@
       messages: props.messages,
     })
     if (result !== undefined) {
-      createSnackbar({
-        content: result ? 'The file is saved.' : 'Error on saving file.',
+      notification.$createNotice({
         type: result ? 'success' : 'error',
+        content: result ? 'The file is saved.' : 'Error on saving file.',
       })
     }
   }
 
   const runChatHistoryCleaning = async () => {
-    component.value = 'confirmation-dialog'
-    dialogProps.value = {
-      title: 'chat.history.clean.dialog.title',
-      onConfirm: async () => {
-        await clearChat(props.chat.chatId)
+    const component = defineAsyncComponent(() => import('../dialogs/confirmation-dialog.vue'))
+    dialog.$openDialog({
+      component,
+      dialogProps: {
+        title: $tr('chat.history.clean.dialog.title'),
+        onConfirm: async () => {
+          await clearChat(props.chat.chatId)
+        },
       },
-    }
-    isOpenDialog.value = true
+    })
   }
 
   const openChatInfoDialog = () => {
-    component.value = 'chat-info-dialog'
-    componentProps.value = { chat: props.chat }
-    dialogProps.value = {
-      solo: true,
-    }
-    isOpenDialog.value = true
+    const component = defineAsyncComponent(() => import('../dialogs/chat-info-dialog.vue'))
+    dialog.$openDialog({
+      component,
+      dialogProps: {
+        confirmButton: false,
+        cancelButton: false,
+      },
+      componentProps: {
+        chat: props.chat,
+      },
+    })
   }
 
   const runChatRenaming = () => {
-    component.value = 'chat-rename-dialog'
-    componentProps.value = { chatName: props.chat.name }
-    dialogProps.value = {
-      title: 'chat.rename.dialog.title',
-      confirmButtonText: 'chat.rename.dialog.button.text',
-      onConfirm: async ({ oldName, newName }: { oldName: string, newName: string }) => {
-        if (newName !== oldName) {
-          await renameChat(props.chat, newName)
-        }
-        clearDialogProps()
+    const component = defineAsyncComponent(() => import('../dialogs/chat-rename-dialog.vue'))
+    dialog.$openDialog({
+      component,
+      componentProps: {
+        chatName: props.chat.name
       },
-    }
-    isOpenDialog.value = true
+      dialogProps: {
+        title: $tr('chat.rename.dialog.title'),
+        confirmButtonText: $tr('chat.rename.dialog.button.text'),
+        onConfirm: async ({ oldName, newName }: { oldName: string, newName: string }) => {
+          if (newName !== oldName) {
+            await renameChat(props.chat, newName)
+          }
+        },
+      }
+    })
   }
 
   const closeChat = async () => {
     await router.push('/chats')
-    getChat(null)
+    await getChat(null)
   }
 
   const runChatDeleting = () => {
-    component.value = 'confirmation-dialog'
-    dialogProps.value = {
-      title: 'chat.delete.dialog.title',
-      confirmButtonColor: 'var(--blue-main)',
-      confirmButtonBackground: 'var(--system-white)',
-      cancelButtonColor: 'var(--system-white)',
-      cancelButtonBackground: 'var(--blue-main)',
-      onConfirm: async () => {
-        await deleteChat(props.chat.chatId)
-        if (props.chat.chatId === currentChatId.value) {
-          await router.push('/chats')
-          await getChat(null)
-        }
-        await getChatList()
-        clearDialogProps()
+    const component = defineAsyncComponent(() => import('../dialogs/confirmation-dialog.vue'))
+    dialog.$openDialog({
+      component,
+      dialogProps: {
+        title: $tr('chat.delete.dialog.title'),
+        confirmButtonColor: 'var(--blue-main)',
+        confirmButtonBackground: 'var(--system-white)',
+        cancelButtonColor: 'var(--system-white)',
+        cancelButtonBackground: 'var(--blue-main)',
+        onConfirm: async () => {
+          await deleteChat(props.chat.chatId)
+          if (props.chat.chatId === currentChatId.value) {
+            await router.push('/chats')
+            await getChat(null)
+          }
+          await getChatList()
+        },
       },
-    }
-    isOpenDialog.value = true
+    })
   }
 
   const runChatLeave = () => {
-    component.value = 'confirmation-dialog'
-    dialogProps.value = {
-      title: 'chat.leave.dialog.title',
-      confirmButtonText: 'chat.leave.dialog.button',
-      confirmButtonColor: 'var(--blue-main)',
-      confirmButtonBackground: 'var(--system-white)',
-      cancelButtonColor: 'var(--system-white)',
-      cancelButtonBackground: 'var(--blue-main)',
-      onConfirm: async () => {
-        await leaveChat(props.chat, [user.value])
-        if (props.chat.chatId === currentChatId.value) {
-          await router.push('/chats')
-          await getChat(null)
-        }
-        await getChatList()
-        clearDialogProps()
+    const component = defineAsyncComponent(() => import('../dialogs/confirmation-dialog.vue'))
+    dialog.$openDialog({
+      component,
+      dialogProps: {
+        title: $tr('chat.leave.dialog.title'),
+        confirmButtonText: 'chat.leave.dialog.button',
+        confirmButtonColor: 'var(--blue-main)',
+        confirmButtonBackground: 'var(--system-white)',
+        cancelButtonColor: 'var(--system-white)',
+        cancelButtonBackground: 'var(--blue-main)',
+        onConfirm: async () => {
+          await leaveChat(props.chat, [user.value])
+          if (props.chat.chatId === currentChatId.value) {
+            await router.push('/chats')
+            await getChat(null)
+          }
+          await getChatList()
+        },
       },
-    }
-    isOpenDialog.value = true
+    })
   }
 
   const actionsHandlers = {
@@ -178,21 +190,13 @@
         </div>
 
         <div
-          v-phtml.sanitize="props.chat.timestamp ? $tr('chat.header.info', { date: text }) : ''"
+          v-ui3n-html.sanitize="props.chat.timestamp ? $tr('chat.header.info', { date: text }) : ''"
           class="chat-header__info"
         />
       </div>
     </div>
 
     <chat-header-actions @select:action="selectAction" />
-
-    <p-dialog
-      v-if="dialogProps && component && isOpenDialog"
-      :component="component"
-      :component-props="componentProps"
-      :dialog-props="dialogProps"
-      @closed="closeDialog"
-    />
   </div>
 </template>
 

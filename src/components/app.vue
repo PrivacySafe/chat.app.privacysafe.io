@@ -1,16 +1,15 @@
 <script lang="ts" setup>
   import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref, toRefs } from 'vue'
   import { get, size } from 'lodash'
+  import { getDeliveryErrors, Ui3nMenu } from '@v1nt1248/3nclient-lib'
   import prLogo from '@/assets/images/privacysafe-logo.png'
   import { makeServiceCaller } from '@/libs/ipc-service-caller'
   import { appDeliverySrvProxy } from '@/services/services-provider'
   import { AppVersion } from '@/constants'
   import { useAppStore, useContactsStore, useChatsStore } from '@/store'
   import { getAppConfig } from '@/helpers/app.helper'
-  import { getDeliveryErrors } from '@/helpers/common.helper'
   import ContactIcon from '@/components/contacts/contact-icon.vue'
 
-  const isMenuOpen = ref(false)
   const appElement = ref<Element|null>(null)
 
   const { user: me, connectivityStatus } = toRefs(useAppStore())
@@ -183,15 +182,11 @@
             </span>
           </span>
         </div>
-        <var-menu
-          v-model:show="isMenuOpen"
-          :offset-y="40"
+        <ui3n-menu
           :offset-x="-40"
+          :offset-y="4"
         >
-          <div
-            class="app__toolbar-icon"
-            @click="isMenuOpen = true"
-          >
+          <div class="app__toolbar-icon">
             <contact-icon
               :name="me"
               :size="36"
@@ -201,15 +196,15 @@
 
           <template #menu>
             <div class="app__toolbar-menu">
-              <var-cell
+              <div
                 class="app__toolbar-menu-item"
                 @click="appExit"
               >
                 {{ $tr('app.exit') }}
-              </var-cell>
+              </div>
             </div>
           </template>
-        </var-menu>
+        </ui3n-menu>
       </div>
     </div>
     <div class="app__content">
@@ -326,7 +321,16 @@
         border-radius: var(--half-size);
 
         &-item {
+          display: flex;
+          justify-content: flex-start;
+          align-items: center;
+          position: relative;
+          width: 100%;
+          height: calc(var(--base-size) * 3);
           cursor: pointer;
+          font-size: var(--font-12);
+          font-weight: 400;
+          padding: 0 var(--base-size);
 
           &:hover {
             background-color: var(--blue-main-30);

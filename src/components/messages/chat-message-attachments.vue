@@ -1,7 +1,7 @@
 <script lang="ts" setup>
   import { computed } from 'vue'
   import { isEmpty } from 'lodash'
-  import { Icon } from '@iconify/vue'
+  import { Ui3nIcon } from '@v1nt1248/3nclient-lib'
 
   const props = defineProps<{
     attachments?: ChatMessageAttachmentsInfo[];
@@ -35,7 +35,7 @@
       :key="index"
       class="chat-message-attachments__item"
     >
-      <icon
+      <ui3n-icon
         icon="baseline-attach-file"
         width="16"
         height="16"

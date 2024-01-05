@@ -3,7 +3,7 @@ import { ChatsActions } from './types'
 import { appChatsSrvProxy } from '@/services/services-provider'
 import { chatIdLength } from '@/constants'
 import { useAppStore } from '@/store'
-import { getRandomId } from '@/helpers/common.helper'
+import { getRandomId } from '@v1nt1248/3nclient-lib'
 
 export const renameChat: ChatsActions['renameChat'] = async function (this, chat, newChatName) {
   const appStore = useAppStore()

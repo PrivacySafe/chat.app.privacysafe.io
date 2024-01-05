@@ -3,7 +3,7 @@ import { ChatsActions } from './types'
 import { useAppStore } from '@/store'
 import { msgIdLength } from '@/constants'
 import { appChatsSrvProxy } from '@/services/services-provider'
-import { getRandomId } from '@/helpers/common.helper'
+import { getRandomId } from '@v1nt1248/3nclient-lib'
 
 export const updateMembers: ChatsActions['updateMembers'] = async function (this, chat, users): Promise<void> {
   if (!chat || size(users) === 0) {

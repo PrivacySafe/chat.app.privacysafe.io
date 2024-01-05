@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020, 2023 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,7 +23,19 @@ declare namespace web3n.startup {
 	 * functionality, when user creates new account in 3NWeb domains.
 	 */
 	interface SignUpService {
-		
+
+		/**
+		 * @param serviceUrl of 3NWeb signup service url.
+		 */
+		setSignUpServer(serviceUrl: string): Promise<void>;
+
+		/**
+		 * @param signupToken
+		 * @return a promise, resolvable to an array of available domains for
+		 * creation of a new account.
+		 */
+		getAvailableDomains(signupToken?: string): Promise<string[]>;
+
 		/**
 		 * @param name is a part of address that comes before @domain
 		 * @param signupToken

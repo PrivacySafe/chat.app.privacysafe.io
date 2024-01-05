@@ -1,8 +1,8 @@
 <script lang="ts" setup>
-  import { ref, computed, watch, onBeforeMount, toRefs } from 'vue'
+  import { ref, computed, watch, onBeforeMount, toRefs, inject } from 'vue'
   import { get, keyBy } from 'lodash'
   import { useAppStore, useContactsStore, useChatsStore } from '@/store'
-  import PInput from '@/components/ui/p-input.vue'
+  import { I18nPlugin, I18N_KEY, Ui3nButton, Ui3nChip, Ui3nInput, Ui3nTabs } from '@v1nt1248/3nclient-lib'
   import ContactList from '@/components/contacts/contact-list.vue'
   import ContactIcon from '@/components/contacts/contact-icon.vue'
 
@@ -10,6 +10,9 @@
     withoutOverlay?: boolean
   }>()
   const emit = defineEmits(['close'])
+
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
+
   const { user } = toRefs(useAppStore())
   const { contactList: allContacts } = toRefs(useContactsStore())
   const { fetchContactList, addContact } = useContactsStore()
@@ -120,17 +123,18 @@
   >
     <div class="chat-create-dialog__body">
       <div class="chat-create-dialog__top">
-        <var-tabs
-          v-model:active="tabs.current"
+        <ui3n-tabs
+          v-model="tabs.current"
           class="chat-create-dialog__tabs"
         >
-          <var-tab
+          <div
             v-for="item in tabs.items"
             :key="item.id"
+            class="chat-create-dialog__tab"
           >
             {{ $tr(item.name) }}
-          </var-tab>
-        </var-tabs>
+          </div>
+        </ui3n-tabs>
       </div>
 
       <div
@@ -138,9 +142,9 @@
         class="chat-create-dialog__content"
       >
         <div class="chat-create-dialog__content-header">
-          <p-input
+          <ui3n-input
             v-model:value="searchText"
-            icon="round-search"
+            icon="search"
             clearable
           />
 
@@ -154,10 +158,10 @@
               v-if="selectedContacts.length"
               class="chat-create-dialog__selected-body"
             >
-              <var-chip
+              <ui3n-chip
                 v-for="contactId in selectedContacts"
                 :key="contactId"
-                size="small"
+                :max-width="104"
                 class="chat-create-dialog__selected-item"
               >
                 {{ getContact(contactId).displayName }}
@@ -168,7 +172,7 @@
                     :readonly="true"
                   />
                 </template>
-              </var-chip>
+              </ui3n-chip>
             </div>
           </template>
         </div>
@@ -190,7 +194,7 @@
         class="chat-create-dialog__content"
       >
         <div class="chat-create-dialog__content-header">
-          <p-input
+          <ui3n-input
             v-model:value="groupChatName"
             label="Group Name"
             clearable
@@ -207,22 +211,21 @@
       </div>
 
       <div class="chat-create-dialog__buttons">
-        <var-button
-          text
-          type="primary"
+        <ui3n-button
+          text-color="var(--blue-main, #0090ec)"
+          color="var(--system-white, #fff)"
           @click="onFirstBtnClick"
         >
           {{ multipleModeStep === 1 ? $tr('btn.text.close') : $tr('btn.text.back') }}
-        </var-button>
+        </ui3n-button>
 
-        <var-button
+        <ui3n-button
           v-if="selectedChatType === 'group'"
-          type="primary"
           :disabled="!selectedContacts.length || (multipleModeStep === 2 && !groupChatName)"
           @click="onSecondBtnClick"
         >
           {{ multipleModeStep === 1 ? $tr('btn.text.next') : $tr('btn.text.create') }}
-        </var-button>
+        </ui3n-button>
       </div>
     </div>
   </div>
@@ -279,10 +282,15 @@
         --tabs-indicator-background: var(--blue-main, #0090ec);
 
         width: 220px;
+      }
 
-        .var-tab {
-          font-weight: 500;
-        }
+      .chat-create-dialog__tab {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 110px;
+        font-size: 14px;
+        font-weight: 500;
       }
     }
 
@@ -319,7 +327,7 @@
       justify-content: center;
       align-items: center;
 
-      .var-button {
+      .ui3n-button {
         margin: 0 var(--half-size);
         font-weight: 500;
         text-transform: capitalize;
@@ -341,10 +349,10 @@
         justify-content: flex-start;
         align-items: flex-start;
 
-        .var-chip {
-          &__text-small {
+        .ui3n-chip {
+          .ui3n-chip__body {
             display: inline-block;
-            padding-left: var(--half-size);
+            font-weight: 600;
             @include text-overflow-ellipsis(calc(100% - var(--base-size) * 3));
           }
         }
@@ -357,8 +365,7 @@
 
         max-width: calc(var(--base-size) * 13);
         margin: 0 var(--half-size) var(--half-size) 0;
-        font-weight: 600;
-        padding-left: 0;
+        padding-left: 0 !important;
       }
     }
   }

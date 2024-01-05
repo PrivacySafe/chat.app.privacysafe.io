@@ -22,5 +22,6 @@
     font-weight: 400;
     color: var(--black-90);
     text-align: center;
+    padding: 32px 16px;
   }
 </style>

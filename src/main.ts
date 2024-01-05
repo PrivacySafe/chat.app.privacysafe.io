@@ -1,46 +1,40 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { router } from './router'
-import dayjs from 'dayjs'
-import relativeTime from 'dayjs/plugin/relativeTime'
-import { vueBusPlugin } from './store/plugins/vue-bus-plugin'
-import { i18nPlugin } from './store/plugins/i18n-plugin'
-import { iconsInitialization } from './icons'
+import { dialogs, i18n, I18nOptions, notifications, storeVueBus, storeI18n, storeNotifications, vueBus, useIcons } from '@v1nt1248/3nclient-lib'
 import { initializationServices } from '@/services/services-provider'
-import PHtml from '@/directives/p-html'
 import App from '@/components/app.vue'
 
-import '@varlet/touch-emulator'
+import '@v1nt1248/3nclient-lib/style.css'
 import '@/assets/styles/main.css'
 
-import { I18n } from '@/plugins/i18n'
-import { bus } from '@/plugins/vue-bus'
 import en from './data/i18/en.json'
-
-dayjs.extend(relativeTime)
 
 const mode = process.env.NODE_ENV
 
 const init = () => {
-  iconsInitialization()
   initializationServices()
     .then(() => {
       const pinia = createPinia()
-      pinia.use(vueBusPlugin)
-      pinia.use(i18nPlugin)
+      pinia.use(storeVueBus)
+      pinia.use(storeI18n)
+      pinia.use(storeNotifications)
 
       const app = createApp(App)
 
       app.config.globalProperties.$router = router
-      // app.config.globalProperties.$store = store
+      app.config.compilerOptions.isCustomElement = tag => {
+        return tag.startsWith('ui3n-')
+      }
 
       app
         .use(pinia)
-        .use(I18n, { lang: 'en', messages: { en } })
-        .use(bus)
+        .use(useIcons)
+        .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
+        .use(vueBus)
+        .use(dialogs)
+        .use(notifications)
         .use(router)
-        .provide('$dayjs', dayjs)
-        .directive('phtml', PHtml)
         .mount('#main')
     })
 }

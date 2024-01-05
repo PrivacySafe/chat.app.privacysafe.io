@@ -1,11 +1,11 @@
 <script lang="ts" setup>
   import { ref, inject, watch } from 'vue'
   import { size } from 'lodash'
+  import { I18nPlugin, I18N_KEY, Ui3nInput } from '@v1nt1248/3nclient-lib'
   import { validationParams } from '@/constants'
-  import PInput from '@/components/ui/p-input.vue'
 
   const { chatsNameMaxLength } = validationParams
-  const { $tr } = inject<I18nPlugin>('i18n')!
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
 
   const props = defineProps<{
     chatName: string;
@@ -28,7 +28,7 @@
 
 <template>
   <div class="chat-rename-dialog">
-    <p-input
+    <ui3n-input
       v-model:value="data.newName"
       :rules="[checkRequired, checkLength]"
       placeholder="Enter chat name"
@@ -41,6 +41,7 @@
   .chat-rename-dialog {
     position: relative;
     width: 100%;
-    height: calc(var(--base-size) * 5);
+    height: calc(var(--base-size) * 13);
+    padding: 32px 16px;
   }
 </style>

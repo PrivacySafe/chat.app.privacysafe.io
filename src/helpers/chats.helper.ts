@@ -4,10 +4,9 @@ import { isEmpty, size } from 'lodash'
 import { useChatsStore } from '@/store'
 import { fileLinkStoreSrv } from '@/services/services-provider'
 import { addFileTo } from '@/services/base/attachments-container'
-import { html2text } from '@/helpers//forUi'
+import { getRandomId, html2text } from '@v1nt1248/3nclient-lib'
 import { getContactName } from '@/helpers//contacts.helper'
 import { messageActions, msgIdLength } from '@/constants'
-import { getRandomId } from '@/helpers/common.helper'
 
 export function createAttachmentsContainer(files: ReadonlyFile[]): AttachmentsContainer {
   const container = {} as AttachmentsContainer

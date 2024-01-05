@@ -2,7 +2,7 @@ import { without } from 'lodash'
 import { ChatsActions } from './types'
 import { appChatsSrvProxy, appDeliverySrvProxy } from '@/services/services-provider'
 import { msgIdLength } from '@/constants'
-import { getRandomId } from '@/helpers/common.helper'
+import { getRandomId } from '@v1nt1248/3nclient-lib'
 import { chatMessagesByType } from '@/helpers/chats.helper'
 
 export const leaveChat: ChatsActions['leaveChat'] = async function (this, chat, users, isRemoved = false) {
