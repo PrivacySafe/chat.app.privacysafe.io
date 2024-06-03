@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 - 2022 3NSoft Inc.
+ Copyright (C) 2021 - 2023 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -28,7 +28,7 @@ declare namespace web3n.apps {
 		listApps(): Promise<AppInfo[]>;
 		openApp(id: string, devTools?: boolean): Promise<void>;
 		getAppInfo(id: string): Promise<AppInfo|undefined>;
-		getAppIcon(id: string): Promise<files.ReadonlyFile>;
+		getAppIcon(id: string, entrypoint?: string): Promise<files.ReadonlyFile>;
 	}
 
 	interface AppInfo {

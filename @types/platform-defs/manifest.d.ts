@@ -23,6 +23,8 @@ declare namespace web3n.caps {
 		appDomain: string;
 		version: string;
 		name?: string;
+		description?: string;
+		icon?: string;
 		components?: {
 			[entrypoint: string]: AppComponent;
 		};
@@ -32,6 +34,7 @@ declare namespace web3n.caps {
 		startedBy: 'user';
 		runtime: GUIRuntime;
 		name: string;
+		description?: string;
 		icon?: string;
 		windowOpts?: ui.WindowOptions;
 	}
@@ -46,6 +49,7 @@ declare namespace web3n.caps {
 		runtime: GUIRuntime;
 		startedBy: AllowedServiceCallers;
 		service: string;
+		icon?: string;
 		windowOpts?: ui.WindowOptions;
 		allowNonGUICaller?: true;
 		childOfGUICaller?: true;

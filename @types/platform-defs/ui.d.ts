@@ -47,12 +47,6 @@ declare namespace web3n.ui {
 		 */
 		y?: number;
 		/**
-		 * The width and height would be used as web page’s size, which means
-		 * the actual window’s size will include window frame’s size and be slightly larger.
-		 * Default: false.
-		 */
-		useContentSize?: boolean;
-		/**
 		 * Show window in the center of the screen.
 		 * Default: true
 		 */
@@ -106,48 +100,20 @@ declare namespace web3n.ui {
 		 */
 		skipTaskbar?: boolean;
 		/**
-		 * Default window title.
-		 * Default: "Electron".
-		 */
-		title?: string;
-		/**
-		 * The window icon, when omitted on Windows the executable’s icon would be used as window icon.
-		 */
-		icon?: string;
-		/**
 		 * Specify false to create a Frameless Window.
 		 * Default: true.
 		 */
 		frame?: boolean;
-		/**
-		 * If window is not modal, specifies if it should still stay atop of a parent. Ignored for modal window.
-		 * Default: false.
-		 * (Non-Electron flag)
-		 */
-		alwaysAboveParent?: boolean;
 		/**
 		 * Whether this is a modal window. This only works when the window is a child window.
 		 * Default: false.
 		 */
 		modal?: boolean;
 		/**
-		 * Whether the web view accepts a single mouse-down event that simultaneously activates the window.
+		 * Remember window size and location if it was adjusted.
 		 * Default: false.
 		 */
-		acceptFirstMouse?: boolean;
-		/**
-		 * Window’s background color as Hexadecimal value, like #66CD00 or #FFF or #80FFFFFF (alpha is supported).
-		 * Default: #FFF (white).
-		 */
-		backgroundColor?: string;
-		/**
-		 * The style of window title bar.
-		 */
-		titleBarStyle?: 'default' | 'hidden' | 'hidden-inset';
-		/**
-		 * Use WS_THICKFRAME style for frameless windows on Windows
-		 */
-		thickFrame?: boolean;
+		rememberWindowLocation?: boolean;
 	}
 
 }
