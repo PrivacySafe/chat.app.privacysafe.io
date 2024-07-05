@@ -1,8 +1,9 @@
 {
   "name": "Apps Chats",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.5.11",
+  "version": "0.5.13",
   "components": {
+
     "/index.html": {
       "startedBy": "user",
       "runtime": "web-gui",
@@ -53,12 +54,17 @@
         "minHeight": 512,
         "maxWidth": 1440
       },
-      "icon": "logo.png"
+      "icon": "logo.png",
+      "startCmds": {
+        "open-chat-with": {
+					"otherApps": "*"
+				}
+      }
     },
+
     "/chatsDenoServices.js": {
       "allowedCallers": {
-        "thisAppComponents": "*",
-        "otherApps": "*"
+        "thisAppComponents": "*"
       },
       "services": ["AppChatsInternal"],
       "runtime": "deno",
@@ -70,6 +76,7 @@
         }
       }
     },
+
     "/deliveryDenoServices.js": {
       "allowedCallers": {
         "thisAppComponents": "*",
@@ -96,5 +103,6 @@
         }
       }
     }
+
   }
 }

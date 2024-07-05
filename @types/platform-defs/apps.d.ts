@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 - 2023 3NSoft Inc.
+ Copyright (C) 2021 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,6 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+/// <reference path="./manifest.d.ts" />
+
+/**
+ * This is used by system utility launcher app, and concerns only platform
+ * developers, not app developers. Nonetheless, app developers have a standard
+ * for distributing apps via http, and it necessarily reflects in the api here.
+ */
 declare namespace web3n.apps {
 
 	interface Apps {
@@ -25,37 +32,41 @@ declare namespace web3n.apps {
 	}
 
 	interface AppsOpener {
-		listApps(): Promise<AppInfo[]>;
+		listApps(filter?: AppState[]): Promise<AppVersions[]>;
 		openApp(id: string, devTools?: boolean): Promise<void>;
-		getAppInfo(id: string): Promise<AppInfo|undefined>;
-		getAppIcon(id: string, entrypoint?: string): Promise<files.ReadonlyFile>;
+		getAppVersions(
+			id: string, filter?: AppState[]
+		): Promise<AppVersions|undefined>;
+		getAppManifest(
+			id: string, version?: string
+		): Promise<caps.AppManifest|undefined>;
+		getAppFileBytes(
+			id: string, path: string, version?: string
+		): Promise<Uint8Array|undefined>;
+		watchApps(observer: Observer<AppEvent>): () => void;
 	}
 
-	interface AppInfo {
+	interface AppVersions {
 		id: string;
-		installed?: {
-			platform: PlatformType;
-			version: string;
-		}[];
-		packs?: {
-			platform: PlatformType;
-			version: string;
-		}[];
-		bundled?: {
-			platform: PlatformType;
-			version: string;
-			isLink?: true;
-		}[];
+		current?: string;
+		packs?: string[];
+		bundled?: string;
 	}
 
-	type PlatformType = 'web' | 'linux' | 'windows' | 'mac';
-	type VariantType = 'zip' | 'unpacked' | 'AppImage' | 'deb' | 'nsis' | 'blockmap' | 'exe' | 'dmg';
-	type ArchType = 'src' | 'web' | 'x64' | 'arm64' | 'ia32';
+	type AppState = 'current' | 'packs' | 'bundled';
+
+	interface AppEvent {
+		type: 'installed' | 'uninstalled';
+		id: string;
+		version: string;
+	}
 
 	interface AppsDownloader {
 		getAppChannels(id: string): Promise<DistChannels>;
 		getLatestAppVersion(id: string, channel: string): Promise<string>;
-		getAppVersionList(id: string, version: string): Promise<AppVersionPacks>;
+		getAppVersionFilesList(
+			id: string, version: string
+		): Promise<AppDistributionList>;
 		downloadWebApp(
 			id: string, version: string, observer: Observer<DownloadProgress>
 		): () => void;
@@ -71,16 +82,17 @@ declare namespace web3n.apps {
 		main?: string;
 	}
 
-	interface AppVersionPacks {
+	interface AppDistributionList {
 		files: {
-			[fName: string]: PackVariant;
+			[fName: string]: {
+				content: DistAppFileContent;
+				sha512: string;
+				size: number;
+			};
 		};
 	}
 
-	interface PackVariant {
-		arch: ArchType;
-		variant: VariantType;
-	}
+	type DistAppFileContent = 'bin/zip' | 'bin/unpacked' | 'src/zip';	
 
 	interface DownloadProgress {
 		totalFiles: number;
@@ -92,13 +104,13 @@ declare namespace web3n.apps {
 	}
 
 	interface AppsInstaller {
-		unpackBundledWebApp(
+		unpackBundledApp(
 			id: string, observer: Observer<BundleUnpackProgress>
 		): () => void;
-		installWebApp(id: string, version: string): Promise<void>;
+		installApp(id: string, version: string): Promise<void>;
+		removeAppPack(id: string, version: string): Promise<void>;
+		uninstallApp(id: string): Promise<void>;
 		// removeAppData(id: string);
-		// removeAppPacks(id: string);
-		// uninstallApp(id: string);
 	}
 
 	interface BundleUnpackProgress {
@@ -111,7 +123,7 @@ declare namespace web3n.apps {
 		getCurrentVersion(): Promise<string>;
 		getChannels(): Promise<DistChannels>;
 		getLatestVersion(channel: string): Promise<string>;
-		getVersionList(version: string): Promise<AppVersionPacks>;
+		getVersionList(version: string): Promise<AppDistributionList>;
 		availableUpdateType(): Promise<string|undefined>;
 		downloadAndApplyUpdate(
 			channel: string, observer: Observer<PlatformDownloadProgress>

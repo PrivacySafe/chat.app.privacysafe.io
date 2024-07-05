@@ -10,11 +10,30 @@ import '@/assets/styles/main.css'
 
 import en from './data/i18/en.json'
 
+interface OpenChatCmdArg {
+	peerAddress: string;
+}
+
 const mode = process.env.NODE_ENV
 
 const init = () => {
   initializationServices()
-    .then(() => {
+    .then(async () => {
+      const startCmd = await w3n.shell!.getStartedCmd!()
+      if (startCmd) {
+        console.log(`Chat app was started with command:`, startCmd)
+      }
+      const unsub = w3n.shell!.watchStartCmds!({
+        next: cmd => console.log(`Command came to chat app:`, cmd),
+        error: err => console.error(`Error in listening to commands for chat app:`, err),
+        complete: () => console.log(`Listening to commands for chat app is closed by platform side.`)
+      })
+      return ((startCmd && (startCmd.cmd === 'open-chat-with')) ?
+        (startCmd.params[0] as OpenChatCmdArg).peerAddress :
+        undefined
+      );
+    })
+    .then(addressToOpen => {
       const pinia = createPinia()
       pinia.use(storeVueBus)
       pinia.use(storeI18n)

@@ -39,12 +39,12 @@ declare namespace web3n.testing {
 	interface TestStand extends BasicTestStand {
 		staticTestInfo(): Promise<StaticTestInfo>;
 		idOfTestUser(userNum: number): Promise<string>;
-		observeMsgsFromOtherLocalTestUser(
-			userNum: number, appDomain: string|undefined,
+		observeMsgsFromOtherLocalTestProcess(
+			userNum: number|undefined, appDomain: string|undefined,
 			component: string|undefined, observer: Observer<any>
 		): () => void;
-		sendMsgToOtherLocalTestUser(
-			userNum: number, appDomain: string|undefined,
+		sendMsgToOtherLocalTestProcess(
+			userNum: number|undefined, appDomain: string|undefined,
 			component: string|undefined, msg: any
 		): Promise<void>;
 	}

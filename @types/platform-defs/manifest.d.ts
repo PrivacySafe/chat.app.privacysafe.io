@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 - 2022 3NSoft Inc.
+ Copyright (C) 2021 - 2022, 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -28,10 +28,39 @@ declare namespace web3n.caps {
 		components?: {
 			[entrypoint: string]: AppComponent;
 		};
+		launchers?: Launcher[];
+		windowOpts?: ui.WindowOptions;
+		capsRequested?: RequestedCAPs;
+		sharedLibs?: SharedLibInfo[];
 	}
 
-	interface UserStartedComponent extends CommonComponentSetting {
-		startedBy: 'user';
+	/**
+	 * Launcher exposes clickable things that user can start/launch. System's
+	 * launcher app uses provided here info for setting up user interface. If
+	 * a required runtime or forma-factor is not available on a device, launcher
+	 * app can indicate it. This way an app may contain components for both
+	 * desktop and mobile devices without expecting each component to be
+	 * cross-platform and cross-form-factor (has this ever existed?).
+	 */
+	interface Launcher {
+		// XXX
+		// - add env/device/form-factor
+		// - remove GUIComponent.startedBy and GUIComponent.name fields
+		name: string;
+		component?: string;
+		startCmd?: {
+			cmd: string;
+			params?: any[];
+		}
+		icon?: string;
+		description?: string;
+	}
+
+	interface GUIComponent extends CommonComponentSetting {
+		startedBy?: 'user';
+		startCmds?: {
+			[cmd: string]: AllowedCallers;
+		};
 		runtime: GUIRuntime;
 		name: string;
 		description?: string;
@@ -40,14 +69,15 @@ declare namespace web3n.caps {
 	}
 
 	interface ServiceComponent extends CommonComponentSetting {
-		startedBy: AllowedServiceCallers;
-		services: string | string[];
+		allowedCallers: AllowedCallers;
+		service?: string;
+		services?: string[];
 		forOneConnectionOnly?: true;
 	}
 
 	interface GUIServiceComponent extends CommonComponentSetting {
 		runtime: GUIRuntime;
-		startedBy: AllowedServiceCallers;
+		allowedCallers: AllowedCallers;
 		service: string;
 		icon?: string;
 		windowOpts?: ui.WindowOptions;
@@ -61,24 +91,18 @@ declare namespace web3n.caps {
 		capsRequested?: RequestedCAPs;
 		sharedLibs?: SharedLibInfo[];
 		multiInstances?: true;
-
-		// XXX add implementation for openComponent to open this app components
-		//     that are not services. E.g. LibreOffice opens Calc or Writer
-		//     components.
-		openComponent?: string[];
 	}
 
 	type GUIRuntime = 'web-gui';
 
 	type NonGUIRuntime = 'wasm,mp1' | 'deno';
 
-	interface AllowedServiceCallers {
+	interface AllowedCallers {
 		thisAppComponents?: '*' | string[];
 		otherApps?: '*' | string[];
 	}
 
-	type AppComponent = UserStartedComponent |
-		ServiceComponent | GUIServiceComponent;
+	type AppComponent = GUIComponent | ServiceComponent | GUIServiceComponent;
 
 	interface SharedLibInfo {
 		libDomain: string;
@@ -113,6 +137,10 @@ declare namespace web3n.caps {
 		fileDialog?: FileDialogsCAPSettings;
 		mountFS?: DeviceMountFSCAPSetting;
 		userNotifications?: true;
+		startAppCmds?: {
+			thisApp?: string|string[];
+			otherApps?: { [ appDomain: string ]: string|string[]; };
+		};
 	}
 
 	type FileDialogsCAPSettings = 'all' | 'readonly';
