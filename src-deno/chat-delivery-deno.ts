@@ -1,29 +1,51 @@
+/*
+ Copyright (C) 2020 - 2024 3NSoft Inc.
+
+ This program is free software: you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation, either version 3 of the License, or (at your option) any later
+ version.
+
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ See the GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License along with
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 /* eslint-disable @typescript-eslint/triple-slash-reference, @typescript-eslint/no-explicit-any, max-len */
 /// <reference path="../@types/platform-defs/injected-w3n.d.ts" />
 /// <reference path="../@types/platform-defs/test-stand.d.ts" />
 /// <reference path="../@types/app.d.ts" />
 /// <reference path="../@types/contact.d.ts" />
 /// <reference path="../@types/chat.d.ts" />
+/// <reference path="../@types/services.d.ts" />
 // @deno-types="./ipc-service.d.ts"
 import { MultiConnectionIPCWrap } from './ipc-service.js'
-// @ts-ignore
 import { SingleProc } from '../src/helpers/processes.ts'
-// @ts-ignore
 import { prepareMessageDeliveryInfo } from './helpers/delivery.helpers.ts'
+import { ObserversSet } from './observer-utils.ts';
 
-declare let Deno: {
-  exit: () => void;
+interface DeliveryServiceData {
+  lastReceivedMessageTimestamp: number;
 }
+
+declare const w3n: web3n.testing.CommonW3N;
 
 const deliveryServiceDataFileName = 'delivery-service-data.json'
 
-class ChatDeliveryService {
+export class ChatDeliveryService implements AppDeliverySrv {
+
   public readonly fileProc = new SingleProc()
-  private readonly incomingChatMessageObservers = new Set<web3n.Observer<ChatIncomingMessage>>()
-  private readonly outgoingChatMessageObservers = new Set<web3n.Observer<DeliveryMessageProgress>>()
+  private readonly incomingChatMessageObservers = new ObserversSet<ChatIncomingMessage>()
+  private readonly outgoingChatMessageObservers = new ObserversSet<DeliveryMessageProgress>()
   private data: DeliveryServiceData = {
     lastReceivedMessageTimestamp: 0,
   }
+  private shouldCheckMissedMessages = true
+  private readonly msgHandingProc = new SingleProc()
 
   private userId: string|undefined
 
@@ -62,18 +84,15 @@ class ChatDeliveryService {
     const { lastReceivedMessageTimestamp } = await this.getServiceDataFile()
     this.data.lastReceivedMessageTimestamp = Math.max(lastReceivedMessageTimestamp - 60 * 1000, 0)
     const listMessages = await w3n.mail?.inbox.listMsgs(this.data.lastReceivedMessageTimestamp)
+    .catch(err => w3n.log!('error', `LIST MESSAGES ERROR: `, err))
     if (listMessages) {
       for (const item of listMessages) {
         const { msgId, msgType, deliveryTS } = item
         if (msgType === 'chat') {
           try {
             const msg = await w3n.mail?.inbox.getMsg(msgId) as ChatIncomingMessage
-            if (msg) {
-              for (const obs of this.incomingChatMessageObservers) {
-                if (obs.next) {
-                  obs.next(msg)
-                }
-              }
+            if (msg && (msg.jsonBody?.chatMessageType !== 'webrtc-call')) {
+              this.incomingChatMessageObservers.next(msg)
               this.data.lastReceivedMessageTimestamp = Math.max(this.data.lastReceivedMessageTimestamp, deliveryTS || 0)
             }
           } catch (e) {
@@ -85,46 +104,52 @@ class ChatDeliveryService {
     }
   }
 
-  public initialization() {
-    this.completeAllWatchers()
+  private async handleIncomingMessage(msg: IncomingMessage): Promise<void> {
+    const { msgType, jsonBody } = msg as ChatIncomingMessage
+    if (msgType === 'chat') {
+      if (jsonBody?.chatMessageType === 'webrtc-call') {
+
+        // XXX open 
+
+      } else {
+        const { deliveryTS } = msg
+        this.data.lastReceivedMessageTimestamp = deliveryTS
+        await this.saveServiceDataFile(this.data)
+        this.incomingChatMessageObservers.next(msg as ChatIncomingMessage)
+      }
+    }
   }
+
   public async start(): Promise<void> {
+    if (this.userId) {
+      // service is already started, and second start will be echoing messages
+      return;
+    }
     this.userId = await w3n.mail?.getUserId()
 
-    await this.handleMissedInboxMessages()
-
-    w3n.mail?.inbox.subscribe(
+    w3n.mail!.inbox.subscribe(
       'message',
       {
-        next: async value => {
-          const { msgType } = value
-          if (msgType === 'chat') {
-            const { deliveryTS } = value
-            this.data.lastReceivedMessageTimestamp = deliveryTS
-            await this.saveServiceDataFile(this.data)
-            for (const obs of this.incomingChatMessageObservers) {
-
-              if (obs.next) {
-                obs.next(value as ChatIncomingMessage)
-              }
-            }
+        next: msg => {
+          if (this.incomingChatMessageObservers.isEmpty()) {
+            this.shouldCheckMissedMessages = true
+          } else {
+            this.msgHandingProc.startOrChain(
+              () => this.handleIncomingMessage(msg)
+            )
           }
         },
         error: err => w3n.log!('error', `Inbox subscribe error: `, err),
       },
     )
 
-    w3n.mail?.delivery.observeAllDeliveries({
+    w3n.mail!.delivery.observeAllDeliveries({
       next: async (value: DeliveryMessageProgress) => {
         const { progress } = value
         const { localMeta = {} } = progress || {}
         const { path } = localMeta
-        if (path.includes('chat')) {
-          for (const obs of this.outgoingChatMessageObservers) {
-            if (obs.next) {
-              obs.next(value)
-            }
-          }
+        if (path?.includes('chat')) {
+          this.outgoingChatMessageObservers.next(value)
         }
       },
       error: err => w3n.log!('error', `Send error: `, err),
@@ -161,7 +186,7 @@ class ChatDeliveryService {
     if (msgIds.length) {
       try {
         for (const msgId of msgIds) {
-          w3n.mail?.delivery.rmMsg(msgId)
+          w3n.mail!.delivery.rmMsg(msgId)
         }
       } catch (e) {
         w3n.log!('error', `Error deleting the messages ${msgIds.join(', ')} from the delivery list. `, e)
@@ -212,36 +237,30 @@ class ChatDeliveryService {
 
   public watchIncomingMessages(obs: web3n.Observer<ChatIncomingMessage>): () => void {
     this.incomingChatMessageObservers.add(obs)
+    this.shouldCheckMissedMessages = false
+    this.msgHandingProc.startOrChain(
+      () => this.handleMissedInboxMessages()
+    )
     return () => {
       this.incomingChatMessageObservers.delete(obs)
+      if (this.incomingChatMessageObservers.isEmpty()) {
+        this.shouldCheckMissedMessages = true;
+      }
     }
   }
 
   public watchOutgoingMessages(obs: web3n.Observer<DeliveryMessageProgress>): () => void {
     this.outgoingChatMessageObservers.add(obs)
-    return () => {
-      this.outgoingChatMessageObservers.delete(obs)
-    }
+    return () => this.outgoingChatMessageObservers.delete(obs)
   }
 
   public completeAllWatchers(): void {
-    for (const obs of this.incomingChatMessageObservers) {
-      if (obs.complete) {
-        obs.complete()
-      }
-    }
-    this.incomingChatMessageObservers.clear()
-
-    for (const obs of this.outgoingChatMessageObservers) {
-      if (obs.complete) {
-        obs.complete()
-      }
-    }
-    this.outgoingChatMessageObservers.clear()
+    this.incomingChatMessageObservers.complete()
+    this.outgoingChatMessageObservers.complete()
   }
 }
 
-class ChatDeliveryServiceWrap extends MultiConnectionIPCWrap {
+export class ChatDeliveryServiceWrap extends MultiConnectionIPCWrap {
   constructor(
     srvName: string,
     private readonly fileProc: SingleProc,
@@ -250,21 +269,32 @@ class ChatDeliveryServiceWrap extends MultiConnectionIPCWrap {
   }
 
   protected onListeningCompletion(): Promise<void> {
-    return this.fileProc.startOrChain(async () => Deno.exit());
+    return this.fileProc.startOrChain(async () => w3n.closeSelf?.());
   }
 
   protected async onListeningError(err: any): Promise<void> {
     await super.onListeningError(err);
-    await this.fileProc.startOrChain(async () => Deno.exit());
+    await this.fileProc.startOrChain(async () => w3n.closeSelf?.());
   }
+
 }
 
-const deliverySrv = new ChatDeliveryService()
-const deliverySrvWrap = new ChatDeliveryServiceWrap('ChatDeliveryService', deliverySrv.fileProc)
+export async function setupAndStartChatDeliveryService():
+Promise<ChatDeliveryService> {
+  const deliverySrv = new ChatDeliveryService()
+  const deliverySrvWrap = new ChatDeliveryServiceWrap('ChatDeliveryService', deliverySrv.fileProc)
 
-deliverySrvWrap.exposeReqReplyMethods(deliverySrv, [
-  'initialization', 'start', 'addMessageToDeliveryList', 'removeMessageFromDeliveryList', 'getMessage', 'getDeliveryList', 'removeMessageFromInbox',
-])
-deliverySrvWrap.exposeObservableMethods(deliverySrv, ['watchIncomingMessages', 'watchOutgoingMessages'])
+  await deliverySrv.start()
 
-deliverySrvWrap.startIPC()
+  deliverySrvWrap.exposeReqReplyMethods(deliverySrv, [
+    'addMessageToDeliveryList', 'removeMessageFromDeliveryList', 'getMessage', 'getDeliveryList', 'removeMessageFromInbox',
+  ])
+  deliverySrvWrap.exposeObservableMethods(deliverySrv, [
+    'watchIncomingMessages', 'watchOutgoingMessages'
+  ])
+
+  deliverySrvWrap.startIPC()
+
+  return deliverySrv;
+}
+

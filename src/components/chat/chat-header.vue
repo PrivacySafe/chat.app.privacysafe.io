@@ -18,6 +18,7 @@
   import { getChatName } from '@/helpers/chat-ui.helper'
   import ChatAvatar from '@/components/chat/chat-avatar.vue'
   import ChatHeaderActions from '@/components/chat/chat-header-actions.vue'
+  import { startVideoCallComponent } from '@/helpers/video-chat'
 
   const vUi3nHtml = Ui3nHtml
 
@@ -36,9 +37,9 @@
   const { getChat, deleteChat, leaveChat, clearChat, renameChat, getChatList } = useChatsStore()
 
   const text = computed<string>(() => {
-    if (!props.chat.msgId)
+    if (!props.chat.msgId) {
       return ''
-
+    }
     return prepareDateAsSting(props.chat.timestamp)
   })
   const isGroupChat = computed<boolean>(() => size(props.chat.members) > 2)
@@ -153,6 +154,10 @@
     })
   }
 
+  async function startVideoCall(): Promise<void> {
+    await startVideoCallComponent(props.chat)
+  }
+
   const actionsHandlers = {
     history: {
       export: runChatHistoryExporting,
@@ -195,6 +200,8 @@
         />
       </div>
     </div>
+
+    <button @click="startVideoCall">🎥 Call</button>
 
     <chat-header-actions @select:action="selectAction" />
   </div>

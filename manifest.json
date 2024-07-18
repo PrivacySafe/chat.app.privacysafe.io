@@ -1,7 +1,7 @@
 {
   "name": "Apps Chats",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.5.13",
+  "version": "0.6.2",
   "components": {
 
     "/index.html": {
@@ -14,7 +14,10 @@
         "mailerid": true,
         "shell": {
           "fileDialog": "all",
-          "userNotifications": true
+          "userNotifications": true,
+          "startAppCmds": {
+            "thisApp": [ "start-new-call", "accept-call" ]
+          }
         },
         "storage": {
           "appFS": [
@@ -62,42 +65,46 @@
       }
     },
 
-    "/chatsDenoServices.js": {
-      "allowedCallers": {
-        "thisAppComponents": "*"
+    "/video.html": {
+      "startCmds": {
+        "start-new-call": {
+          "thisAppComponents": "*"
+        },
+        "accept-call": {
+          "thisAppComponents": "*"
+        }
       },
-      "services": ["AppChatsInternal"],
+      "runtime": "web-gui",
+      "capsRequested": {
+        "mail": {
+          "sendingTo": "all",
+          "receivingFrom": "all"
+        }
+      },
+      "windowOpts": {
+      }
+    },
+
+    "/background-instance.js": {
+      "services": {
+        "AppChatsInternal": {
+          "thisAppComponents": "*"
+        },
+        "ChatDeliveryService": {
+          "thisAppComponents": "*",
+          "otherApps": "*"
+        }
+      },
       "runtime": "deno",
       "capsRequested": {
         "log": "all",
         "mailerid": true,
-        "storage": {
-          "appFS": "default"
-        }
-      }
-    },
-
-    "/deliveryDenoServices.js": {
-      "allowedCallers": {
-        "thisAppComponents": "*",
-        "otherApps": "*"
-      },
-      "services": ["ChatDeliveryService"],
-      "runtime": "deno",
-      "capsRequested": {
-        "log": "all",
         "mail": {
           "sendingTo": "all",
           "receivingFrom": "all"
         },
-        "mailerid": true,
         "storage": {
-          "appFS": [
-            {
-              "domain": "chat.app.privacysafe.io",
-              "storage": "local"
-            }
-          ],
+          "appFS": "default",
           "userFS": "all",
           "sysFS": "all"
         }

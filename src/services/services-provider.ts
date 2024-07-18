@@ -14,6 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+
 import { makeServiceCaller } from '@/libs/ipc-service-caller'
 import { outgoingFileLinkStore } from '@/services/outgoing-file-link-store'
 
@@ -49,15 +50,12 @@ export async function initializationServices() {
 
     const deliverySrvConn = await w3n.rpc!.thisApp!('ChatDeliveryService')
     appDeliverySrvProxy = makeServiceCaller<AppDeliverySrv>(deliverySrvConn, [
-      'initialization',
-      'start',
       'addMessageToDeliveryList',
       'removeMessageFromDeliveryList',
       'getMessage',
       'getDeliveryList',
       'removeMessageFromInbox',
     ]) as AppDeliverySrv
-    appDeliverySrvProxy.initialization()
 
     console.info('\n--- initializationServices DONE---\n')
   } catch (e) {

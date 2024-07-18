@@ -23,8 +23,6 @@ interface AppChatsSrv {
 }
 
 interface AppDeliverySrv {
-  initialization(): void;
-  start(): Promise<void>;
   addMessageToDeliveryList(
     message: ChatOutgoingMessage, localMetaPath: ChatMessageLocalMeta, systemMessage?: boolean,
   ): Promise<void>;

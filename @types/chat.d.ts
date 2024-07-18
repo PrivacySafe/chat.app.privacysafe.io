@@ -23,7 +23,7 @@ interface SendingError {
   text: string;
 }
 
-type ChatMessageType = 'regular' | 'system';
+type ChatMessageType = 'regular' | 'system' | 'webrtc-call';
 type MessageType = 'incoming' | 'outgoing';
 
 type ChatSystemEventBase = 'add' | 'delete' | 'remove' | 'update' | 'send';
@@ -50,6 +50,7 @@ interface ChatMessageJsonBody {
 }
 
 interface ChatIncomingMessage extends web3n.asmail.IncomingMessage {
+  msgType: 'chat';
   jsonBody: ChatMessageJsonBody;
 }
 
@@ -93,10 +94,6 @@ interface ChatMessageView<T extends MessageType> extends ChatMessageViewBase<T> 
 
 interface ChatMessageViewForDB<T extends MessageType> extends ChatMessageViewBase<T> {
   attachments: string | null;
-}
-
-interface DeliveryServiceData {
-  lastReceivedMessageTimestamp: number;
 }
 
 type ChatMessageActionType = 'reply' | 'copy' | 'forward' | 'download' | 'resend' | 'delete_message' | 'cancel_sending'

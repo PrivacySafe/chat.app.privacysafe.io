@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Video Call</title>
+	<script type="module" src="./video/video-ui.js"></script>
+	<style>
+		.small-own-video {
+			float: inline-end;
+			margin-right: 10em;
+		}
+		.small-own-video > video {
+			max-width: 100px;
+		}
+	</style>
+</head>
+<body>
+
+	<div id="remoteview-container" hidden>
+		<video id="remoteview" autoplay playsinline></video>
+		<br>
+		<em><span id="peer-name"></span></em>
+	</div>
+	<div id="selfview-container">
+		<video id="selfview" autoplay playsinline muted></video>
+	</div>
+
+	<button id="start-call-btn" onclick="startVideoCall()" hidden>
+		Start Call
+	</button>
+	<button id="end-call-btn" onclick="endCall()" hidden>
+		End Call
+	</button>
+
+</body>
+</html>

@@ -27,3 +27,24 @@ export function getRandomId(numOfChars: number): string {
   }
   return result.slice(0, numOfChars)
 }
+
+export function setupGlobalReportingOfUnhandledErrors(
+  keepProcAlive = false
+): void {
+  self.onunhandledrejection = (ev) => {
+    w3n.log?.('error', `Captured unhandled promise rejection/error event`, ev.reason)
+    if (keepProcAlive) {
+      ev.preventDefault()
+    }
+  }
+  self.onerror = (ev) => {
+    if (typeof ev === 'string') {
+      w3n.log?.('error', `Captured unhandled error event (string value)`, ev)
+    } else {
+      w3n.log?.('error', `Captured unhandled error event`, (ev as any).error)
+      if (keepProcAlive) {
+        ev.preventDefault()
+      }
+    }
+  }
+}

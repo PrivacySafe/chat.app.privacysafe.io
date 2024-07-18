@@ -1,3 +1,20 @@
+/*
+ Copyright (C) 2020 - 2024 3NSoft Inc.
+
+ This program is free software: you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation, either version 3 of the License, or (at your option) any later
+ version.
+
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ See the GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License along with
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 /* eslint-disable @typescript-eslint/triple-slash-reference, @typescript-eslint/no-explicit-any, max-len */
 /// <reference path="../@types/platform-defs/injected-w3n.d.ts" />
 /// <reference path="../@types/platform-defs/test-stand.d.ts" />
@@ -8,10 +25,10 @@
 import { SQLiteOn3NStorage } from './sqlite-on-3nstorage/index.js'
 // @deno-types="./ipc-service.d.ts"
 import { MultiConnectionIPCWrap } from './ipc-service.js'
-// @ts-ignore
 import { chatValueToSqlInsertParams, messageValueToSqlInsertParams, objectFromQueryExecResult } from './helpers/chats.helpers.ts'
-// @ts-ignore
 import { getRandomId } from './helpers/common.helpers.ts'
+
+type FSSyncException = web3n.files.FSSyncException;
 
 type SqlValue = number | string | Blob | Uint8Array | null
 
@@ -34,7 +51,7 @@ const deleteMessageByChatMsgId = 'DELETE FROM messages WHERE chatMessageId=$chat
 const insertMessageQuery = 'INSERT INTO messages(msgId, messageType, sender, body, attachments, chatId, chatMessageType, chatMessageId, initialMessageId, status, timestamp) VALUES ($msgId, $messageType, $sender, $body, $attachments, $chatId, $chatMessageType, $chatMessageId, $initialMessageId, $status, $timestamp)'
 const upsertMessageQuery = 'INSERT INTO messages(msgId, messageType, sender, body, attachments, chatId, chatMessageType, chatMessageId, initialMessageId, status, timestamp) VALUES ($msgId, $messageType, $sender, $body, $attachments, $chatId, $chatMessageType, $chatMessageId, $initialMessageId, $status, $timestamp) ON CONFLICT(chatMessageId) DO UPDATE SET msgId=$msgId, messageType=$messageType, sender=$sender, body=$body, attachments=$attachments, chatId=$chatId, chatMessageType=$chatMessageType, chatMessageId=$chatMessageId, initialMessageId=$initialMessageId, status=$status, timestamp=$timestamp'
 
-class ChatService {
+export class ChatService {
   private readonly sqlite: SQLiteOn3NStorage
 
   constructor(
@@ -79,6 +96,13 @@ class ChatService {
     const countModifiedRow = this.sqlite.db.getRowsModified()
     if (countModifiedRow > 0) {
       await this.sqlite.saveToFile({ skipUpload: true })
+      .catch((exc: FSSyncException) => {
+        if ((exc.type === 'fs-sync') && exc.alreadyUploading) {
+          return  // explicit do nothing
+        } else {
+          w3n.log!('error', `Error is thrown when saving file chat db file`, exc)
+        }
+      })
     }
   }
 
@@ -100,7 +124,7 @@ class ChatService {
         await this.saveDbFile()
         return newChatId
       } catch (e) {
-        console.error('\nCreate chat error: ', e)
+        w3n.log!('error', 'Create chat throw error', e)
         throw e
       }
     } else {
@@ -116,7 +140,7 @@ class ChatService {
       this.sqlite.db.exec(upsertChatQuery, params as any)
       await this.saveDbFile()
     } catch (e) {
-      console.error('\nUpdate chat error: ', e)
+      w3n.log!('error', 'Update chat throws error', e)
       throw e
     }
   }
@@ -243,25 +267,24 @@ class ChatService {
   }
 }
 
-ChatService.initialization()
-  .then(async srv => {
-    const srvWrapInternal = new MultiConnectionIPCWrap('AppChatsInternal')
-    srvWrapInternal.exposeReqReplyMethods(srv, [
-      'createChat',
-      'updateChat',
-      'getChatList',
-      'getChatsUnreadMessagesCount',
-      'getChat',
-      'deleteChat',
-      'clearChat',
-      'getMessage',
-      'deleteMessage',
-      'getMessagesByChat',
-      'upsertMessage',
-    ])
-    srvWrapInternal.startIPC()
-  })
-  .catch(err => {
-    console.error(`Error in a startup of chats service component`, err)
-    setTimeout(() => w3n.closeSelf!(), 100)
-  })
+export async  function setupAndStartAppChatsInternalService():
+Promise<ChatService> {
+  const srv = await ChatService.initialization();
+  const srvWrapInternal = new MultiConnectionIPCWrap('AppChatsInternal')
+  srvWrapInternal.exposeReqReplyMethods(srv, [
+    'createChat',
+    'updateChat',
+    'getChatList',
+    'getChatsUnreadMessagesCount',
+    'getChat',
+    'deleteChat',
+    'clearChat',
+    'getMessage',
+    'deleteMessage',
+    'getMessagesByChat',
+    'upsertMessage',
+  ]);
+  srvWrapInternal.startIPC();
+  return srv;
+}
+
