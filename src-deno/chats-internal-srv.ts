@@ -22,9 +22,9 @@
 /// <reference path="../@types/contact.d.ts" />
 /// <reference path="../@types/chat.d.ts" />
 // @deno-types="./sqlite-on-3nstorage/index.d.ts"
-import { SQLiteOn3NStorage } from './sqlite-on-3nstorage/index.js'
+import { SQLiteOn3NStorage } from './helpers/sqlite-on-3nstorage/index.js'
 // @deno-types="./ipc-service.d.ts"
-import { MultiConnectionIPCWrap } from './ipc-service.js'
+import { MultiConnectionIPCWrap } from './helpers/ipc-service.js'
 import { chatValueToSqlInsertParams, messageValueToSqlInsertParams, objectFromQueryExecResult } from './helpers/chats.helpers.ts'
 import { getRandomId } from './helpers/common.helpers.ts'
 

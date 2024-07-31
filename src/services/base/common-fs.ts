@@ -41,9 +41,9 @@ export default class CommonFs<T extends 'local'|'synced'> {
     }
 
     if (this.fsType === 'local') {
-      this.fsI = await (w3n.storage as web3n.storage.Service).getAppLocalFS(this.fsName)
+      this.fsI = await w3n.storage!.getAppLocalFS(this.fsName)
     } else {
-      this.fsI = await (w3n.storage as web3n.storage.Service).getAppSyncedFS(this.fsName)
+      this.fsI = await w3n.storage!.getAppSyncedFS(this.fsName)
     }
   }
 }

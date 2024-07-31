@@ -23,10 +23,10 @@
 /// <reference path="../@types/chat.d.ts" />
 /// <reference path="../@types/services.d.ts" />
 // @deno-types="./ipc-service.d.ts"
-import { MultiConnectionIPCWrap } from './ipc-service.js'
+import { MultiConnectionIPCWrap } from './helpers/ipc-service.js'
 import { SingleProc } from '../src/helpers/processes.ts'
 import { prepareMessageDeliveryInfo } from './helpers/delivery.helpers.ts'
-import { ObserversSet } from './observer-utils.ts';
+import { ObserversSet } from './helpers/observer-utils.ts';
 
 interface DeliveryServiceData {
   lastReceivedMessageTimestamp: number;
@@ -109,7 +109,7 @@ export class ChatDeliveryService implements AppDeliverySrv {
     if (msgType === 'chat') {
       if (jsonBody?.chatMessageType === 'webrtc-call') {
 
-        // XXX open 
+        // XXX open video window
 
       } else {
         const { deliveryTS } = msg
@@ -125,7 +125,7 @@ export class ChatDeliveryService implements AppDeliverySrv {
       // service is already started, and second start will be echoing messages
       return;
     }
-    this.userId = await w3n.mail?.getUserId()
+    this.userId = await w3n.mail!.getUserId()
 
     w3n.mail!.inbox.subscribe(
       'message',

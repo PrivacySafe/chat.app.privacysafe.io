@@ -15,8 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { setupAndStartChatDeliveryService } from "./chat-delivery-deno.ts"
-import { setupAndStartAppChatsInternalService } from "./chats-deno.ts"
+import { setupAndStartChatDeliveryService } from "./chat-delivery-srv.ts"
+import { setupAndStartAppChatsInternalService } from "./chats-internal-srv.ts"
 import { setupGlobalReportingOfUnhandledErrors } from "./helpers/common.helpers.ts"
 
 setupGlobalReportingOfUnhandledErrors(true)

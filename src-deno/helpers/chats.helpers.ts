@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/triple-slash-reference */
 /// <reference path="../../@types/chat.d.ts" />
 // @deno-types="../sqlite-on-3nstorage/index.d.ts"
-import { QueryExecResult } from '../sqlite-on-3nstorage/index.js'
+import { QueryExecResult } from './sqlite-on-3nstorage/index.js'
 
 type SqlValue = number | string | Uint8Array | Blob | null
 

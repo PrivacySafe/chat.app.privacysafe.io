@@ -1,5 +1,5 @@
-import { Database as DBClass, BindParams as QueryParams, QueryExecResult as QueryResult } from './sqljs.d.ts';
-import { SingleProc, Action } from './synced.d.ts';
+import { Database as DBClass, BindParams as QueryParams, QueryExecResult as QueryResult } from './sqljs';
+import { SingleProc, Action } from './synced';
 export declare type Database = DBClass;
 export declare type BindParams = QueryParams;
 export declare type QueryExecResult = QueryResult;

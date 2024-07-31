@@ -1,7 +1,7 @@
 {
   "name": "Apps Chats",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "components": {
 
     "/index.html": {
@@ -16,38 +16,25 @@
           "fileDialog": "all",
           "userNotifications": true,
           "startAppCmds": {
-            "thisApp": [ "start-new-call", "accept-call" ]
+            "thisApp": [ "start-new-call" ]
           }
         },
         "storage": {
-          "appFS": [
-            {
-              "domain": "chat.app.privacysafe.io",
-              "storage": "synced-n-local"
-            }
-          ],
+          "appFS": "default",
           "userFS": "all",
           "sysFS": "all"
         },
-        "mail": {
-          "sendingTo": "all",
-          "receivingFrom": "all"
-        },
-        "appRPC": {
-          "serviceComponents": ["AppChatsInternal", "ChatDeliveryService"]
-        },
-        "otherAppsRPC": {
-          "callable": [
-            {
-              "app": "launcher.app.privacysafe.io",
-              "component": "AppConfigs"
-            },
-            {
-              "app": "contacts.app.privacysafe.io",
-              "component": "AppContacts"
-            }
-          ]
-        },
+        "appRPC": [ "AppChatsInternal", "ChatDeliveryService" ],
+        "otherAppsRPC": [
+          {
+            "app": "launcher.app.privacysafe.io",
+            "service": "AppConfigs"
+          },
+          {
+            "app": "contacts.app.privacysafe.io",
+            "service": "AppContacts"
+          }
+        ],
         "connectivity": "check"
       },
       "windowOpts": {
@@ -68,10 +55,10 @@
     "/video.html": {
       "startCmds": {
         "start-new-call": {
-          "thisAppComponents": "*"
+          "thisAppComponents": "/background-instance.js"
         },
         "accept-call": {
-          "thisAppComponents": "*"
+          "thisAppComponents": "/background-instance.js"
         }
       },
       "runtime": "web-gui",
@@ -88,11 +75,10 @@
     "/background-instance.js": {
       "services": {
         "AppChatsInternal": {
-          "thisAppComponents": "*"
+          "thisAppComponents": [ "/index.html" ]
         },
         "ChatDeliveryService": {
-          "thisAppComponents": "*",
-          "otherApps": "*"
+          "thisAppComponents": [ "/index.html" ]
         }
       },
       "runtime": "deno",
