@@ -1,7 +1,7 @@
 {
   "name": "Apps Chats",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "components": {
 
     "/index.html": {
@@ -14,17 +14,16 @@
         "mailerid": true,
         "shell": {
           "fileDialog": "all",
-          "userNotifications": true,
-          "startAppCmds": {
-            "thisApp": [ "start-new-call" ]
-          }
+          "userNotifications": true
         },
         "storage": {
           "appFS": "default",
           "userFS": "all",
           "sysFS": "all"
         },
-        "appRPC": [ "AppChatsInternal", "ChatDeliveryService" ],
+        "appRPC": [
+          "AppChatsInternal", "ChatDeliveryService", "VideoGUIOpener"
+        ],
         "otherAppsRPC": [
           {
             "app": "launcher.app.privacysafe.io",
@@ -48,26 +47,26 @@
       "startCmds": {
         "open-chat-with": {
 					"otherApps": "*"
-				}
+				},
+        "incoming-call": {
+          "thisAppComponents": [ "/background-instance.js" ]
+        }
       }
     },
 
-    "/video.html": {
-      "startCmds": {
-        "start-new-call": {
-          "thisAppComponents": "/background-instance.js"
-        },
-        "accept-call": {
-          "thisAppComponents": "/background-instance.js"
+    "/video-chat.html": {
+      "services": {
+        "VideoChatComponent": {
+          "thisAppComponents": [ "/background-instance.js" ]
         }
       },
       "runtime": "web-gui",
       "capsRequested": {
-        "mail": {
-          "sendingTo": "all",
-          "receivingFrom": "all"
-        }
+        "appRPC": [
+          "WebRTCSignalingCAP"
+        ]
       },
+      "forOneConnectionOnly": true,
       "windowOpts": {
       }
     },
@@ -79,15 +78,29 @@
         },
         "ChatDeliveryService": {
           "thisAppComponents": [ "/index.html" ]
+        },
+        "VideoGUIOpener": {
+          "thisAppComponents": [ "/index.html" ]
+        },
+        "WebRTCSignalingCAP": {
+          "thisAppComponents": [ "/video-chat.html" ]
         }
       },
       "runtime": "deno",
       "capsRequested": {
+        "appRPC": [
+          "AppChatsInternal", "ChatDeliveryService", "VideoChatComponent"
+        ],
         "log": "all",
         "mailerid": true,
         "mail": {
           "sendingTo": "all",
           "receivingFrom": "all"
+        },
+        "shell": {
+          "startAppCmds": {
+            "thisApp": [ "incoming-call" ]
+          }
         },
         "storage": {
           "appFS": "default",

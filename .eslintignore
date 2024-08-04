@@ -1,7 +1,7 @@
-src/libs/**/*.js
-src/libs/**/*.d.ts
-src-deno/**/*.js
-src-deno/**/*.d.ts
+src-main/libs/**/*.js
+src-main/libs/**/*.d.ts
+src-background-instance/**/*.js
+src-background-instance/**/*.d.ts
 /doc/**/*.*
 /app/**/*.*
 

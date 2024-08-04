@@ -1,11 +1,7 @@
-import path from 'path'
+import path, { resolve } from 'path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import components from 'unplugin-vue-components/vite'
-
-function _resolve(dir) {
-  return path.resolve(__dirname, dir)
-}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -20,7 +16,9 @@ export default defineConfig(({ mode }) => {
 
   const plugins = [
     vue(),
-    components(),
+    components({
+      dirs: [ 'src-main/components', 'src-video' ]
+    }),
   ]
 
   let optimizeDeps = {}
@@ -35,20 +33,33 @@ export default defineConfig(({ mode }) => {
     }
   }
 
-  const build = {
-    outDir: 'app',
-  }
-
   return {
     server,
-    build,
+    build: {
+      // reference: https://rollupjs.org/configuration-options/
+      rollupOptions: {
+        input: {
+          main: resolve(__dirname, './index.html'),
+          videoChat: resolve(__dirname, './video-chat.html'),
+        },
+        output: [
+          {
+            name: "main",
+            dir: "app"
+          },
+          {
+            name: "videoChat",
+            dir: "app"
+          }
+        ]
+      }
+    },
     define,
     plugins,
     optimizeDeps,
     resolve: {
       alias: {
-        'vue': 'vue/dist/vue.esm-bundler.js',
-        '@': _resolve('./src'),
+        'vue': 'vue/dist/vue.esm-bundler.js'
       }
     }
   }
