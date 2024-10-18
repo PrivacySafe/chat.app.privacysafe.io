@@ -61,7 +61,9 @@ export class ChatCommandsHandler {
       await this.router.push(`/chats`)
       return
     }
-    const chatId = await findChatWithPeer(peerAddress)
+    const chatId = (cmdArg.chatId ?
+      cmdArg.chatId : await findChatWithPeer(peerAddress)
+    )
     if (chatId) {
       await this.router.push(`/chats/${chatId}`)
     } else {

@@ -19,6 +19,7 @@ type MainWindowCommand = 'open-chat-with' | 'incoming-call'
 
 interface OpenChatCmdArg {
 	peerAddress: string;
+	chatId?: string;
 }
 
 interface IncomingCallCmdArg {

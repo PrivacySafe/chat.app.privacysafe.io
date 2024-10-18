@@ -17,13 +17,13 @@
 
 <script lang="ts" setup>
   import { onMounted, shallowRef } from 'vue';
-  import { useStreamsStore } from './stores';
+  import { useStreamsStore } from './store/streams';
 
   const ownVideo = shallowRef<HTMLVideoElement>()
   const streams = useStreamsStore()
 
   onMounted(() => {
-    ownVideo.value!.srcObject = streams.ownStream!
+    ownVideo.value!.srcObject = streams.ownVAStream!;
   })
 
 </script>

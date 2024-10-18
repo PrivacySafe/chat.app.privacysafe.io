@@ -15,10 +15,6 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 
-<script lang="ts" setup>
-  const a = 4;
-</script>
-
 <template>
   <router-view></router-view>
 </template>

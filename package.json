@@ -1,7 +1,7 @@
 {
   "name": "chat.app.privacysafe.io",
   "version": "0.5.11",
-  "license": "ISC",
+  "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,6 @@
     "linter:fix": "eslint -c .eslintrc.js --fix --ext .js,.vue,.ts, src-main",
     "lint": "yarn linter && yarn stylelint",
     "lint:fix": "yarn linter:fix && yarn stylelint:fix",
-    "test": "yarn clean:coverage && jest",
     "test:watch": "yarn clean:coverage && jest --watch"
   },
   "dependencies": {

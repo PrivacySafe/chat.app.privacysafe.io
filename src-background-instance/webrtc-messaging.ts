@@ -38,20 +38,42 @@ class WebRTCSignalingProc {
   setupChannelForChat(
     chatId: string, peer: string
   ): WebRTCSignalingPeerChannels {
-    let chatChannels = this.channelsByChats.get(chatId)
+    let peerChannels = this.getPeerChannels(chatId, peer)
+    if (!peerChannels) {
+      peerChannels = new WebRTCSignalingPeerChannels(
+        chatId, peer, () => this.deletePeerChannels(peerChannels!)
+      )
+      this.addPeerChannels(peerChannels)
+    }
+    return peerChannels
+  }
+
+  private getPeerChannels(
+    chatId: string, peerAddr: string
+  ): WebRTCSignalingPeerChannels|undefined {
+    return this.channelsByChats.get(chatId)?.get(toCanonicalAddress(peerAddr))
+  }
+
+  private addPeerChannels(peerChannels: WebRTCSignalingPeerChannels): void {
+    let chatChannels = this.channelsByChats.get(peerChannels.chatId)
     if (!chatChannels) {
       chatChannels = new Map()
-      this.channelsByChats.set(chatId, chatChannels)
+      this.channelsByChats.set(peerChannels.chatId, chatChannels)
     }
-    const canonPeerAddr = toCanonicalAddress(peer)
-    let peerChannel = chatChannels.get(canonPeerAddr)
-    if (!peerChannel) {
-      peerChannel = new WebRTCSignalingPeerChannels(
-        chatId, canonPeerAddr, () => chatChannels!.delete(canonPeerAddr)
-      )
-      chatChannels.set(canonPeerAddr, peerChannel)
+    chatChannels.set(peerChannels.canonPeerAddr, peerChannels)
+  }
+
+  private deletePeerChannels(peerChannels: WebRTCSignalingPeerChannels): void {
+    let chatChannels = this.channelsByChats.get(peerChannels.chatId)
+    if (!chatChannels) {
+      return
     }
-    return peerChannel
+    if (chatChannels.get(peerChannels.canonPeerAddr) === peerChannels) {
+      chatChannels.delete(peerChannels.canonPeerAddr)
+      if (chatChannels.size === 0) {
+        this.channelsByChats.delete(peerChannels.chatId)
+      }
+    }
   }
 
   handleIncomingMsg(msg: ChatIncomingMessage): void {
@@ -67,7 +89,8 @@ class WebRTCSignalingProc {
       }
       const peerChannels = chatChannels.get(toCanonicalAddress(msg.sender))
       if (!peerChannels) {
-        // sender doesn't belong to this chat
+        // sender doesn't belong to this chat, or, in a group chat
+        // it was removed, and now calls back, and chat window might be up
         return
       }
       peerChannels.handleIncomingSignal(webrtcMsg)
@@ -101,12 +124,15 @@ export class WebRTCSignalingPeerChannels {
   private receivingBuffer: WebRTCMsg[]|undefined = undefined
   private sendingProc: Promise<void>|undefined = undefined
   private sendingBuffer: WebRTCMsg[]|undefined = undefined
+  public readonly canonPeerAddr: string
 
   constructor(
     public readonly chatId: string,
     public readonly peerAddr: string,
     private readonly onDetach: () => void
-  ) {}
+  ) {
+    this.canonPeerAddr = toCanonicalAddress(this.peerAddr)
+  }
 
   attach(channel: string, signalsListener: WebRTCSignalListener): void {
     if (this.channelListeners.has(channel)) {

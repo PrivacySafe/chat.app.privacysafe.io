@@ -1,7 +1,7 @@
 {
   "name": "Apps Chats",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.7.0",
+  "version": "0.7.7",
   "components": {
 
     "/index.html": {
@@ -14,7 +14,12 @@
         "mailerid": true,
         "shell": {
           "fileDialog": "all",
-          "userNotifications": true
+          "userNotifications": true,
+					"fsResource": {
+						"otherApps": {
+							"launcher.app.privacysafe.io": "ui-settings"
+						}
+					}
         },
         "storage": {
           "appFS": "default",
@@ -25,10 +30,6 @@
           "AppChatsInternal", "ChatDeliveryService", "VideoGUIOpener"
         ],
         "otherAppsRPC": [
-          {
-            "app": "launcher.app.privacysafe.io",
-            "service": "AppConfigs"
-          },
           {
             "app": "contacts.app.privacysafe.io",
             "service": "AppContacts"
@@ -46,6 +47,7 @@
       "icon": "logo.png",
       "startCmds": {
         "open-chat-with": {
+          "thisAppComponents": [ "/background-instance.js" ],
 					"otherApps": "*"
 				},
         "incoming-call": {
@@ -99,7 +101,7 @@
         },
         "shell": {
           "startAppCmds": {
-            "thisApp": [ "incoming-call" ]
+            "thisApp": [ "incoming-call", "open-chat-with" ]
           }
         },
         "storage": {
@@ -110,5 +112,13 @@
       }
     }
 
-  }
+  },
+  "launchOnSystemStartup": [
+    {
+      "name": "Messaging background service",
+      "component": "/background-instance.js",
+      "icon": "logo.png",
+      "description": "Starts backround process to observe messaging and show notifications when new messages arrive"
+    }
+  ]
 }

@@ -74,22 +74,20 @@
       const currentUser = await w3n.mailerid!.getUserId()
       setUser(currentUser)
 
-      await getAppConfig()
+      await getAppConfig().then(
+        configs => configs.watchConfig({
+          next: ({ lang, currentTheme, colors }) => {
+            setLang(lang)
+            setColorTheme({ theme: currentTheme, colors })
+          },
+          error: e => console.error(e)
+        }),
+        err => console.error(err)
+      )
       await getConnectivityStatus()
       connectivityTimerId.value = setInterval(getConnectivityStatus, 60000)
 
-      const configSrvConnection = await w3n.rpc!.otherAppsRPC!('launcher.app.privacysafe.io', 'AppConfigs')
-      const configSrv = makeServiceCaller<AppConfigs>(configSrvConnection, [], ['watchConfig']) as AppConfigs
       await getChatList()
-
-      configSrv.watchConfig({
-        next: ({ lang, currentTheme, colors }) => {
-          setLang(lang)
-          setColorTheme({ theme: currentTheme, colors })
-        },
-        error: e => console.error(e),
-        complete: () => configSrvConnection.close(),
-      })
 
       const deliverySrvConnection = await w3n.rpc!.thisApp!('ChatDeliveryService')
       const deliverSrv = makeServiceCaller(deliverySrvConnection, [], [

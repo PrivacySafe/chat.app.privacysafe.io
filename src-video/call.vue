@@ -16,63 +16,101 @@
 -->
 
 <script lang="ts" setup>
-  import { onMounted, shallowRef, watch } from 'vue';
-  import { useStreamsStore } from './stores';
-  import { WebRTCPeer } from './webrtc-peer';
+import { onMounted, ref, watch, computed, Ref } from 'vue';
+import { useStreamsStore } from './store/streams';
+import { storeToRefs } from 'pinia';
 
-  const ownVideo = shallowRef<HTMLVideoElement>()
-  const peerVideo = shallowRef<HTMLVideoElement>()
+const ownVideo = ref<HTMLVideoElement>();
+const peerVideo = ref<HTMLVideoElement>();
 
-  const streams = useStreamsStore()
-  const peer = streams.usePeerStore(streams.chat.peers[0].addr)
+const streams = useStreamsStore();
 
-  function connectPeerToVideoElems(webrtc: WebRTCPeer|undefined) {
-    if (!webrtc) {
-      return
-    }
-    webrtc.sendMediaStream(streams.ownStream)
-    watch(
-      () => peer.vaStream!,
-      stream => {
-        peerVideo.value!.srcObject = stream
+onMounted(() => {
+  ownVideo.value!.srcObject = streams.ownVAStream;
+});
+
+
+// XXX hidding construction of relationships into function suggests peer-video
+//     component as the next step for composability and reusability for many
+//     peers.
+function peerUI(
+  peerStateProxy: typeof streams.fstPeer,
+  videoElemRef: Ref<HTMLVideoElement|undefined>
+) {
+  const ui = {
+    name: peerStateProxy.peerName,
+    vaStream: computed(() => peerStateProxy.vaStream),
+    audio: {
+      mutedHere: computed(() => videoElemRef.value?.muted),
+      toggle: () => {
+        videoElemRef.value!.muted = !videoElemRef.value!.muted;
+        console.log(`Peer audio output mute flag is`, videoElemRef.value!.muted);
       },
-      { immediate: true }
-    )
-  }
+    },
+  };
+  watch(
+    [ videoElemRef, ui.vaStream ],
+    ([ videoElem, vaStream ]) => {
+      if (vaStream && videoElem) {
+        videoElem.srcObject = vaStream;
+      }
+    },
+    { immediate: true }
+  );
+  return ui;
+}
 
-  onMounted(() => {
-    ownVideo.value!.srcObject = streams.ownStream!
-
-    watch(
-      () => peer.webrtc!,
-      connectPeerToVideoElems,
-      { immediate: true }
-    )
-  })
+const fstPeer = peerUI(streams.fstPeer, peerVideo);
 
 </script>
 
 <template>
 
-  <h1>Call with {{ peer.name }}</h1>
+  <section>
 
-  <div class="peer-video">
-    <video class="peer-video" ref="peerVideo" playsinline autoplay></video>
-  </div>
+    <h1>Call with {{ streams.fstPeer.peerName }}</h1>
 
-  <img class="ring-graphics" src="./assets/images/outgoing-ring.gif">
- 
-  <video class="own-video" ref="ownVideo" playsinline autoplay muted></video>
+    <div class="peer-video">
+      <video
+        ref="peerVideo"
+        class="peer-video"
+        playsinline
+        autoplay
+      />
+    </div>
+
+    <img
+      class="ring-graphics"
+      src="./assets/images/outgoing-ring.gif"
+    >
+  
+    <video
+      ref="ownVideo"
+      class="own-video mirror-flip"
+      playsinline
+      autoplay
+      muted
+    />
+
+  </section>
 
 </template>
 
 <style lang="scss" scoped>
+  .mirror-flip {
+    transform: rotateY(180deg);
+  }
+
+  .grayscale-filter {
+    filter: grayscale(100%);
+  }
+
   .own-video {
     position: absolute;
     width: 20%;
     min-width: 150px;
     bottom: 10%;
-    right: 20%;
+    right: 10%;
     z-index: 10;
   }
 

@@ -19,16 +19,30 @@
 
 declare namespace web3n.caps {
 
-	interface AppManifest {
+	type AppManifest = GeneralAppManifest | SimpleGUIAppManifest;
+
+	interface GeneralAppManifest {
 		appDomain: string;
 		version: string;
-		name?: string;
-		description?: string;
-		icon?: string;
-		components?: {
+		name: string;
+		description: string;
+		icon: string;
+		components: {
 			[entrypoint: string]: AppComponent;
 		};
 		launchers?: Launcher[];
+		launchOnSystemStartup?: Launcher[];
+		exposedFSResources?: {
+			[resourceName: string]: FSResourceDescriptor;
+		};
+	}
+
+	interface SimpleGUIAppManifest {
+		appDomain: string;
+		version: string;
+		name: string;
+		description: string;
+		icon: string;
 		windowOpts?: ui.WindowOptions;
 		capsRequested?: RequestedCAPs;
 		sharedLibs?: SharedLibInfo[];
@@ -43,21 +57,28 @@ declare namespace web3n.caps {
 	 * cross-platform and cross-form-factor (has this ever existed?).
 	 */
 	interface Launcher {
-		// XXX
-		// - add env/device/form-factor
-		// - remove GUIComponent.startedBy and GUIComponent.name fields
 		name: string;
 		component?: string;
 		startCmd?: {
 			cmd: string;
-			params?: any[];
+			params: any[];
 		}
-		icon?: string;
-		description?: string;
+		icon: string;
+		description: string;
+		formFactor?: UserInterfaceFormFactor|UserInterfaceFormFactor[];
+	}
+
+	type UserInterfaceFormFactor = 'desktop' | 'tablet' | 'phone';
+
+	interface FSResourceDescriptor {
+		allow: AllowedCallers;
+		appStorage: 'local'|'synced';
+		path: string;
+		itemType: 'file'|'folder';
+		initValueSrc?: string;
 	}
 
 	interface GUIComponent extends CommonComponentSetting {
-		startedBy?: 'user';
 		startCmds?: {
 			[cmd: string]: AllowedCallers;
 		};
@@ -66,31 +87,27 @@ declare namespace web3n.caps {
 		description?: string;
 		icon?: string;
 		windowOpts?: ui.WindowOptions;
+		multiInstances?: true;
 	}
 
 	interface ServiceComponent extends CommonComponentSetting {
-		allowedCallers: AllowedCallers;
-		service?: string;
-		services?: string[];
+		services: {
+			[srv: string]: AllowedCallers;
+		};
 		forOneConnectionOnly?: true;
 	}
 
-	interface GUIServiceComponent extends CommonComponentSetting {
+	interface GUIServiceComponent extends ServiceComponent {
 		runtime: GUIRuntime;
-		allowedCallers: AllowedCallers;
-		service: string;
 		icon?: string;
 		windowOpts?: ui.WindowOptions;
-		allowNonGUICaller?: true;
 		childOfGUICaller?: true;
-		forOneConnectionOnly?: true;
 	}
 
 	interface CommonComponentSetting {
 		runtime: NonGUIRuntime | GUIRuntime;
 		capsRequested?: RequestedCAPs;
 		sharedLibs?: SharedLibInfo[];
-		multiInstances?: true;
 	}
 
 	type GUIRuntime = 'web-gui';
@@ -112,8 +129,8 @@ declare namespace web3n.caps {
 	interface RequestedCAPs extends common.RequestedCAPs {
 		apps?: AppsCAPSetting;
 		logout?: LogoutCAPSetting;
-		appRPC?: AppRPCCAPSetting;
-		otherAppsRPC?: OtherAppsRPCCAPSetting;
+		appRPC?: string[];
+		otherAppsRPC?: { app: string; service: string; }[];
 		shell?: ShellCAPsSetting;
 		connectivity?: ConnectivityCAPSetting;
 	}
@@ -122,25 +139,12 @@ declare namespace web3n.caps {
 
 	type LogoutCAPSetting = 'all';
 
-	interface AppRPCCAPSetting {
-		serviceComponents: string[];
-	}
-
-	interface OtherAppsRPCCAPSetting {
-		callable: {
-			app: string;
-			component: string;
-		}[];
-	}
-
 	interface ShellCAPsSetting {
 		fileDialog?: FileDialogsCAPSettings;
 		mountFS?: DeviceMountFSCAPSetting;
 		userNotifications?: true;
-		startAppCmds?: {
-			thisApp?: string|string[];
-			otherApps?: { [ appDomain: string ]: string|string[]; };
-		};
+		startAppCmds?: ResourcesRequest;
+		fsResource?: ResourcesRequest;
 	}
 
 	type FileDialogsCAPSettings = 'all' | 'readonly';
@@ -148,6 +152,11 @@ declare namespace web3n.caps {
 	type DeviceMountFSCAPSetting = 'all';
 
 	type ConnectivityCAPSetting = 'check';
+
+	interface ResourcesRequest {
+		thisApp?: string|string[];
+		otherApps?: { [ appDomain: string ]: string|string[]; };
+	}
 
 	interface SiteManifest {
 		siteDomain: string;

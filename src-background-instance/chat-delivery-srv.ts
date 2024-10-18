@@ -121,8 +121,14 @@ export class ChatDeliveryService implements AppDeliverySrv {
       } else {
         if (this.incomingChatMessageObservers.isEmpty()) {
 
-          // XXX trigger taskbar notifications in absence of main window
+          // XXX need trigger taskbar notifications instead of the following
 
+          if (jsonBody.chatMessageType === 'regular') {
+            await w3n.shell!.startAppWithParams!(null, 'open-chat-with', {
+              chatId: jsonBody.chatId,
+              peerAddress: msg.sender
+            } as OpenChatCmdArg)
+          }
 
         } else {
           this.data.lastReceivedMessageTimestamp = msg.deliveryTS

@@ -36,7 +36,6 @@ declare module 'vue' {
     MessageForwardDialog: typeof import('./src-main/components/dialogs/message-forward-dialog.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
-    Splashscreen: typeof import('./src-video/splashscreen.vue')['default']
     VaSetup: typeof import('./src-video/va-setup.vue')['default']
     VideoApp: typeof import('./src-video/video-app.vue')['default']
   }

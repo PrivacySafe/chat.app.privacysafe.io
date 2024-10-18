@@ -43,18 +43,6 @@ interface UserStatus {
 type AvailableLanguages = 'en'
 type AvailableColorThemes = 'default' | 'dark'
 
-interface AppConfig {
-  lang: AvailableLanguages;
-  currentTheme: AvailableColorThemes;
-  colors: Record<string, string>;
-}
-
-interface AppConfigs {
-  getCurrentLanguage: () => Promise<AvailableLanguages>;
-  getCurrentColorTheme: () => Promise<{currentTheme: AvailableColorThemes, colors: Record<string, string> }>;
-  watchConfig(obs: web3n.Observer<AppConfig>): () => void;
-}
-
 type SystemMessageHandlerParams = {
   msgId?: string;
   chatId?: string;

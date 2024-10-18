@@ -16,49 +16,50 @@
 -->
 
 <script lang="ts" setup>
-  import { onMounted, shallowRef } from "vue";
-  import { useStreamsStore } from "./stores"
-  import { useRouter } from "vue-router";
-  import { videoChatSrv } from "./video-component-srv";
+import { onMounted, shallowRef, onBeforeMount } from "vue";
+import { useStreamsStore } from "./store/streams"
+import { useRouter } from "vue-router";
+import { videoChatSrv } from "./video-component-srv";
+import { storeToRefs } from "pinia";
 
-  const streams = useStreamsStore()
+const streams = useStreamsStore();
 
-  const ownVideo = shallowRef<HTMLVideoElement>()
+const ownVideo = shallowRef<HTMLVideoElement>();
 
-  async function setOwnVideo() {
-    if (streams.ownStream) {
-      ownVideo.value!.srcObject = streams.ownStream
-    } else {
-      const ownStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true
-      })
-      streams.setOwnStream(ownStream)
-      ownVideo.value!.srcObject = streams.ownStream
-    }
+async function setOwnVideo() {
+  if (streams.ownVAStream) {
+    ownVideo.value!.srcObject = streams.ownVAStream;
+  } else {
+    const ownStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: true
+    });
+    streams.ownVAStream = ownStream;
+    ownVideo.value!.srcObject = streams.ownVAStream;
   }
+}
 
-  onMounted(async () => {
-    await setOwnVideo()
-    await videoChatSrv.setVAChannelsForAllPeers()
-  })
+onMounted(async () => {
 
-  const router = useRouter()
+  // XXX
+  console.log(`TODO: need a choice of media`);
 
-  async function startChatCall() {
-    videoChatSrv.notifyOnCallStart()
-    if (streams.isGroupChat()) {
-      await router.push('group-call')
-    } else {
-      await router.push('call')
-    }
+  await setOwnVideo();
+});
+
+const router = useRouter();
+
+async function startChatCall() {
+  streams.sendOwnStreamToPeers();
+  videoChatSrv.notifyOnCallStart();
+  if (streams.isGroupChat) {
+    await router.push('group-call');
+  } else {
+    await router.push('call');
   }
+}
 
-  async function joinChatCall() {
-    
-  }
-
-  const { isAnyOneConnected } = streams
+const { isAnyOneConnected } = storeToRefs(streams);
 
 </script>
 
@@ -67,12 +68,37 @@
 -->
 
 <template>
+  <section>
 
-  <h1>Checking video</h1>
-  <video ref="ownVideo" playsinline autoplay muted></video>
-  <br>
+    <h1>Checking video</h1>
 
-  <button v-if="!isAnyOneConnected" @click="startChatCall()">Start</button>
-  <button v-else @click="joinChatCall()">Join</button>
+    <video
+      ref="ownVideo"
+      class="mirror-flip"
+      playsinline
+      autoplay
+      muted
+    />
 
+    <br>
+
+    <button
+      @click="startChatCall()"
+    >
+      {{ isAnyOneConnected ? 'Join' : 'Start' }}
+    </button>
+
+  </section>
 </template>
+
+<style lang="scss" scoped>
+
+  .mirror-flip {
+    transform: rotateY(180deg);
+  }
+
+  .grayscale-filter {
+    filter: grayscale(100%);
+  }
+
+</style>

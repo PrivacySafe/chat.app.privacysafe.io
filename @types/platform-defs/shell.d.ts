@@ -24,6 +24,22 @@ declare namespace web3n.shell {
 		startAppWithParams?: commands.StartAppWithParams;
 		getStartedCmd?: commands.GetStartedCmd;
 		watchStartCmds?: commands.WatchStartCmds;
+		getFSResource?: GetFSResource;
+	}
+
+	type GetFSResource = (
+		appDomain: string|null|undefined, resourceName: string
+	) => Promise<web3n.files.ReadonlyFS|web3n.files.ReadonlyFile>;
+
+	interface FSResourceException extends RuntimeException {
+		type: 'fs-resource';
+		resourceAppDomain: string;
+		requestingAppDomain: string;
+		requestingComponent: string;
+		resourceName: string;
+		notAllowed?: true;
+		resourceNotFound?: true;
+		resourceNotInitialized?: true;
 	}
 
 }

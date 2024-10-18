@@ -15,59 +15,45 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { createApp } from 'vue'
-import { VideoChat, videoChatSrv } from './video-component-srv'
-import VideoApp from './video-app.vue'
-import { Router, createRouter, createWebHistory } from 'vue-router'
-import Splashscreen from './splashscreen.vue'
-import PreCall from './va-setup.vue'
-import Call from './call.vue'
-import GroupCall from './group-call.vue'
-import { createPinia } from 'pinia'
+import { createApp } from 'vue';
+import VideoApp from './video-app.vue';
+import { createRouter, createWebHistory } from 'vue-router';
+import VASetup from './va-setup.vue';
+import Call from './call.vue';
+import GroupCall from './group-call.vue';
+import { createPinia } from 'pinia';
+import { VideoChat } from './video-component-srv';
+import { useStreamsStore } from './store/streams';
 
-function makeVideoAppRouter(): Router {
-  return createRouter({
-    history: createWebHistory(),
-    routes: [
-      {
-        name: 'splashscreen',
-        path: '/splashscreen',
-        component: Splashscreen
-      },
-      {
-        name: 'va-setup',
-        path: '/va-setup',
-        component: PreCall
-      },
-      {
-        name: 'call',
-        path: '/call',
-        component: Call
-      },
-      {
-        name: 'group-call',
-        path: '/group-call',
-        component: GroupCall
-      }
-    ]
-  })
-}
+VideoChat.startService()
+.then(srv => srv.initStore(useStreamsStore()))
 
-async function init(): Promise<void> {
-  const app = createApp(VideoApp)
-  const pinia = createPinia()
-  const router = makeVideoAppRouter()
+const app = createApp(VideoApp);
+const pinia = createPinia();
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    {
+      name: 'va-setup',
+      path: '/va-setup',
+      component: VASetup,
+    },
+    {
+      name: 'call',
+      path: '/call',
+      component: Call,
+    },
+    {
+      name: 'group-call',
+      path: '/group-call',
+      component: GroupCall,
+    }
+  ]
+});
 
-  app
-  .use(pinia)
-  .use(router)
-  .mount('#video-main')
-  app.config.globalProperties.$router = router
+app
+.use(pinia)
+.use(router)
+.mount('#video-main');
 
-  VideoChat.initializeService(router)
-
-  await router.replace('splashscreen')
-
-}
-
-init()
+router.replace('va-setup');

@@ -15,13 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Router } from 'vue-router';
 // @deno-types="./libs/ipc/ipc-service.d.ts"
 import { MultiConnectionIPCWrap } from './libs/ipc/ipc-service.js'
-import { useStreamsStore } from './stores.ts';
-import { OffBandSignalingChannel, WebRTCPeer } from './webrtc-peer.ts';
-import { toCanonicalAddress } from './libs/address-utils.ts';
-import { SingleProc, makeSyncedFunc } from './libs/processes/single.ts';
+import { StreamsStore } from './store/streams';
+import { OffBandSignalingChannel, WebRTCPeer } from './webrtc-peer';
+import { toCanonicalAddress } from './libs/address-utils';
+import { SingleProc, makeSyncedFunc } from './libs/processes/single';
+import { defer } from './libs/processes/deferred';
 
 
 export let videoChatSrv: VideoChat
@@ -32,56 +32,68 @@ export class VideoChat {
 
   private ctrlObs: web3n.Observer<CallGUIEvent>|undefined = undefined;
   private chat: ChatInfoForCall|undefined = undefined;
-  private readonly connectors = new PeerSignalsListeners()
+  private readonly connectors = new PeerSignalsListeners();
 
-  private constructor(
-    private readonly router: Router
-  ) {
+  private constructor() {
     Object.seal(this);
   }
 
-  static initializeService(router: Router) {
+  static async startService(): Promise<VideoChat> {
     if (videoChatSrv) {
-      throw new Error(`Service singleton has already been initialized`)
+      throw new Error(`Service singleton has already been initialized`);
     }
-    videoChatSrv = new VideoChat(router);
-    videoChatSrv.startVideoChatComponentService();
+    videoChatSrv = new VideoChat();
+    await videoChatSrv.startVideoChatComponentService();
+    return videoChatSrv;
   }
 
-  private startVideoChatComponentService(): void {
-    const srv: VideoChatComponent = {
-      closeWindow: this.closeWindow.bind(this),
-      async focusWindow(): Promise<void> {
-        // this is a noop, cause call to GUI service focuses the window
-      },
-      startCallGUIForChat: this.setChatInfo.bind(this),
-      watch: this.setControllerObs.bind(this),
-      handleWebRTCSignal: this.handleIncomingWebRTCSignal.bind(this)
+  private startVideoChatComponentService(): Promise<void> {
+    let chatDataInit = defer<void>();
+    try {
+      const srv: VideoChatComponent = {
+        closeWindow: this.closeWindow.bind(this),
+        async focusWindow(): Promise<void> {
+          // this is a noop, cause call to GUI service focuses the window
+        },
+        startCallGUIForChat: async chat => {
+          if (this.chat) {
+            throw `Chat room is already set for this window`;
+          }
+          this.chat = chat;
+          chatDataInit.resolve();
+          chatDataInit = undefined as any;
+        },
+        watch: this.setControllerObs.bind(this),
+        handleWebRTCSignal: this.handleIncomingWebRTCSignal.bind(this)
+      }
+      const srvWrap = new MultiConnectionIPCWrap('VideoChatComponent');
+      srvWrap.exposeReqReplyMethods(srv, [
+        'focusWindow', 'closeWindow', 'startCallGUIForChat',
+        'handleWebRTCSignal'
+      ]);
+      srvWrap.exposeObservableMethods(srv, [
+        'watch'
+      ]);
+      srvWrap.startIPC();
+    } catch (err) {
+      chatDataInit.reject(err);
     }
-    const srvWrap = new MultiConnectionIPCWrap('VideoChatComponent');
-    srvWrap.exposeReqReplyMethods(srv, [
-      'focusWindow', 'closeWindow', 'startCallGUIForChat',
-      'handleWebRTCSignal'
-    ]);
-    srvWrap.exposeObservableMethods(srv, [
-      'watch'
-    ]);
-    srvWrap.startIPC();
+    return chatDataInit.promise;
   }
 
   private async handleIncomingWebRTCSignal(
     peerAddr: string, { channel, data }: WebRTCMsg
   ): Promise<void> {
-    const listener = this.connectors.get(peerAddr, channel)
+    const listener = this.connectors.get(peerAddr, channel);
     if (!listener) {
-      return
+      return;
     }
     if (Array.isArray(data)) {
       for (const datum of data) {
-        await listener(datum)
+        await listener(datum);
       }
     } else {
-      await listener(data)
+      await listener(data);
     }
   }
 
@@ -99,37 +111,21 @@ export class VideoChat {
     w3n.closeSelf!();
   }
 
-  private async setChatInfo(chat: ChatInfoForCall): Promise<void> {
-    if (this.chat) {
-      throw `Chat room is already set for this window`;
-    }
-    this.chat = chat;
-    useStreamsStore().setChat(chat)
-    await this.router.replace('va-setup')
-  }
-
-  async setVAChannelsForAllPeers(): Promise<void> {
-    this.chat!.peers.forEach(({ addr: peerAddr }) => {
-      this.setWebRTCPeerFor(peerAddr, vaChannel, this.chat!.rtcConfig)
-    })
-  }
-
-  private setWebRTCPeerFor(
-    peerAddr: string, channel: string, rtcConfig: RTCConfiguration
-  ): void {
-    const store = useStreamsStore()
-    const peerStore = store.usePeerStore(peerAddr)
-    peerStore.setWebRTCPeer(WebRTCPeer.makeWith(
-      rtcConfig,
-      this.makeConnector(channel, peerAddr),
-      fstIsPolite(this.chat!.ownAddr, peerAddr)
-    ))
+  initStore(store: StreamsStore): void {
+    store.initStoreWithChatInfo(
+      videoChatSrv.chat!,
+      peerAddr => WebRTCPeer.makeWith(
+        videoChatSrv.chat!.rtcConfig,
+        videoChatSrv.makeConnector(vaChannel, peerAddr),
+        fstIsPolite(videoChatSrv.chat!.ownAddr, peerAddr)
+      )
+    );
   }
 
   notifyOnCallStart(): void {
     this.ctrlObs!.next!({
       type: 'call-started'
-    })
+    });
   }
 
   private makeConnector(
@@ -139,16 +135,16 @@ export class VideoChat {
       observeIncoming: obs => {
         this.connectors.addOnce(
           peerAddr, channel, makeSyncedFunc(new SingleProc, null, obs)
-        )
+        );
         this.ctrlObs!.next!({
           type: 'start-channel', channel, peerAddr
-        })
+        });
       },
       close: () => {
-        this.connectors.delete(peerAddr, channel)
+        this.connectors.delete(peerAddr, channel);
         this.ctrlObs!.next!({
           type: 'close-channel', channel, peerAddr
-        })
+        });
       },
       send: (data) => this.ctrlObs!.next!({
         type: 'webrtc-signal', channel, peerAddr, data
@@ -165,11 +161,11 @@ function fstIsPolite(fstAddr: string, otherAddr: string): boolean {
   const fst = toCanonicalAddress(fstAddr)
   const other = toCanonicalAddress(otherAddr)
   if (fst < other) {
-    return true
+    return true;
   } else if (fst > other) {
-    return false
+    return false;
   } else {
-    throw new Error(`Starting WebRTC call with self is not supported`)
+    throw new Error(`Starting WebRTC call with self is not supported`);
   }
 }
 
@@ -180,32 +176,32 @@ class PeerSignalsListeners {
   get(
     peerAddr: string, channel: string
   ): SignalsListener|undefined {
-    const peerConnectors = this.listeners.get(toCanonicalAddress(peerAddr))
-    return peerConnectors?.get(channel)
+    const peerConnectors = this.listeners.get(toCanonicalAddress(peerAddr));
+    return peerConnectors?.get(channel);
   }
 
   addOnce(peerAddr: string, channel: string, listener: SignalsListener): void {
     if (this.get(peerAddr, channel)) {
-      throw new Error(`Listener is already set`)
+      throw new Error(`Listener is already set`);
     }
-    const peerCanonAddr = toCanonicalAddress(peerAddr)
-    let peerConnectors = this.listeners.get(peerCanonAddr)
+    const peerCanonAddr = toCanonicalAddress(peerAddr);
+    let peerConnectors = this.listeners.get(peerCanonAddr);
     if (!peerConnectors) {
-      peerConnectors = new Map()
-      this.listeners.set(peerCanonAddr, peerConnectors)
+      peerConnectors = new Map();
+      this.listeners.set(peerCanonAddr, peerConnectors);
     }
-    peerConnectors.set(channel, listener)
+    peerConnectors.set(channel, listener);
   }
 
   delete(peerAddr: string, channel: string): void {
-    const peerCanonAddr = toCanonicalAddress(peerAddr)
-    const peerConnectors = this.listeners.get(peerCanonAddr)
+    const peerCanonAddr = toCanonicalAddress(peerAddr);
+    const peerConnectors = this.listeners.get(peerCanonAddr);
     if (!peerConnectors) {
-      return
+      return;
     }
-    peerConnectors.delete(channel)
+    peerConnectors.delete(channel);
     if (peerConnectors.size === 0) {
-      this.listeners.delete(peerCanonAddr)
+      this.listeners.delete(peerCanonAddr);
     }
   }
 
