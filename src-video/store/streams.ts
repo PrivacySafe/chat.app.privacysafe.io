@@ -16,78 +16,108 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 import { defineStore } from 'pinia';
-import { WebRTCPeer } from 'src-video/webrtc-peer';
-import { setupStateChangesFromPeerEvents } from './peer-state';
-
-export interface StreamsStoreState {
-  chatName: string;
-  ownName: string;
-  ownVAStream: MediaStream|null;
-  peers: PeerState[];
-}
+import set from 'lodash/set';
+import { VideoAudioChannel } from 'src-video/services/video-audio-channel';
 
 export interface PeerState {
   peerAddr: string;
   peerName: string;
-  vaChannel: WebRTCPeer;
-  vaStream: MediaStream|null;
+  vaChannel: VideoAudioChannel;
+  vaStream: MediaStream | null;
+}
+
+export interface PeerUiState {
+  isMicOn: boolean;
+  isCamOn: boolean;
+}
+
+export interface StreamsStoreState {
+  chatName: string;
+  ownName: string;
+  ownAddr: string;
+  ownVAStream: MediaStream | null;
+  isMicOn: boolean;
+  isCamOn: boolean;
+  peers: PeerState[];
+  peersUiState: Record<string, PeerUiState>;
 }
 
 export const useStreamsStore = defineStore('streams', {
 
   state: () => ({
     peers: [],
+    peersUiState: {},
     chatName: '',
     ownName: '',
-    ownVAStream: null
+    ownAddr: '',
+    isMicOn: true,
+    isCamOn: true,
+    ownVAStream: null,
   } as StreamsStoreState),
 
   getters: {
-    isGroupChat: ({ peers }) => (peers.length > 1),
-    isAnyOneConnected: ({ peers }) => !!peers.find(p => !!p.vaStream),
-    fstPeer: ({ peers }) => peers[0],
+    isGroupChat: state => state.peers.length > 1,
+
+    isAnyOneConnected: state => !!state.peers.find(p => !!p.vaStream),
+
+    fstPeer: state => state.peers[0],
+
+    fstPeerUiState: state => state.peersUiState[0],
+
+    isOwnAudioAvailable: ({ ownVAStream }) => (ownVAStream ?
+      (ownVAStream.getAudioTracks().length > 0) :
+      undefined
+    ),
+
+    isOwnVideoAvailable: ({ ownVAStream }) => (ownVAStream ?
+      (ownVAStream.getVideoTracks().length > 0) :
+      undefined
+    ),
   },
 
   actions: {
-
-    initStoreWithChatInfo(
-      chatInfo: ChatInfoForCall, makeVAChannel: (peerAddr: string) => WebRTCPeer
-    ): void {
-      if (this.ownName) {
-        throw new Error(`Chat is already set`);
-      }
-      const { chatName, ownName, peers } = chatInfo;
-      this.chatName = chatName;
-      this.ownName = ownName;
-      this.peers = peers.map(({ addr: peerAddr, name: peerName }) => {
-        const peerState: PeerState = {
-          peerAddr,
-          peerName,
-          vaChannel: makeVAChannel(peerAddr),
-          vaStream: null
-        };
-        // XXX note that some code on bare (not wrapped/proxied) object won't
-        //     trigger watches, hence following setup call is done below on
-        //     wrapped peer states, that even requires casting
-        // setupStateChangesFromPeerEvents(peerState);
-        return peerState;
+    setMicOn(val: boolean) {
+      this.isMicOn = val;
+      this.ownVAStream?.getAudioTracks().forEach(audioTrack => {
+        audioTrack.enabled = val;
       });
-      this.peers.forEach(
-        peer => setupStateChangesFromPeerEvents(peer as PeerState)
-      );
     },
 
-    sendOwnStreamToPeers() {
-      if (!this.ownVAStream) {
-        throw new Error(`Own stream is not set`);
+    setCamOn(val: boolean) {
+      this.isCamOn = val;
+      this.ownVAStream?.getVideoTracks().forEach(videoTrack => {
+        videoTrack.enabled = val;
+      });
+    },
+
+    setPeerUiState({ user, mic, cam }: { user: string; mic?: 'on' | 'off'; cam?: 'on' | 'off' }) {
+      if (mic) {
+        set(this.peersUiState, [user, 'isMicOn'], mic === 'on');
       }
-      for (const peer of this.peers) {
-        peer.vaChannel.sendMediaStream(this.ownVAStream);
+      if (cam) {
+        set(this.peersUiState, [user, 'isCamOn'], cam === 'on');
       }
     },
 
-  }
+    setOwnVAStream(val: MediaStream | null) {
+      this.ownVAStream = val;
+      this.ownVAStream?.getAudioTracks().forEach(audioTrack => {
+        audioTrack.enabled = this.isMicOn;
+      });
+      this.ownVAStream?.getVideoTracks().forEach(videoTrack => {
+        videoTrack.enabled = this.isCamOn;
+      });
+    },
 
+    getPeer(peerAddr: string) {
+      const peer = this.peers.find(p => (p.peerAddr === peerAddr));
+      if (!peer) {
+        throw new Error(`Peer with address ${peerAddr} not found among ${this.peers.length} peers. Is it exact spelling as is used in chat info?`);
+      }
+      return peer;
+    },
+  },
 });
 
 export type StreamsStore = ReturnType<typeof useStreamsStore>;
+export type Peer = ReturnType<StreamsStore['getPeer']>;

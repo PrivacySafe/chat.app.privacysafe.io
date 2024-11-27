@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,170 +16,166 @@
 -->
 
 <script lang="ts" setup>
-  import { computed, inject, toRefs } from 'vue'
-  import { get, size } from 'lodash'
-  import { I18nPlugin, I18N_KEY, prepareDateAsSting, Ui3nBadge, Ui3nHtml } from '@v1nt1248/3nclient-lib'
-  import { useChatsStore } from '../../store'
-  import { getChatSystemMessageText } from '../../helpers/chat-ui.helper'
-  import ChatAvatar from './chat-avatar.vue'
+import { computed, inject } from 'vue';
+import { storeToRefs } from 'pinia';
+import get from 'lodash/get';
+import size from 'lodash/size';
+import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
+import { Ui3nBadge, Ui3nHtml } from '@v1nt1248/3nclient-lib';
+import { useChatsStore } from '@main/store';
+import { getChatSystemMessageText } from '@main/helpers/chat-ui.helper';
+import type { ChatListItemView, ChatMessageView, MessageType } from '~/index';
+import ChatAvatar from './chat-avatar.vue';
 
-  const vUi3nHtml = Ui3nHtml
+const vUi3nHtml = Ui3nHtml;
 
-  const emit = defineEmits(['click'])
-  const props = defineProps<{
-    data: ChatListItemView & { displayName: string };
-  }>()
+const props = defineProps<{
+  data: ChatListItemView & { displayName: string };
+}>();
+const emit = defineEmits(['click']);
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
-  const { currentChat } = toRefs(useChatsStore())
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const { currentChat } = storeToRefs(useChatsStore());
 
-  const selectedChatId = computed<string>(() => get(currentChat.value(), ['chatId'], ''))
-  const isGroupChat = computed<boolean>(() => size(props.data.members) > 2)
+const selectedChatId = computed<string>(() => get(currentChat.value(), ['chatId'], ''));
+const isGroupChat = computed<boolean>(() => size(props.data.members) > 2);
 
-  const message = computed<string>(() => {
-    const { msgId, chatMessageType, messageType, body, attachments = [] } = props.data || {}
+const message = computed<string>(() => {
+  const { msgId, chatMessageType, messageType, body, attachments = [] } = props.data || {};
 
-    if (!msgId)
-      return ' '
+  if (!msgId)
+    return ' ';
 
-    if (chatMessageType === 'system') {
-      return `<i>${getChatSystemMessageText({
-        message: { body } as ChatMessageView<MessageType>,
-        chat: props.data,
-      })}</i>`
-    }
+  if (chatMessageType === 'system') {
+    return `<i>${getChatSystemMessageText({
+      message: { body } as ChatMessageView<MessageType>,
+      chat: props.data,
+    })}</i>`;
+  }
 
-    const attachmentsText = attachments!.map(a => a.name).join(', ')
-    return messageType === 'outgoing'
-      ? `<b>You: </b>${body || `<i>${$tr('text.send.file')}: ${attachmentsText}</i>`}`
-      : body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`
-  })
+  const attachmentsText = attachments!.map(a => a.name).join(', ');
+  return messageType === 'outgoing'
+    ? `<b>You: </b>${body || `<i>${$tr('text.send.file')}: ${attachmentsText}</i>`}`
+    : body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`;
+});
 
-  const date = computed<string>(() => {
-    const chatLastDate = props.data.msgId
-      ? props.data.timestamp
-      : props.data.createdAt
+const date = computed<string>(() => {
+  const chatLastDate = props.data.msgId
+    ? props.data.timestamp
+    : props.data.createdAt;
 
-    return prepareDateAsSting(chatLastDate!)
-  })
+  return prepareDateAsSting(chatLastDate!);
+});
 </script>
 
 <template>
   <div
-    class="chat-list-item"
-    :class="{ 'chat-list-item--selected': props.data.chatId === selectedChatId }"
+    :class="[$style.chatListItem, data.chatId === selectedChatId && $style.chatListItemSelected]"
     @click="emit('click', $event)"
   >
     <chat-avatar
-      :name="props.data.displayName"
+      :name="data.displayName"
       :shape="isGroupChat ? 'decagon' : 'circle'"
     />
 
-    <div class="chat-list-item__content">
-      <div class="chat-list-item__name">
-        {{ props.data.displayName }}
+    <div :class="$style.chatListItemContent">
+      <div :class="$style.chatListItemName">
+        {{ data.displayName }}
       </div>
       <div
         v-ui3n-html.sanitize="message"
-        class="chat-list-item__message"
+        :class="$style.chatListItemMessage"
       />
     </div>
 
-    <div class="chat-list-item__info">
-      <div class="chat-list-item__date">
+    <div :class="$style.chatListItemInfo">
+      <div :class="$style.chatListItemDate">
         {{ date }}
       </div>
-      <div class="chat-list-item__status">
+      <div :class="$style.chatListItemStatus">
         <ui3n-badge
-          v-if="props.data.unread"
-          :value="props.data.unread"
+          v-if="data.unread"
+          :value="data.unread"
         />
       </div>
     </div>
   </div>
 </template>
 
-<style lang="scss" scoped>
-  @import "../../assets/styles/mixins";
+<style lang="scss" module>
+@use '../../assets/styles/mixins' as mixins;
 
-  .chat-list-item {
-    position: relative;
-    width: 100%;
-    height: calc(var(--base-size) * 8);
-    display: flex;
-    padding: 0 calc(var(--base-size) * 2);
-    justify-content: flex-start;
-    align-items: center;
-    border-bottom: 1px solid var(--system-white);
+.chatListItem {
+  position: relative;
+  width: 100%;
+  height: calc(var(--spacing-s) * 8);
+  display: flex;
+  padding: 0 var(--spacing-m);
+  justify-content: flex-start;
+  align-items: center;
+  border-radius: var(--spacing-xs);
 
-    &__content {
-      position: relative;
-      width: calc(100% - var(--base-size) * 12.5);
-      margin-left: var(--base-size);
-    }
-
-    &__name {
-      position: relative;
-      height: 22px;
-      font-size: var(--font-16);
-      font-weight: 500;
-      line-height: 22px;
-      color: var(--black-90);
-      margin-bottom: 2px;
-      @include text-overflow-ellipsis();
-    }
-
-    &__message {
-      position: relative;
-      height: 20px;
-      font-size: var(--font-14);
-      font-weight: 400;
-      line-height: 20px;
-      @include text-overflow-ellipsis();
-    }
-
-    &__info {
-      position: relative;
-      width: calc(var(--base-size) * 7);
-    }
-
-    &__date {
-      position: relative;
-      height: 22px;
-      text-align: right;
-      margin-bottom: 2px;
-      font-size: var(--font-9);
-      font-weight: 400;
-      line-height: 22px;
-      color: var(--black-30);
-    }
-
-    &__status {
-      position: relative;
-      height: 20px;
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-
-      :deep(.var-badge) {
-        max-height: 20px;
-        display: flex;
-        top: -2px;
-
-        .var-badge__content {
-          line-height: 1;
-          padding: 4px 6px;
-        }
-      }
-    }
-
-    &:hover {
-      cursor: pointer;
-      background-color: var(--blue-main-20);
-    }
-
-    &--selected {
-      background-color: var(--blue-main-20);
-    }
+  &:hover {
+    cursor: pointer;
+    background-color: var(--color-bg-chat-bubble-general-bg);
   }
+}
+
+.chatListItemSelected {
+  background-color: var(--color-bg-chat-bubble-general-bg);
+}
+
+.chatListItemContent {
+  position: relative;
+  margin-left: var(--spacing-s);
+  flex-grow: 1;
+}
+
+.chatListItemName {
+  position: relative;
+  height: 22px;
+  font-size: var(--font-16);
+  font-weight: 500;
+  line-height: 22px;
+  color: var(--color-text-chat-bubble-other-default);
+  margin-bottom: 2px;
+  @include mixins.text-overflow-ellipsis();
+}
+
+.chatListItemMessage {
+  position: relative;
+  height: 20px;
+  font-size: var(--font-14);
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--color-text-chat-bubble-other-default);
+  @include mixins.text-overflow-ellipsis();
+}
+
+.chatListItemInfo {
+  position: relative;
+  width: max-content;
+  padding-left: var(--spacing-xs);
+}
+
+.chatListItemDate {
+  position: relative;
+  height: 22px;
+  white-space: nowrap;
+  text-align: right;
+  margin-bottom: 2px;
+  font-size: var(--font-10);
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--color-text-chat-bubble-other-sub);
+}
+
+.chatListItemStatus {
+  position: relative;
+  height: 20px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
 </style>

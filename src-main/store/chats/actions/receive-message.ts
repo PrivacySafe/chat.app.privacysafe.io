@@ -1,8 +1,10 @@
-import { size, without } from 'lodash'
-import { ChatsActions } from './types'
-import { appChatsSrvProxy, appDeliverySrvProxy } from '../../../services/services-provider'
-import { useContactsStore } from '../..'
-import { getAttachmentFilesInfo } from '../../../helpers/chats.helper'
+import size from 'lodash/size';
+import without from 'lodash/without';
+import type { ChatsActions } from './types';
+import { appChatsSrvProxy, appDeliverySrvProxy } from '@main/services/services-provider';
+import { useContactsStore } from '@main/store';
+import { getAttachmentFilesInfo } from '@main/helpers/chats.helper';
+import type { ChatMessageView, ChatSystemEvent, ChatSystemMessageData } from '~/index';
 
 const systemMessageHandlers: Partial<Record<ChatSystemEvent, string>> = {
   'update:status': 'handleUpdateMessageStatus',
@@ -11,11 +13,11 @@ const systemMessageHandlers: Partial<Record<ChatSystemEvent, string>> = {
   'add:members': 'handlerAddChatMembers',
   'remove:members': 'handlerRemoveChatMembers',
   'delete:message': 'handlerDeleteChatMessage',
-}
+};
 
-export const receiveMessage: ChatsActions['receiveMessage'] = async function (this, { me, msg, currentChatId }) {
-  const contactsStore = useContactsStore()
-  await contactsStore.fetchContactList()
+export const receiveMessage: ChatsActions['receiveMessage'] = async function(this, { me, msg, currentChatId }) {
+  const contactsStore = useContactsStore();
+  await contactsStore.fetchContactList();
 
   const {
     jsonBody,
@@ -24,7 +26,7 @@ export const receiveMessage: ChatsActions['receiveMessage'] = async function (th
     plainTxtBody,
     htmlTxtBody,
     sender,
-  } = msg
+  } = msg;
   const {
     chatId,
     chatMessageType = 'regular',
@@ -34,26 +36,26 @@ export const receiveMessage: ChatsActions['receiveMessage'] = async function (th
     chatName,
     initialMessageId,
     chatSystemData = {} as ChatSystemMessageData,
-  } = jsonBody
-  const isChatPresent = Object.keys(this.chatList).includes(chatId!)
+  } = jsonBody;
+  const isChatPresent = Object.keys(this.chatList).includes(chatId!);
 
   if (!isChatPresent) {
-    const msgRecipients = without(members, me)
+    const msgRecipients = without(members, me);
     const name = size(msgRecipients) > 1
       ? chatName || 'Group chat'
-      : chatName || sender
-    await this.createChat({ chatId, members, admins, name })
+      : chatName || sender;
+    await this.createChat({ chatId, members, admins, name });
   }
 
   switch (chatMessageType) {
     case 'system':
-      const { event,  value, displayable = false} = chatSystemData
-      const systemMessageHandler = systemMessageHandlers[event]
+      const { event, value, displayable = false } = chatSystemData;
+      const systemMessageHandler = systemMessageHandlers[event];
       //@ts-ignore
       systemMessageHandler && this[systemMessageHandler] && await this[systemMessageHandler]({
         chatId, msgId, sender, chatMessageId, value, displayable,
-      })
-      break
+      });
+      break;
     default:
       const msgView: ChatMessageView<'incoming'> = {
         msgId,
@@ -67,23 +69,23 @@ export const receiveMessage: ChatsActions['receiveMessage'] = async function (th
         initialMessageId: initialMessageId || null,
         timestamp: Date.now(),
         status: 'received',
-      }
+      };
 
-      await appChatsSrvProxy.upsertMessage(msgView)
+      await appChatsSrvProxy.upsertMessage(msgView);
       if (chatId === currentChatId) {
-        this.currentChatMessages.push(msgView)
+        this.currentChatMessages.push(msgView);
       }
-      await this.getChatList()
+      await this.getChatList();
       this.sendSystemMessage({
         chatId,
         chatMessageId,
         recipients: [sender],
         event: 'update:status',
         value: 'received',
-      })
+      });
       if (!attachments) {
-        appDeliverySrvProxy.removeMessageFromInbox([msgId])
+        appDeliverySrvProxy.removeMessageFromInbox([msgId]);
       }
-      break
+      break;
   }
-}
+};

@@ -14,14 +14,22 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+import type { AttachmentsContainer, FileW } from '~/index';
+
 export function isContainerEmpty(c: AttachmentsContainer | undefined): boolean {
-  if (!c) { return true; }
-  if (c.files && (Object.keys(c.files).length > 0)) { return false; }
+  if (!c) {
+    return true;
+  }
+  if (c.files && (Object.keys(c.files).length > 0)) {
+    return false;
+  }
   return !(c.folders && (Object.keys(c.folders).length > 0));
 }
 
 export function* iterFilesIn(c: AttachmentsContainer | undefined): IterableIterator<{ fileName: string, file: FileW }> {
-  if (!c || !c.files) { return; }
+  if (!c || !c.files) {
+    return;
+  }
   for (const fileName of Object.keys(c.files)) {
     const file = c.files[fileName];
     yield { fileName, file };
@@ -29,8 +37,10 @@ export function* iterFilesIn(c: AttachmentsContainer | undefined): IterableItera
 }
 
 export function* iterFoldersIn(c: AttachmentsContainer | undefined):
-IterableIterator<{ folderName: string, folder: FS }> {
-  if (!c || !c.folders) { return; }
+  IterableIterator<{ folderName: string, folder: web3n.files.FS }> {
+  if (!c || !c.folders) {
+    return;
+  }
   for (const folderName of Object.keys(c.folders)) {
     const folder = c.folders[folderName];
     yield { folderName, folder };
@@ -38,19 +48,31 @@ IterableIterator<{ folderName: string, folder: FS }> {
 }
 
 export function addFileTo(c: AttachmentsContainer, file: FileW, name?: string): void {
-  if (!file) { throw new Error(`File is not given`); }
-  if (!c.files) { c.files = {}; }
-  if (!name) { name = file.name; }
+  if (!file) {
+    throw new Error(`File is not given`);
+  }
+  if (!c.files) {
+    c.files = {};
+  }
+  if (!name) {
+    name = file.name;
+  }
   if (c.files[name] || (c.folders && c.folders[name])) {
     throw new Error(`File name ${name}, as it is already used`);
   }
   c.files[name] = file;
 }
 
-export function addFolderTo(c: AttachmentsContainer, folder: FS, name?: string): void {
-  if (!folder) { throw new Error(`Folder is not given`); }
-  if (!c.folders) { c.folders = {}; }
-  if (!name) { name = folder.name; }
+export function addFolderTo(c: AttachmentsContainer, folder: web3n.files.FS, name?: string): void {
+  if (!folder) {
+    throw new Error(`Folder is not given`);
+  }
+  if (!c.folders) {
+    c.folders = {};
+  }
+  if (!name) {
+    name = folder.name;
+  }
   if (c.folders[name] || (c.files && c.files[name])) {
     throw new Error(`Folder name ${name}, as it is already used by other `);
   }

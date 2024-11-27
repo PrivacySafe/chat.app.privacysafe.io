@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,185 +16,172 @@
 -->
 
 <script lang="ts" setup>
-  import { ref, computed, watch, onBeforeMount, toRefs, inject } from 'vue'
-  import { get, keyBy } from 'lodash'
-  import { useAppStore, useContactsStore, useChatsStore } from '../../store'
-  import { I18nPlugin, I18N_KEY, Ui3nButton, Ui3nChip, Ui3nInput, Ui3nTabs } from '@v1nt1248/3nclient-lib'
-  import ContactList from '../contacts/contact-list.vue'
-  import ContactIcon from '../contacts/contact-icon.vue'
+import { ref, computed, onBeforeMount, inject } from 'vue';
+import { storeToRefs } from 'pinia';
+import get from 'lodash/get';
+import keyBy from 'lodash/keyBy';
+import { useAppStore, useContactsStore, useChatsStore } from '@main/store';
+import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { capitalize } from '@v1nt1248/3nclient-lib/utils';
+import { Ui3nButton, Ui3nChip, Ui3nInput, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+import type { PersonView } from '~/index';
+import ContactList from '../contacts/contact-list.vue';
+import ContactIcon from '../contacts/contact-icon.vue';
 
-  const props = defineProps<{
-    withoutOverlay?: boolean
-  }>()
-  const emit = defineEmits(['close'])
+interface ChatCreateDialogEmits {
+  (ev: 'select', val: string): void;
+  (ev: 'close'): void;
+  (ev: 'confirm'): void;
+  (ev: 'cancel'): void;
+}
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
+const emits = defineEmits<ChatCreateDialogEmits>();
 
-  const { user } = toRefs(useAppStore())
-  const { contactList: allContacts } = toRefs(useContactsStore())
-  const { fetchContactList, addContact } = useContactsStore()
-  const { createChat } = useChatsStore()
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
-  const tabs = ref({
-    items: [
-      { name: 'chat.create.dialog.tab.chat', id: 'regular' },
-      { name: 'chat.create.dialog.tab.group', id: 'group' },
-    ],
-    current: 0,
-  })
-  const searchText = ref<string>('')
-  const selectedContacts = ref<string[]>([])
-  const multipleModeStep = ref(1)
-  const groupChatName = ref('')
+const { user } = storeToRefs(useAppStore());
+const contactsStore = useContactsStore();
+const { contactList: allContacts } = storeToRefs(contactsStore);
+const { fetchContactList, addContact } = contactsStore;
+const { createChat } = useChatsStore();
 
-  const selectedChatType = computed<string>(() => tabs.value.items[tabs.value.current].id)
-  const nonSelectableContacts = computed<string[]>(() => allContacts.value
-    .reduce((res, contact) => {
-      if (contact.mail === user.value) {
-        res.push(contact.id)
-      }
-      return res
-    }, [] as string[])
-  )
-  const contacts = computed<Record<string, PersonView & { displayName: string }>>(() => keyBy(allContacts.value, 'id'))
-  const selectedContactList = computed<Array<PersonView & { displayName: string }>>(
-    () => allContacts.value.filter(c => selectedContacts.value.includes(c.id))
-  )
+const searchText = ref<string>('');
+const selectedContacts = ref<string[]>([]);
+const multipleModeStep = ref(1);
+const chatName = ref('');
 
-  onBeforeMount(async () => await fetchContactList())
-
-  watch(
-    () => selectedChatType.value,
-    (val, oldValue) => {
-      if (val !== oldValue) {
-        selectedContacts.value = []
-        multipleModeStep.value = 1
-        groupChatName.value = ''
-      }
-    },
-  )
-
-  async function selectContacts(contactId: string) {
-    if (selectedChatType.value === 'regular') {
-      selectedContacts.value = [contactId]
-      const person = get(contacts.value, [contactId, 'mail'])
-      const members = [user.value, person]
-      const chatId = await createChat({ members, admins: [user.value], name: person })
-      closeDialog(chatId)
-    } else {
-      const contactIndex = selectedContacts.value.indexOf(contactId)
-      if (contactIndex === -1) {
-        selectedContacts.value.push(contactId)
-      } else {
-        selectedContacts.value.splice(contactIndex, 1)
-      }
+const nonSelectableContacts = computed<string[]>(() => allContacts.value
+  .reduce((res, contact) => {
+    if (contact.mail === user.value) {
+      res.push(contact.id);
     }
+    return res;
+  }, [] as string[]),
+);
+
+const contacts = computed<Record<string, PersonView & { displayName: string }>>(() => keyBy(allContacts.value, 'id'));
+
+const selectedContactList = computed<Array<PersonView & { displayName: string }>>(
+  () => allContacts.value.filter(c => selectedContacts.value.includes(c.id)),
+);
+
+const isMultipleMode = computed(() => selectedContacts.value.length > 1);
+
+const actionLeftBtnText = computed(() => {
+  if (!isMultipleMode.value) {
+    return capitalize($tr('btn.text.close'));
   }
 
-  function getContact(contactId: string): PersonView & { displayName: string } {
-    return get(contacts.value, contactId)
+  return multipleModeStep.value === 1
+    ? capitalize($tr('btn.text.close'))
+    : capitalize($tr('btn.text.back'));
+});
+
+const actionRightBtnText = computed(() => {
+  if (!isMultipleMode.value) {
+    return capitalize($tr('btn.text.create'));
   }
 
-  function onFirstBtnClick() {
-    if (
-      selectedChatType.value === 'regular'
-      || (selectedChatType.value === 'group' && multipleModeStep.value === 1)
-    ) {
-      emit('close')
-    } else {
-      multipleModeStep.value = 1
-    }
+  return multipleModeStep.value === 1
+    ? capitalize($tr('btn.text.next'))
+    : capitalize($tr('btn.text.create'));
+});
+
+onBeforeMount(async () => await fetchContactList());
+
+async function selectContacts(contactId: string) {
+  const contactIndex = selectedContacts.value.indexOf(contactId);
+  if (contactIndex === -1) {
+    selectedContacts.value.push(contactId);
+  } else {
+    selectedContacts.value.splice(contactIndex, 1);
+  }
+}
+
+function getContact(contactId: string): PersonView & { displayName: string } {
+  return get(contacts.value, contactId);
+}
+
+function onActionLeftBtnClick() {
+  if (isMultipleMode.value && actionLeftBtnText.value === capitalize($tr('btn.text.back'))) {
+    multipleModeStep.value = 1;
+    return;
   }
 
-  async function onSecondBtnClick(){
-    if (multipleModeStep.value === 1) {
-      multipleModeStep.value = 2
-    } else {
-      const members = [
-        user.value,
-        ...selectedContacts.value.map(contactId => get(contacts.value, [contactId, 'mail'])),
-      ]
-      const chatId = await createChat({ members, admins: [user.value], name: groupChatName.value.trim() })
-      closeDialog(chatId)
-    }
+  emits('close');
+}
+
+async function onActionRightBtnClick() {
+  if (isMultipleMode.value && actionRightBtnText.value === capitalize($tr('btn.text.next'))) {
+    multipleModeStep.value = 2;
+    return;
   }
 
-  async function addNewContact(mail: string) {
-    await addContact(mail)
-  }
+  const members = [
+    user.value,
+    ...selectedContacts.value.map(contactId => get(contacts.value, [contactId, 'mail'])),
+  ];
+  const chatId = await createChat({
+    members,
+    admins: [user.value],
+    name: isMultipleMode.value ? chatName.value.trim() : members[1],
+  });
+  emits('select', chatId);
+  emits('confirm');
+}
 
-  function closeDialog(chatId?: string) {
-    if (!props.withoutOverlay) {
-      emit('close', chatId)
-    }
-  }
+async function addNewContact(mail: string) {
+  await addContact(mail);
+}
 </script>
 
 <template>
-  <div
-    :class="[
-      'chat-create-dialog__wrapper',
-      { 'chat-create-dialog__wrapper--without-overlay': withoutOverlay }
-    ]"
-    @click.prevent.self="closeDialog(undefined)"
-  >
-    <div class="chat-create-dialog__body">
-      <div class="chat-create-dialog__top">
-        <ui3n-tabs
-          v-model="tabs.current"
-          class="chat-create-dialog__tabs"
-        >
-          <div
-            v-for="item in tabs.items"
-            :key="item.id"
-            class="chat-create-dialog__tab"
-          >
-            {{ $tr(item.name) }}
-          </div>
-        </ui3n-tabs>
-      </div>
+  <div :class="$style.chatCreateDialog">
+    <div :class="$style.chatCreateDialogBody">
+      <template v-if="!isMultipleMode || (isMultipleMode && multipleModeStep === 1)">
+        <ui3n-input
+          v-model="searchText"
+          icon="round-search"
+          clearable
+          :class="$style.chatCreateDialogInput"
+        />
 
-      <div
-        v-if="multipleModeStep === 1"
-        class="chat-create-dialog__content"
-      >
-        <div class="chat-create-dialog__content-header">
-          <ui3n-input
-            v-model:value="searchText"
-            icon="search"
-            clearable
-          />
-
-          <template v-if="selectedChatType === 'group'">
-            <div class="chat-create-dialog__selected-info">
+        <div :class="$style.chatCreateDialogContent">
+          <template v-if="selectedContacts.length > 1">
+            <div :class="$style.chatCreateDialogSelectedInfo">
               {{ $tr('chat.create.dialog.selected.contacts') }}:
               {{ selectedContacts.length }}/{{ Object.values(allContacts).length }}
             </div>
 
-            <div
-              v-if="selectedContacts.length"
-              class="chat-create-dialog__selected-body"
-            >
-              <ui3n-chip
+            <div :class="$style.chatCreateDialogSelectedBody">
+              <template
                 v-for="contactId in selectedContacts"
                 :key="contactId"
-                :max-width="104"
-                class="chat-create-dialog__selected-item"
               >
-                {{ getContact(contactId).displayName }}
-                <template #left>
-                  <contact-icon
-                    :name="getContact(contactId).displayName"
-                    :size="24"
-                    :readonly="true"
-                  />
-                </template>
-              </ui3n-chip>
+                <ui3n-tooltip
+                  placement="top"
+                  :content="getContact(contactId).mail"
+                >
+                  <ui3n-chip
+                    :max-width="104"
+                    :class="$style.chatCreateDialogSelectedItem"
+                  >
+                    {{ getContact(contactId).displayName }}
+                    <template #left>
+                      <contact-icon
+                        :name="getContact(contactId).displayName"
+                        :size="24"
+                        :readonly="true"
+                      />
+                    </template>
+                  </ui3n-chip>
+                </ui3n-tooltip>
+              </template>
             </div>
           </template>
         </div>
 
-        <div class="chat-create-dialog__content-list">
+        <div :class="$style.chatCreateDialogContentList">
           <contact-list
             :contact-list="Object.values(contacts)"
             :search-text="searchText"
@@ -204,186 +191,134 @@
             @add:new="addNewContact"
           />
         </div>
-      </div>
+      </template>
 
-      <div
-        v-else
-        class="chat-create-dialog__content"
-      >
-        <div class="chat-create-dialog__content-header">
-          <ui3n-input
-            v-model:value="groupChatName"
-            label="Group Name"
-            clearable
+      <template v-else>
+        <ui3n-input
+          v-model="chatName"
+          :label="$tr('chat.create.group.name.label')"
+          :class="$style.chatCreateDialogInput"
+        />
+
+        <div :class="$style.chatCreateDialogContentList">
+          <contact-list
+            :contact-list="selectedContactList"
+            :without-anchor="true"
+            :readonly="true"
           />
-
-          <div class="chat-create-dialog__content-list">
-            <contact-list
-              :contact-list="selectedContactList"
-              :without-anchor="true"
-              :readonly="true"
-            />
-          </div>
         </div>
-      </div>
+      </template>
+    </div>
 
-      <div class="chat-create-dialog__buttons">
-        <ui3n-button
-          text-color="var(--blue-main, #0090ec)"
-          color="var(--system-white, #fff)"
-          @click="onFirstBtnClick"
-        >
-          {{ multipleModeStep === 1 ? $tr('btn.text.close') : $tr('btn.text.back') }}
-        </ui3n-button>
+    <div :class="$style.chatCreateDialogActions">
+      <ui3n-button
+        type="secondary"
+        @click="onActionLeftBtnClick"
+      >
+        {{ actionLeftBtnText }}
+      </ui3n-button>
 
-        <ui3n-button
-          v-if="selectedChatType === 'group'"
-          :disabled="!selectedContacts.length || (multipleModeStep === 2 && !groupChatName)"
-          @click="onSecondBtnClick"
-        >
-          {{ multipleModeStep === 1 ? $tr('btn.text.next') : $tr('btn.text.create') }}
-        </ui3n-button>
-      </div>
+      <ui3n-button
+        v-if="selectedContacts.length > 0"
+        :disabled="isMultipleMode && multipleModeStep === 2 && !chatName"
+        :class="$style.actionRightBtn"
+        @click="onActionRightBtnClick"
+      >
+        {{ actionRightBtnText }}
+      </ui3n-button>
     </div>
   </div>
 </template>
 
-<style lang="scss">
-  @import "../../assets/styles/mixins";
+<style lang="scss" module>
+.chatCreateDialog {
+  --chat-create-dialog-actions-height: 64px;
 
-  .chat-create-dialog__wrapper {
-    position: fixed;
-    z-index: 1000;
-    inset: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: rgba(0, 0, 0, 0.5);
+  position: relative;
+  width: calc(var(--column-size) * 4);
+  height: calc(95vh - var(--spacing-xxl));
+  padding: var(--spacing-m) 0 0 var(--spacing-m);
+  border-radius: var(--spacing-s);
+  background-color: var(--color-bg-block-primary-default);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  overflow: hidden;
+}
 
-    .chat-create-dialog__body {
-      position: relative;
-      width: 380px;
-      height: 90%;
-      border-radius: var(--base-size);
-      background-color: var(--system-white, #fff);
-    }
+.chatCreateDialogBody {
+  position: relative;
+  height: calc(100% - var(--chat-create-dialog-actions-height));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+}
 
-    &--without-overlay {
-      top: 5%;
-      bottom: 5%;
-      left: calc(50% - 190px);
-      width: 380px;
-      background-color: transparent;
-      border-radius: var(--base-size);
-      box-shadow: 0 2px 8px var(--black-30);
+.chatCreateDialogActions {
+  position: relative;
+  height: var(--chat-create-dialog-actions-height);
+  padding-right: var(--spacing-m);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  column-gap: var(--spacing-s);
+}
 
-      .chat-create-dialog__body {
-        width: 100%;
-        height: 100%;
-      }
-    }
+.chatCreateDialogInput {
+  width: calc(100% - var(--spacing-m));
+  margin-bottom: var(--spacing-s);
+
+  :global(.ui3n-icon) {
+    top: 10px;
   }
+}
 
-  .chat-create-dialog {
-    &__top {
-      position: relative;
-      width: 100%;
-      height: calc(var(--base-size) * 6);
-      border-bottom: 1px solid var(--gray-50, #f2f2f2);
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
+.chatCreateDialogContent {
+  position: relative;
+  width: 100%;
+}
 
-      .chat-create-dialog__tabs {
-        --tab-active-color: var(--blue-main, #0090ec);
-        --tabs-indicator-background: var(--blue-main, #0090ec);
+.chatCreateDialogSelectedInfo {
+  font-size: var(--font-10);
+  font-weight: 500;
+  color: var(--color-text-block-secondary-default);
+  margin-bottom: var(--spacing-s);
+}
 
-        width: 220px;
-      }
+.chatCreateDialogSelectedBody {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-s);
+}
 
-      .chat-create-dialog__tab {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 110px;
-        font-size: 14px;
-        font-weight: 500;
-      }
-    }
+.chatCreateDialogSelectedItem {
+  --font-size-sm: var(--font-10);
+  --chip-text-small-margin: 0;
+  --chip-small-padding: 0 var(--base-size);
 
-    &__content {
-      position: relative;
-      width: 100%;
-      height: calc(100% - var(--base-size) * 14);
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-start;
-      align-items: stretch;
-      padding: calc(var(--base-size) * 2) calc(var(--base-size) * 2) var(--base-size);
+  max-width: 104px;
+  margin: 0 var(--spacing-xs) var(--spacing-xs) 0;
+  padding-left: 0 !important;
+}
 
-      &-header {
-        margin-bottom: var(--base-size);
-      }
+.chatCreateDialogContentList {
+  position: relative;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex-grow: 2;
 
-      &-list {
-        overflow-x: hidden;
-        overflow-y: auto;
-        flex-grow: 2;
-      }
-    }
-
-    &__buttons {
-      --button-primary-color: var(--blue-main, #0090ec);
-      --button-normal-height: calc(var(--base-size) * 4);
-
-      position: relative;
-      width: 100%;
-      height: calc(var(--base-size) * 8);
-      border-top: 1px solid var(--gray-50, #f2f2f2);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-
-      .ui3n-button {
-        margin: 0 var(--half-size);
-        font-weight: 500;
-        text-transform: capitalize;
-      }
-    }
-
-    &__selected {
-      &-info {
-        margin-top: var(--base-size);
-        font-size: var(--font-10);
-        font-weight: 500;
-        color: var(--black-30, #b3b3b3);
-      }
-
-      &-body {
-        margin-top: var(--base-size);
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-start;
-        align-items: flex-start;
-
-        .ui3n-chip {
-          .ui3n-chip__body {
-            display: inline-block;
-            font-weight: 600;
-            @include text-overflow-ellipsis(calc(100% - var(--base-size) * 3));
-          }
-        }
-      }
-
-      &-item {
-        --font-size-sm: var(--font-10);
-        --chip-text-small-margin: 0;
-        --chip-small-padding: 0 var(--base-size);
-
-        max-width: calc(var(--base-size) * 13);
-        margin: 0 var(--half-size) var(--half-size) 0;
-        padding-left: 0 !important;
-      }
-    }
+  & > div > div > div {
+    padding-right: var(--spacing-m) !important;
   }
+}
+
+.actionRightBtn {
+  width: 64px !important;
+}
 </style>

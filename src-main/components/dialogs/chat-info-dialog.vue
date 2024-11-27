@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,391 +16,327 @@
 -->
 
 <script lang="ts" setup>
-  import { computed, inject, ref, toRefs } from 'vue'
-  import { cloneDeep, isEqual, size } from 'lodash'
-  import { useAppStore, useContactsStore, useChatsStore } from '../../store'
-  import { getChatName } from '../../helpers/chat-ui.helper'
-  import { I18nPlugin, I18N_KEY, Ui3nButton, Ui3nIcon, Ui3nInput } from '@v1nt1248/3nclient-lib'
-  import ChatAvatar from '../chat/chat-avatar.vue'
-  import ContactList from '../contacts/contact-list.vue'
+import { computed, inject, ref } from 'vue';
+import { storeToRefs } from 'pinia';
+import cloneDeep from 'lodash/cloneDeep';
+import isEqual from 'lodash/isEqual';
+import size from 'lodash/size';
+import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { Ui3nButton, Ui3nIcon, Ui3nInput } from '@v1nt1248/3nclient-lib';
+import { capitalize } from '@v1nt1248/3nclient-lib/utils';
+import { useAppStore, useContactsStore, useChatsStore } from '@main/store';
+import { getChatName } from '@main/helpers/chat-ui.helper';
+import type { ChatView, ChatMessageView, MessageType, PersonView } from '~/index';
+import ChatAvatar from '../chat/chat-avatar.vue';
+import ContactList from '../contacts/contact-list.vue';
 
-  const props = defineProps<{
-    chat: ChatView & { unread: number } & ChatMessageView<MessageType>;
-  }>()
+const props = defineProps<{
+  chat: ChatView & { unread: number } & ChatMessageView<MessageType>;
+}>();
 
-  const emit = defineEmits(['close'])
+const emit = defineEmits(['close']);
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
-  const { contactList: allContact } = toRefs((useContactsStore()))
-  const { user } = toRefs(useAppStore())
-  const { updateMembers } = useChatsStore()
-  const nonSelectableUserMails = ['support@3nweb.com']
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
-  const showAvatar = ref(true)
-  const editMembersMode = ref(false)
-  const memberSearch = ref('')
-  const userSearch = ref('')
-  const initialSelectedUsers = ref<string[]>([])
-  const selectedUsers = ref<string[]>([])
-  const nonSelectableUsers = computed<string[]>(
-    () => allContact.value
-      .filter(c => nonSelectableUserMails.includes(c.mail))
-      .map(c => c.id)
-  )
-  const isGroupChat = computed<boolean>(() => size(props.chat.members) > 2)
-  const isUserAdmin = computed(() => props.chat.admins.includes(user.value))
-  const members = computed<Array<PersonView & { displayName: string }>>(
-    () => allContact.value.filter(c => props.chat.members.includes(c.mail))
-  )
-  const filteredMembers = computed(
-    () => members.value
-      .filter(m => m.displayName.toLowerCase().includes(memberSearch.value.toLowerCase()))
-  )
-  const addBtnDisable = computed(() => isEqual(
-    initialSelectedUsers.value.slice().sort(),
-    selectedUsers.value.slice().sort(),
-  ))
+const { contactList: allContact } = storeToRefs((useContactsStore()));
+const { user } = storeToRefs(useAppStore());
+const { updateMembers } = useChatsStore();
 
-  const closeDialog = () => emit('close')
+const nonSelectableUserMails = ['support@3nweb.com'];
 
-  const openEditMode = () => {
-    showAvatar.value = false
-    editMembersMode.value = true
-    userSearch.value = memberSearch.value
-    selectedUsers.value = cloneDeep(members.value.map(m => m.id))
-    initialSelectedUsers.value = cloneDeep(selectedUsers.value)
+const editMembersMode = ref(false);
+const memberSearch = ref('');
+const userSearch = ref('');
+const initialSelectedUsers = ref<string[]>([]);
+const selectedUsers = ref<string[]>([]);
+
+const nonSelectableUsers = computed<string[]>(
+  () => allContact.value
+    .filter(c => nonSelectableUserMails.includes(c.mail))
+    .map(c => c.id),
+);
+const isGroupChat = computed<boolean>(() => size(props.chat.members) > 2);
+
+const isUserAdmin = computed(() => props.chat.admins.includes(user.value));
+
+const members = computed<Array<PersonView & { displayName: string }>>(
+  () => allContact.value.filter(c => props.chat.members.includes(c.mail)),
+);
+
+const filteredMembers = computed(
+  () => members.value
+    .filter(m => m.displayName.toLowerCase().includes(memberSearch.value.toLowerCase())),
+);
+
+const addBtnDisable = computed(() => isEqual(
+  initialSelectedUsers.value.slice().sort(),
+  selectedUsers.value.slice().sort(),
+));
+
+function closeDialog() {
+  emit('close');
+}
+
+function openEditMode() {
+  editMembersMode.value = true;
+  userSearch.value = memberSearch.value;
+  selectedUsers.value = cloneDeep(members.value.map(m => m.id));
+  initialSelectedUsers.value = cloneDeep(selectedUsers.value);
+}
+
+function back() {
+  editMembersMode.value = false;
+  userSearch.value = '';
+}
+
+function selectUsers(userId: string) {
+  const userIndex = selectedUsers.value.indexOf(userId);
+  if (userIndex === -1) {
+    selectedUsers.value.push(userId);
+  } else {
+    selectedUsers.value.splice(userIndex, 1);
   }
+}
 
-  const back = () => {
-    if (showAvatar.value) {
-      return
+function _updateMembers() {
+  const updatedMembers = allContact.value.reduce((res, c) => {
+    const { id, mail } = c;
+    if (selectedUsers.value.includes(id)) {
+      res.push(mail);
     }
-
-    if (!editMembersMode.value) {
-      showAvatar.value = true
-    } else {
-      editMembersMode.value = false
-      showAvatar.value = true
-      userSearch.value = ''
-    }
-  }
-
-  const selectUsers = (userId: string) => {
-    const userIndex = selectedUsers.value.indexOf(userId)
-    if (userIndex === -1) {
-      selectedUsers.value.push(userId)
-    } else {
-      selectedUsers.value.splice(userIndex, 1)
-    }
-  }
-
-  const _updateMembers = () => {
-    const updatedMembers = allContact.value.reduce((res, c) => {
-      const { id, mail } = c
-      if (selectedUsers.value.includes(id)) {
-        res.push(mail)
-      }
-      return res
-    }, [] as string[])
-    updateMembers(props.chat, updatedMembers)
-    closeDialog()
-  }
+    return res;
+  }, [] as string[]);
+  updateMembers(props.chat, updatedMembers);
+  closeDialog();
+}
 </script>
 
 <template>
-  <div class="chat-info-dialog">
-    <div class="chat-info-dialog__title">
-      {{ $tr('chat.info.dialog.title') }}
+  <div :class="$style.chatInfoDialog">
+    <div :class="$style.chatInfoDialogBody">
+      <template v-if="editMembersMode">
+        <div :class="$style.chatInfoDialogContentTitle">
+          <ui3n-icon
+            icon="outline-person-add"
+            width="24"
+            height="24"
+            color="var(--color-icon-block-primary-default)"
+          />
+          {{ $tr('chat.info.dialog.add.members.btn') }}
+        </div>
 
-      <ui3n-button
-        round
-        color="transparent"
-        icon="close"
-        icon-size="16"
-        icon-color="#828282"
-        @click="closeDialog"
-      />
-    </div>
+        <ui3n-input
+          v-model="userSearch"
+          icon="round-search"
+          clearable
+          :class="$style.chatInfoDialogContentSearch"
+          :placeholder="$tr('chat.info.dialog.search.input.placeholder')"
+        />
 
-    <div
-      :class="[
-        'chat-info-dialog__content',
-        { 'chat-info-dialog__content--without-avatar': !showAvatar },
-      ]"
-    >
-      <template v-if="!editMembersMode">
-        <div
-          v-if="showAvatar"
-          class="chat-info-dialog__info"
-        >
+        <div :class="$style.chatInfoDialogUserList">
+          <contact-list
+            :contact-list="allContact"
+            :search-text="userSearch"
+            :without-anchor="true"
+            :selected-contacts="selectedUsers"
+            :non-selectable-contacts="nonSelectableUsers"
+            @select="selectUsers"
+          />
+        </div>
+      </template>
+
+      <template v-else>
+        <div :class="$style.chatInfoDialogHeader">
           <chat-avatar
             :name="getChatName(props.chat)"
             size="64"
             :shape="isGroupChat ? 'decagon' : 'circle'"
           />
 
-          <div class="chat-info-dialog__info-content">
-            <span class="chat-info-dialog__name">
+          <div :class="$style.chatInfoDialogHeaderText">
+            <span :class="$style.chatInfoDialogHeaderName">
               {{ getChatName(props.chat) }}
             </span>
 
-            <span class="chat-info-dialog__text">
+            <span :class="$style.chatInfoDialogHeaderUser">
               {{ props.chat.members.length }} {{ $tr('chat.info.dialog.users') }}
             </span>
           </div>
         </div>
 
-        <div class="chat-info-dialog__body">
-          <div class="chat-info-dialog__users">
-            <div class="chat-info-dialog__users-toolbar">
-              <div class="chat-info-dialog__users-title">
-                <ui3n-icon
-                  icon="account-circle"
-                  width="20"
-                  height="20"
-                  color="var(--black-90)"
-                />
-                {{ $tr('chat.info.dialog.users') }}
-              </div>
-              <ui3n-button
-                v-if="isUserAdmin"
-                color="transparent"
-                text-color="var(--blue-main, #0090ec)"
-                @click="openEditMode"
-              >
-                {{ $tr('chat.info.dialog.update.members.btn.text') }}
-              </ui3n-button>
-            </div>
-            <ui3n-input
-              v-model:value="memberSearch"
-              icon="search"
-              clearable
-              :placeholder="$tr('chat.info.dialog.search.input.placeholder')"
-              @focus="showAvatar = false"
+        <div :class="$style.chatInfoDialogContent">
+          <div :class="$style.chatInfoDialogContentTitle">
+            <ui3n-icon
+              icon="outline-account-circle"
+              width="24"
+              height="24"
+              color="var(--color-icon-block-primary-default)"
             />
-            <div class="chat-info-dialog__users-list">
-              <contact-list
-                :contact-list="filteredMembers"
-                :without-anchor="true"
-                :readonly="true"
-              />
-            </div>
+            {{ $tr('chat.info.dialog.users') }}
+
+            <ui3n-button
+              v-if="isUserAdmin"
+              type="secondary"
+              size="small"
+              :class="$style.chatInfoDialogContentTitleBtn"
+              @click="openEditMode"
+            >
+              {{ $tr('chat.info.dialog.add.members.btn') }}
+            </ui3n-button>
           </div>
-        </div>
-      </template>
 
-      <template v-else>
-        <div class="chat-info-dialog__body">
-          <div class="chat-info-dialog__users">
-            <div class="chat-info-dialog__users-toolbar">
-              <div class="chat-info-dialog__users-title">
-                <ui3n-icon
-                  icon="person"
-                  width="20"
-                  height="20"
-                  color="var(--black-90)"
-                />
-                {{ $tr('chat.info.dialog.update.members.btn.text') }}
-              </div>
-            </div>
-            <ui3n-input
-              v-model:value="userSearch"
-              icon="round-search"
-              clearable
-              :placeholder="$tr('chat.info.dialog.search.input.placeholder')"
-              @focus="showAvatar = false"
+          <ui3n-input
+            v-model="memberSearch"
+            icon="round-search"
+            clearable
+            :class="$style.chatInfoDialogContentSearch"
+            :placeholder="$tr('chat.info.dialog.search.input.placeholder')"
+          />
+
+          <div :class="$style.chatInfoDialogUserList">
+            <contact-list
+              :contact-list="filteredMembers"
+              :without-anchor="true"
+              :readonly="true"
             />
-
-            <div class="chat-info-dialog__users-list">
-              <contact-list
-                :contact-list="allContact"
-                :search-text="userSearch"
-                :without-anchor="true"
-                :selected-contacts="selectedUsers"
-                :non-selectable-contacts="nonSelectableUsers"
-                @select="selectUsers"
-              />
-            </div>
           </div>
         </div>
       </template>
     </div>
 
-    <div class="chat-info-dialog__actions">
-      <ui3n-button
-        color="transparent"
-        text-color="var(--blue-main, #0090ec)"
-        :class="{ 'chat-info-dialog__btn--hidden' : showAvatar }"
-        @click="back"
-      >
-        {{ $tr('chat.info.dialog.btn.back.text') }}
-      </ui3n-button>
+    <div :class="$style.chatInfoDialogActions">
+      <template v-if="editMembersMode">
+        <ui3n-button
+          type="secondary"
+          @click="back"
+        >
+          {{ $tr('chat.info.dialog.btn.back.text') }}
+        </ui3n-button>
 
-      <ui3n-button
-        v-if="!editMembersMode"
-        color="transparent"
-        text-color="var(--blue-main, #0090ec)"
-        @click="closeDialog"
-      >
-        {{ $tr('chat.info.dialog.btn.close.text') }}
-      </ui3n-button>
+        <ui3n-button
+          :disabled="addBtnDisable"
+          @click="_updateMembers"
+        >
+          {{ $tr('chat.info.dialog.btn.update.text') }}
+        </ui3n-button>
+      </template>
 
-      <ui3n-button
-        v-else
-        :disabled="addBtnDisable"
-        @click="_updateMembers"
-      >
-        {{ $tr('chat.info.dialog.btn.update.text') }}
-      </ui3n-button>
+      <template v-else>
+        <span />
+
+        <ui3n-button
+          type="secondary"
+          @click="closeDialog"
+        >
+          {{ capitalize($tr('chat.info.dialog.btn.close.text')) }}
+        </ui3n-button>
+      </template>
     </div>
   </div>
 </template>
 
-<style lang="scss" scoped>
-  @import "../../assets/styles/mixins";
+<style lang="scss" module>
+.chatInfoDialog {
+  --chat-info-dialog-header-height: 128px;
+  --chat-info-dialog-actions-height: 64px;
 
-  .chat-info-dialog {
-    --button-mini-font-size: var(--font-12);
-    --button-primary-color: var(--blue-main);
+  position: relative;
+  width: calc(var(--column-size) * 4);
+  height: calc(var(--column-size) * 5);
+  background-color: var(--color-bg-block-primary-default);
+  border-radius: var(--spacing-s);
+}
 
-    position: relative;
-    width: calc(var(--column-size) * 4);
-    height: calc(var(--column-size) * 5);
-    background-color: var(--system-white);
-    border-radius: var(--base-size);
+.chatInfoDialogBody {
+  position: relative;
+  width: 100%;
+  height: calc(100% - var(--chat-info-dialog-actions-height));
+  overflow: hidden;
+}
 
-    &__title {
-      display: flex;
-      width: 100%;
-      justify-content: flex-start;
-      align-items: center;
-      padding:
-        calc(var(--base-size) * 2)
-        calc(var(--base-size) * 3)
-        calc(var(--base-size) * 2 - 1px)
-        calc(var(--base-size) * 2);
-      font-size: var(--font-13);
-      font-weight: 600;
-      color: var(--black-90);
-      line-height: var(--font-16);
-      border-bottom: 1px solid var(--gray-50);
+.chatInfoDialogActions {
+  position: relative;
+  width: 100%;
+  height: var(--chat-info-dialog-actions-height);
+  padding: 0 var(--spacing-m);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--color-border-block-primary-default);
 
-      .ui3n-button {
-        position: absolute;
-        right: var(--half-size);
-        padding: 2px;
-      }
-    }
-
-    &__content {
-      position: relative;
-      width: 100%;
-      height: calc(100% - calc(var(--base-size) * 13) - var(--half-size));
-      margin-bottom: var(--half-size);
-
-      &--without-avatar {
-        .chat-info-dialog__body {
-          height: 100%;
-        }
-      }
-    }
-
-    &__info {
-      position: relative;
-      width: 100%;
-      height: calc(var(--base-size) * 12);
-      display: flex;
-      justify-content: flex-start;
-      align-items: center;
-      padding: calc(var(--base-size) * 2);
-      border-bottom: 1px solid var(--gray-50);
-
-      &-content {
-        position: relative;
-        margin-left: var(--base-size);
-      }
-    }
-
-    &__name {
-      display: block;
-      font-size: var(--font-14);
-      line-height: var(--font-24);
-      font-weight: 500;
-      color: var(--black-90);
-    }
-
-    &__text {
-      display: block;
-      font-size: var(--font-11);
-      line-height: var(--font-16);
-      font-weight: 500;
-      color: var(--black-30);
-    }
-
-    &__body {
-      position: relative;
-      width: 100%;
-      height: calc(100% - var(--base-size) * 12);
-      padding: calc(var(--base-size) * 2) calc(var(--base-size) * 2) var(--base-size);
-    }
-
-    &__users {
-      position: relative;
-      width: 100%;
-      height: 100%;
-
-      &-toolbar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: var(--base-size);
-      }
-
-      &-title {
-        display: flex;
-        justify-content: flex-start;
-        align-items: center;
-        margin-right: var(--half-size);
-        font-size: var(--font-14);
-        font-weight: 500;
-        color: var(--black-90);
-        text-transform: capitalize;
-
-        .iconify {
-          margin-right: 5px;
-        }
-      }
-
-      &-list {
-        position: relative;
-        width: 100%;
-        margin-top: var(--half-size);
-        height: calc(100% - var(--base-size) * 8 - var(--half-size));
-        overflow-y: auto;
-      }
-    }
-
-    &__actions {
-      position: relative;
-      display: flex;
-      width: 100%;
-      height: calc(var(--base-size) * 7 - 1px);
-      justify-content: space-between;
-      align-items: center;
-      border-top: 1px solid var(--gray-50);
-      padding: 0 calc(var(--base-size) * 2);
-
-      .ui3n-button {
-        text-transform: capitalize;
-      }
-    }
-
-    &__btn {
-      &--hidden {
-        pointer-events: none;
-        opacity: 0;
-        cursor: default;
-      }
-    }
+  button {
+    text-transform: capitalize;
   }
+}
+
+.chatInfoDialogHeader {
+  position: relative;
+  width: 100%;
+  height: var(--chat-info-dialog-header-height);
+  padding: 0 var(--spacing-m);
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  column-gap: var(--spacing-s);
+  border-bottom: 1px solid var(--color-border-block-primary-default);
+}
+
+.chatInfoDialogHeaderText {
+  position: relative;
+  flex-grow: 1;
+}
+
+.chatInfoDialogHeaderName {
+  display: block;
+  font-size: var(--font-14);
+  line-height: var(--font-24);
+  font-weight: 500;
+  color: var(--color-text-control-primary-default);
+}
+
+.chatInfoDialogHeaderUser {
+  display: block;
+  font-size: var(--font-11);
+  line-height: var(--font-16);
+  font-weight: 500;
+  color: var(--color-text-control-secondary-default);
+}
+
+.chatInfoDialogContent {
+  position: relative;
+  width: 100%;
+  height: calc(100% - var(--chat-info-dialog-header-height));
+}
+
+.chatInfoDialogContentTitle {
+  position: relative;
+  width: 100%;
+  padding: var(--spacing-m);
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  column-gap: var(--spacing-xs);
+  font-size: var(--font-16);
+  font-weight: 500;
+  color: var(--color-text-block-primary-default);
+  text-transform: capitalize;
+}
+
+.chatInfoDialogContentTitleBtn {
+  position: absolute;
+  right: var(--spacing-m);
+}
+
+.chatInfoDialogContentSearch {
+  width: calc(100% - var(--spacing-l));
+  margin: 0 auto var(--spacing-m);
+}
+
+.chatInfoDialogUserList {
+  position: relative;
+  width: 100%;
+  padding: 0 var(--spacing-m);
+  height: calc(100% - 112px);
+  overflow-y: auto;
+}
 </style>

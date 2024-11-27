@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,141 +16,122 @@
 -->
 
 <script lang="ts" setup>
-  import { computed, toRefs } from 'vue'
-  import { size } from 'lodash'
-  import { useChatsStore } from '../../store'
-  import { chatMenuItems } from '../../constants'
-  import { Ui3nButton, Ui3nMenu, Ui3nIcon } from '@v1nt1248/3nclient-lib'
+import { computed, inject } from 'vue';
+import { storeToRefs } from 'pinia';
+import size from 'lodash/size';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { useChatsStore } from '@main/store';
+import { chatMenuItems } from '@main/constants';
+import { Ui3nButton, Ui3nMenu, Ui3nIcon } from '@v1nt1248/3nclient-lib';
 
-  const emit = defineEmits(['select:action'])
-  const { currentChat } = toRefs(useChatsStore())
+const emit = defineEmits(['select:action']);
 
-  const chatType = computed(() => {
-    const currentChatValue = currentChat.value()
-    const { members = [] } = currentChatValue || {}
-    return size(members) > 2 ? 'group' : 'single'
-  })
-  const availableMenuItems = computed(() => chatMenuItems.filter(i => i.chatTypes.includes(chatType.value)))
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const { currentChat } = storeToRefs(useChatsStore());
 
-  const selectAction = (compositeAction: string) => {
-    emit('select:action', compositeAction)
-  }
+const chatType = computed(() => {
+  const currentChatValue = currentChat.value();
+  const { members = [] } = currentChatValue || {};
+  return size(members) > 2 ? 'group' : 'single';
+});
+
+const availableMenuItems = computed(() => chatMenuItems.filter(i => i.chatTypes.includes(chatType.value)));
+
+function selectAction(compositeAction: string) {
+  emit('select:action', compositeAction);
+}
 </script>
 
 <template>
-  <div class="chat-header-actions">
-    <ui3n-menu
-      :offset-y="4"
-      :offset-x="-40"
+  <ui3n-menu
+    :offset-y="4"
+    :offset-x="-40"
+  >
+    <ui3n-button
+      type="custom"
+      color="var(--color-bg-button-tritery-default)"
+      text-color="var(--color-text-button-tritery-default)"
+      icon="outline-arrow-drop-down"
+      icon-size="16"
+      icon-color="var(--color-icon-button-tertiary-default)"
+      icon-posizion="right"
     >
-      <ui3n-button
-        color="var(--gray-50)"
-        text-color="var(--black-90)"
-        class="chat-header-actions-btn"
-      >
-        Actions
-        <ui3n-icon
-          icon="arrow-drop-down"
-          width="16"
-          height="16"
-          color="var(--black-90)"
-        />
-      </ui3n-button>
+      {{ $tr('chat.header.actions.btn') }}
+    </ui3n-button>
 
-      <template #menu>
-        <div class="chat-header-actions__menu">
-          <div
-            v-for="item in availableMenuItems"
-            :key="item.icon"
-            :class="[
-              'chat-header-actions__menu-item',
-              {
-                'chat-header-actions__menu-item--margin': item.margin,
-                'chat-header-actions__menu-item--accent': item.isAccent,
-                'chat-header-actions__menu-item--disabled': item.disabled,
-              },
-            ]"
-            v-on="item.disabled ? {} : { click: () => selectAction(item.action) }"
-          >
-            <ui3n-icon
-              :icon="item.icon"
-              width="12"
-              height="12"
-            />
-            {{ item.text }}
-          </div>
+    <template #menu>
+      <div :class="$style.chatHeaderActionsMenu">
+        <div
+          v-for="item in availableMenuItems"
+          :key="item.icon"
+          :class="[
+            $style.chatHeaderActionsMenuItem,
+            item.margin && $style.margin,
+            item.isAccent && $style.chatHeaderActionsMenuItemAccent,
+            item.disabled && $style.disabled,
+          ]"
+          v-on="item.disabled ? {} : { click: () => selectAction(item.action) }"
+        >
+          <ui3n-icon
+            :icon="item.icon"
+            width="12"
+            height="12"
+            :color="item.isAccent ? 'var(--warning-content-default)': 'var(--color-icon-control-primary-default)'"
+          />
+          {{ item.text }}
         </div>
-      </template>
-    </ui3n-menu>
-  </div>
+      </div>
+    </template>
+  </ui3n-menu>
 </template>
 
-<style lang="scss" scoped>
-  .chat-header-actions {
-    --button-normal-height: calc(var(--base-size) * 4);
-    --button-normal-font-size: var(--font-13);
-    --button-default-color: var(--gray-50);
-    --button-normal-padding: 0 var(--base-size);
+<style lang="scss" module>
+.chatHeaderActionsMenu {
+  --chat-header-menu-width: 145px;
 
-    .ui3n-button {
-      box-shadow: none;
+  position: relative;
+  width: var(--chat-header-menu-width);
+  background-color: var(--color-bg-control-secondary-default);
+  border-radius: var(--spacing-xs);
+  padding: var(--spacing-xs);
+}
 
-      .iconify {
-        position: relative;
-        top: 2px;
-        margin-left: var(--base-size);
-      }
-    }
+.chatHeaderActionsMenuItem {
+  position: relative;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  column-gap: var(--spacing-s);
+  padding: 0 var(--spacing-xs);
+  height: var(--spacing-ml);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-control-primary-default);
+  border-radius: 2px;
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--color-bg-control-primary-hover);
+    color: var(--color-text-control-accent-default);
   }
-</style>
+}
 
-<style lang="scss">
-  .chat-header-actions__menu {
-    background-color: var(--gray-50);
-    border-radius: var(--half-size);
-    padding: var(--half-size);
-    width: 145px;
+.chatHeaderActionsMenuItemAccent {
+  color: var(--warning-content-default);
 
-    &-item {
-      position: relative;
-      display: flex;
-      justify-content: flex-start;
-      align-items: center;
-      padding: 0 var(--half-size);
-      height: calc(var(--base-size) * 3);
-      font-size: 13px;
-      font-weight: 400;
-      color: var(--black-90);
-      border-radius: 2px;
-      cursor: pointer;
-
-      .iconify {
-        margin-right: var(--half-size);
-      }
-
-      &:hover {
-        color: var(--blue-main-120);
-        background-color: var(--blue-main-30);
-      }
-
-      &--accent {
-        color: var(--pear-100);
-
-        &:hover {
-          color: var(--pear-100);
-          background-color: var(--pear-30);
-        }
-      }
-
-      &--margin {
-        margin-top: var(--half-size);
-      }
-
-      &--disabled {
-        pointer-events: none;
-        opacity: 0.5;
-        cursor: default;
-      }
-    }
+  &:hover {
+    background-color: var(--warning-fill-hover);
+    color: var(--warning-content-default);
   }
+}
+
+.margin {
+  margin-top: var(--spacing-xs);
+}
+
+.disabled {
+  pointer-events: none;
+  opacity: 0.5;
+  cursor: default;
+}
 </style>

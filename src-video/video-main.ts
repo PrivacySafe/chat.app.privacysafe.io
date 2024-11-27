@@ -16,23 +16,38 @@
 */
 
 import { createApp } from 'vue';
-import VideoApp from './video-app.vue';
 import { createRouter, createWebHistory } from 'vue-router';
-import VASetup from './va-setup.vue';
-import Call from './call.vue';
-import GroupCall from './group-call.vue';
 import { createPinia } from 'pinia';
-import { VideoChat } from './video-component-srv';
-import { useStreamsStore } from './store/streams';
+import {
+  i18n,
+  I18nOptions,
+  vueBus,
+  VueEventBus,
+} from '@v1nt1248/3nclient-lib/plugins';
 
-VideoChat.startService()
-.then(srv => srv.initStore(useStreamsStore()))
+import '@v1nt1248/3nclient-lib/variables.css';
+import '@v1nt1248/3nclient-lib/style.css';
+import './assets/styles/video-chat.css';
+
+import { VideoChat } from './services/video-component-srv';
+import { useStreamsStore } from './store/streams';
+import { VideoAudioEvents } from '@video/services/events.ts';
+import VideoApp from './views/video-app.vue';
+import VASetup from './views/va-setup.vue';
+import Call from './views/call/call.vue';
+import GroupCall from './views/group-call.vue';
+
+import en from '@main/data/i18/en.json';
+
+const srvStart = VideoChat.startService();
 
 const app = createApp(VideoApp);
 const pinia = createPinia();
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    { path: '/', redirect: '/va-setup' },
+    { path: '/video-chat.html', redirect: '/va-setup' },
     {
       name: 'va-setup',
       path: '/va-setup',
@@ -47,13 +62,20 @@ const router = createRouter({
       name: 'group-call',
       path: '/group-call',
       component: GroupCall,
-    }
-  ]
+    },
+  ],
 });
 
 app
-.use(pinia)
-.use(router)
-.mount('#video-main');
+  .use(pinia)
+  .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
+  .use(vueBus)
+  .use(router)
+  .mount('#video-main');
 
-router.replace('va-setup');
+srvStart.then(srv => srv.attachToVue(
+  useStreamsStore(),
+  app.config.globalProperties.$emitter as VueEventBus<VideoAudioEvents>,
+));
+
+// router.replace('va-setup');

@@ -19,6 +19,7 @@ declare namespace web3n.shell.commands {
 		appDomain: string;
 		command: string;
 		cmdNotAllowed?: true;
+		cmdNotFound?: true;
 		callerNotAllowed?: true;
 	}
 

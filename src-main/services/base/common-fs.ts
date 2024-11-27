@@ -14,36 +14,36 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-export default class CommonFs<T extends 'local'|'synced'> {
-  private fsI: WritableFS | undefined = undefined
-  public readonly id: number = 0
-  public readonly fsName: string = ''
+export default class CommonFs<T extends 'local' | 'synced'> {
+  private fsI: web3n.files.WritableFS | undefined = undefined;
+  public readonly id: number = 0;
+  public readonly fsName: string = '';
 
   constructor(
     public name: string,
     public fsType: T,
   ) {
-    this.fsName = name
-    this.fsType = fsType
-    this.id = Date.now()
+    this.fsName = name;
+    this.fsType = fsType;
+    this.id = Date.now();
   }
 
-  public async getFs(): Promise<WritableFS|undefined> {
+  public async getFs(): Promise<web3n.files.WritableFS | undefined> {
     if (!this.fsI) {
-      await this.initFs()
+      await this.initFs();
     }
-    return this.fsI
+    return this.fsI;
   }
 
   public async initFs(): Promise<void> {
     if (this.fsName === undefined || this.fsName === null) {
-      throw new Error('FS name is undefined!')
+      throw new Error('FS name is undefined!');
     }
 
     if (this.fsType === 'local') {
-      this.fsI = await w3n.storage!.getAppLocalFS(this.fsName)
+      this.fsI = await w3n.storage!.getAppLocalFS(this.fsName);
     } else {
-      this.fsI = await w3n.storage!.getAppSyncedFS(this.fsName)
+      this.fsI = await w3n.storage!.getAppSyncedFS(this.fsName);
     }
   }
 }

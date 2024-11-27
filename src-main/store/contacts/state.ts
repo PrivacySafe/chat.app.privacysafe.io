@@ -1,5 +1,5 @@
-import { State } from './types'
+import type { State } from './types';
 
 export const state: State = {
   contactList: [],
-}
+};

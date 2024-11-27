@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,60 +16,60 @@
 -->
 
 <script lang="ts" setup>
-  import { computed } from 'vue'
-  import { emoticons, Ui3nClickOutside, Ui3nEmoji } from "@v1nt1248/3nclient-lib";
+import { computed } from 'vue';
+import { emoticons } from '@v1nt1248/3nclient-lib/utils';
+import { Ui3nClickOutside, Ui3nEmoji } from '@v1nt1248/3nclient-lib';
 
-  const vOnClickOutside = Ui3nClickOutside
+const vOnClickOutside = Ui3nClickOutside;
 
-  defineProps<{
-    open: boolean;
-  }>()
-  const emit = defineEmits(['close', 'select'])
+defineProps<{
+  open: boolean;
+}>();
+const emit = defineEmits(['close', 'select']);
 
-  const emoticonsByGroups = computed(() => {
-    return Object.keys(emoticons).reduce((res, id) => {
-      const { group, value } = emoticons[id]
-      if (!res[group]) {
-        res[group] = []
-      }
-      res[group].push({ id, value })
+const emoticonsByGroups = computed(() => {
+  return Object.keys(emoticons).reduce((res, id) => {
+    const { group, value } = emoticons[id];
+    if (!res[group]) {
+      res[group] = [];
+    }
+    res[group].push({ id, value });
 
-      return res
-    }, {} as Record<string, { id: string, value: string }[]>)
-  })
+    return res;
+  }, {} as Record<string, { id: string, value: string }[]>);
+});
 
-  const closeDialog = () => {
-    emit('close')
-  }
+function closeDialog() {
+  emit('close');
+}
 
-  const selectEmoticon = ({ id, value }: { id: string, value: string }) => {
-    emit('select', { id, value })
-    closeDialog()
-  }
+function selectEmoticon({ id, value }: { id: string, value: string }) {
+  emit('select', { id, value });
+  closeDialog();
+}
 </script>
 
 <template>
   <div
     v-if="open"
     v-on-click-outside="closeDialog"
-    class="emoticons-dialog"
+    :class="$style.emoticonsDialog"
   >
-    <div class="emoticons-dialog__body">
+    <div :class="$style.emoticonsDialogBody">
       <div
         v-for="group in Object.keys(emoticonsByGroups)"
         :key="group"
-        class="emoticons-dialog__group"
+        :class="$style.emoticonsDialogGroup"
       >
-        <h4 class="emoticons-dialog__group-name">
+        <h4 :class="$style.emoticonsDialogGroupName">
           {{ group }}
         </h4>
-        <div class="emoticons-dialog__group-body">
+        <div :class="$style.emoticonsDialogGroupBody">
           <ui3n-emoji
             v-for="emoticon in emoticonsByGroups[group]"
             :key="emoticon.id"
             :emoji="emoticon.id"
-            :size="20"
-            class="emoticons-dialog__emoji"
+            :size="24"
             @click="selectEmoticon({ id: emoticon.id, value: emoticon.value })"
           />
         </div>
@@ -78,70 +78,70 @@
   </div>
 </template>
 
-<style lang="scss" scoped>
-  @import "../../assets/styles/mixins";
+<style lang="scss" module>
+@use '../../assets/styles/mixins' as mixins;
 
-  .emoticons-dialog {
-    --emoticons-dialog-padding: calc(var(--base-size) * 1.5);
+.emoticonsDialog {
+  --emoticons-dialog-padding: calc(var(--spacing-s) * 1.5);
 
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  padding: var(--emoticons-dialog-padding) var(--spacing-s) var(--emoticons-dialog-padding);
+  background-color: var(--color-bg-block-primary-default);
+  border-radius: var(--spacing-xs);
+  bottom: 100%;
+  left: calc(var(--spacing-xs) * 1.5);
+  z-index: 5;
+  @include mixins.block-shadow();
+
+  &::before,
+  &::after {
+    content: ' ';
     position: absolute;
-    width: 200px;
-    height: 200px;
-    padding: var(--emoticons-dialog-padding) var(--base-size) var(--emoticons-dialog-padding);
-    background-color: var(--system-white);
-    border-radius: var(--half-size);
-    bottom: 100%;
-    left: calc(var(--half-size) * 1.5);
-    z-index: 5;
-    @include block-shadow;
-
-    &__body {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      overflow-x: hidden;
-      overflow-y: auto;
-
-      .emoticons-dialog__group:last-child {
-        padding-bottom: 0;
-      }
-    }
-
-    &__group {
-      padding-bottom: var(--base-size);
-
-      &-name {
-        font-size: var(--font-12);
-        margin: 0 0 var(--base-size);
-      }
-
-      &-body {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        grid-row-gap: var(--base-size);
-      }
-    }
-
-    &::before,
-    &::after {
-      content: ' ';
-      position: absolute;
-      width: 0;
-      height: 0;
-    }
-
-    &::before {
-      left: 8px;
-      bottom: -12px;
-      border: 6px solid;
-      border-color: var(--black-30) transparent transparent transparent;
-    }
-
-    &::after {
-      left: 9px;
-      bottom: -10px;
-      border: 5px solid;
-      border-color: var(--system-white) transparent transparent transparent;
-    }
+    width: 0;
+    height: 0;
   }
+
+  &::before {
+    left: 8px;
+    bottom: -12px;
+    border: 6px solid;
+    border-color: var(--color-text-chat-bubble-other-default) transparent transparent transparent;
+  }
+
+  &::after {
+    left: 9px;
+    bottom: -10px;
+    border: 5px solid;
+    border-color: var(--color-bg-block-primary-default) transparent transparent transparent;
+  }
+}
+
+.emoticonsDialogBody {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+
+  .emoticonsDialogGroup:last-child {
+    padding-bottom: 0;
+  }
+}
+
+.emoticonsDialogGroup {
+  padding-bottom: var(--spacing-s);
+}
+
+.emoticonsDialogGroupName {
+  font-size: var(--font-12);
+  margin: 0 0 var(--spacing-s);
+}
+
+.emoticonsDialogGroupBody {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-row-gap: var(--spacing-s);
+}
 </style>

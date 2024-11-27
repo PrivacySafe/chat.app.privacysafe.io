@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,27 +16,25 @@
 -->
 
 <script lang="ts" setup>
-  import ContactIcon from './contact-icon.vue'
+import type { PersonView } from '~/index';
+import ContactIcon from './contact-icon.vue';
 
-  defineProps<{
-    contact: PersonView & { displayName: string };
-    selected: boolean;
-    withoutAnchor: boolean;
-    readonly: boolean;
-  }>()
+defineProps<{
+  contact: PersonView & { displayName: string };
+  selected: boolean;
+  withoutAnchor: boolean;
+  readonly: boolean;
+}>();
 
-  const emit = defineEmits(['click'])
+const emit = defineEmits(['click']);
 </script>
 
 <template>
   <div
     :class="[
-      'contact-list-item',
-      {
-        'contact-list-item--selected': selected,
-        'contact-list-item--without-anchor': withoutAnchor,
-        'contact-list-item--readonly': readonly,
-      },
+      $style.contactListItem,
+      withoutAnchor && $style.withoutAnchor,
+      readonly && $style.readonly,
     ]"
     v-on="readonly ? {} : { click: () => emit('click', contact.id) }"
   >
@@ -46,52 +44,52 @@
       :selected="selected"
       :readonly="true"
     />
-    <span
-      :class="[
-        'contact-list-item__name',
-        { 'contact-list-item__name--selected': selected },
-      ]"
-    >
+    <span :class="[$style.name, selected && $style.nameSelected]">
       {{ contact.displayName }}
     </span>
   </div>
 </template>
 
-<style lang="scss" scoped>
-  @import "../../assets/styles/mixins";
+<style lang="scss" module>
+@use '../../assets/styles/mixins' as mixins;
 
-  .contact-list-item {
-    position: relative;
-    width: 100%;
-    height: calc(var(--base-size) * 5.5);
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    padding: 0 calc(var(--base-size) * 2);
-    font-size: var(--font-14);
-    font-weight: 500;
-    color: var(--black-90, #212121);
+.contactListItem {
+  position: relative;
+  width: 100%;
+  height: var(--spacing-xxl);
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  column-gap: var(--spacing-s);
+  padding: 0 var(--spacing-m);
+  font-size: var(--font-14);
+  font-weight: 500;
+  color: var(--color-text-control-primary-default);
 
-    &--without-anchor {
-      padding: 0;
-    }
+  &:not(.readonly) {
+    cursor: pointer;
 
-    &:not(.contact-list-item--readonly) {
-      cursor: pointer;
-
-      &:hover {
-        background-color: var(--blue-main-30, #b0dafc);
-      }
-    }
-
-    &__name {
-      display: inline-block;
-      margin-left: var(--base-size);
-      @include text-overflow-ellipsis(calc(100% - calc(var(--base-size) * 5)));
-
-      &--selected {
-        color: var(--blue-main, #0090ec);
-      }
+    &:hover {
+      background-color: var(--color-bg-chat-bubble-general-bg);
     }
   }
+}
+
+.withoutAnchor {
+  padding: 0;
+}
+
+.readonly {
+  cursor: default;
+}
+
+.name {
+  display: inline-block;
+  margin-left: var(--spacing-s);
+  @include mixins.text-overflow-ellipsis(calc(100% - calc(var(--spacing-s) * 5.5)));
+}
+
+.nameSelected {
+  color: var(--color-text-control-accent-default);
+}
 </style>

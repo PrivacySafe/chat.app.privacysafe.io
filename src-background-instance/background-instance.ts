@@ -15,27 +15,26 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { setupAndStartChatDeliveryService } from "./chat-delivery-srv.ts"
-import { setupAndStartAppChatsInternalService } from "./chats-internal-srv.ts"
-import { setupGlobalReportingOfUnhandledErrors } from "./libs/error-handling.ts"
-import { setupAndStartVideoGUIOpener } from "./video-gui-controller.ts"
-import { setupWebRTCSignalingPipe } from "./webrtc-messaging.ts"
+import { setupAndStartChatDeliveryService } from './chat-delivery-srv.ts';
+import { setupAndStartAppChatsInternalService } from './chats-internal-srv.ts';
+import { setupGlobalReportingOfUnhandledErrors } from './libs/error-handling.ts';
+import { setupAndStartVideoGUIOpener } from './video-gui-controller.ts';
 
-setupGlobalReportingOfUnhandledErrors(true)
+setupGlobalReportingOfUnhandledErrors(true);
 
 try {
 
-  const ownAddr = await w3n.mailerid!.getUserId()
+  const ownAddr = await w3n.mailerid!.getUserId();
 
-  const chatsSrv = await setupAndStartAppChatsInternalService()
+  const chatsSrv = await setupAndStartAppChatsInternalService();
 
-  const webrtcSignalsHandler = setupAndStartVideoGUIOpener(ownAddr, chatsSrv)
+  const webrtcSignalsHandler = setupAndStartVideoGUIOpener(ownAddr, chatsSrv);
 
   const deliverySrv = await setupAndStartChatDeliveryService(
-    webrtcSignalsHandler
-  )
+    webrtcSignalsHandler,
+  );
 
 } catch (err) {
-  w3n.log?.('error', `Error in a startup of instance with main services for chat. Can't proceed, and will close the whole component.`, err)
-  setTimeout(() => w3n.closeSelf!(), 100)
+  w3n.log('error', `Error in a startup of instance with main services for chat. Can't proceed, and will close the whole component.`, err);
+  setTimeout(() => w3n.closeSelf!(), 100);
 }

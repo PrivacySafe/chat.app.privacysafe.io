@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,95 +16,110 @@
 -->
 
 <script lang="ts" setup>
-  import { videoOpenerProxy } from '../../services/services-provider';
-  import { useSharedRef } from '../../router';
+import { computed, inject } from 'vue';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { Ui3nButton } from '@v1nt1248/3nclient-lib';
+import { videoOpenerProxy } from '@main/services/services-provider';
+import { getContactName } from '@main/helpers/contacts.helper';
+import ChatAvatar from '../chat/chat-avatar.vue';
 
-  const props = defineProps<{
-    withoutOverlay?: boolean
-  }>()
-  const emit = defineEmits(['close'])
+interface IncomingCallDialogProps {
+  chatId: string;
+  peerAddress: string;
+}
 
-  const incomingCalls = useSharedRef('incomingCalls')
+interface IncomingCallDialogEmits {
+  (ev: 'close'): void;
+}
 
-  function dismissAllIncomingCalls() {
-    incomingCalls.value = []
-  }
+const props = defineProps<IncomingCallDialogProps>();
 
-  async function joinCall() {
-    const callDetails = incomingCalls.value[0]
-    await videoOpenerProxy.joinCallInRoom(callDetails)
-    dismissAllIncomingCalls()
-  }
+const emits = defineEmits<IncomingCallDialogEmits>();
 
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+
+const user = computed(() => getContactName(props.peerAddress));
+
+async function joinCall() {
+  await videoOpenerProxy.joinCallInRoom({ chatId: props.chatId, peerAddress: props.peerAddress });
+  emits('close');
+}
 </script>
 
 <template>
-  <div
-    :class="[
-      'chat-create-dialog__wrapper',
-      { 'chat-create-dialog__wrapper--without-overlay': withoutOverlay }
-    ]"
-    @click.prevent.self="dismissAllIncomingCalls"
-  >
-    <div class="chat-create-dialog__body">
-      <div class="chat-create-dialog__top">
-        <h3>incoming call</h3>
-      </div>
+  <div :class="$style.incomingCallDialog">
+    <div :class="$style.user">
+      <chat-avatar
+        :size="180"
+        :name="user"
+      />
 
-      <img src="../../assets/images/incoming-ring.gif">
-      <p>Call from {{ incomingCalls[0].peerAddress }}</p>
-      <button @click="joinCall">☏ Join</button>
-      <span>&nbsp; &nbsp; &nbsp;</span>
-      <button @click="dismissAllIncomingCalls">Dismiss ✖️</button>
+      {{ user }}
+    </div>
 
+    <div :class="$style.text">
+      {{ $tr('chat.incoming.dialog.title') }} ...
+    </div>
+
+    <div :class="$style.actions">
+      <ui3n-button
+        type="icon"
+        color="var(--error-content-default)"
+        icon="round-call-end"
+        @click="emits('close')"
+      />
+
+      <ui3n-button
+        type="icon"
+        color="var(--success-content-default)"
+        icon="round-phone"
+        @click="joinCall"
+      />
     </div>
   </div>
 </template>
 
-<style lang="scss">
-  @import "../../assets/styles/mixins";
+<style lang="scss" module>
+.incomingCallDialog {
+  position: relative;
+  height: 480px;
+  padding: var(--spacing-m) var(--spacing-s) var(--spacing-l);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+}
 
-  .chat-create-dialog__wrapper {
-    position: fixed;
-    z-index: 1000;
-    inset: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background-color: rgba(0, 0, 0, 0.5);
+.user {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  gap: var(--spacing-m);
+  padding-top: var(--spacing-m);
+  font-size: var(--font-16);
+  font-style: italic;
+  font-weight: 600;
+  color: var(--color-text-control-primary-default);
+}
 
-    .chat-create-dialog__body {
-      position: relative;
-      width: 380px;
-      height: 90%;
-      border-radius: var(--base-size);
-      background-color: var(--system-white, #fff);
-      text-align: center;
-    }
+.text {
+  text-align: center;
+  font-size: var(--font-16);
+  font-weight: 500;
+  color: var(--color-text-control-primary-default);
+}
 
-    &--without-overlay {
-      top: 5%;
-      bottom: 5%;
-      left: calc(50% - 190px);
-      width: 380px;
-      background-color: transparent;
-      border-radius: var(--base-size);
-      box-shadow: 0 2px 8px var(--black-30);
+.actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  column-gap: var(--spacing-xxl);
 
-      .chat-create-dialog__body {
-        width: 100%;
-        height: 100%;
-      }
-    }
+  button {
+    min-width: var(--spacing-xxl) !important;
+    width: var(--spacing-xxl) !important;
+    height: var(--spacing-xxl);
   }
-
-  .chat-create-dialog {
-    &__top {
-      position: relative;
-      width: 100%;
-      height: calc(var(--base-size) * 6);
-      border-bottom: 1px solid var(--gray-50, #f2f2f2);
-      align-items: center;
-    }
-  }
+}
 </style>

@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,22 +16,22 @@
 -->
 
 <script lang="ts" setup>
-  import { toRefs } from 'vue'
-  import { useRouter } from 'vue-router'
-  import { useChatsStore } from '../../store'
-  import ChatListItem from './chat-list-item.vue'
+import { useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
+import { useChatsStore } from '@main/store';
+import ChatListItem from './chat-list-item.vue';
 
-  const router = useRouter()
-  const { namedChatList } = toRefs(useChatsStore())
+const router = useRouter();
+const { namedChatList } = storeToRefs(useChatsStore());
 
-  const goChat = (ev: MouseEvent, chatId: string) => {
-    ev.preventDefault()
-    router.push(`/chats/${chatId}`)
-  }
+function goChat(ev: MouseEvent, chatId: string) {
+  ev.preventDefault();
+  router.push(`/chats/${chatId}`);
+}
 </script>
 
 <template>
-  <div class="chat-list">
+  <div :class="$style.chatList">
     <chat-list-item
       v-for="chat in namedChatList()"
       :key="chat.chatId"
@@ -41,19 +41,12 @@
   </div>
 </template>
 
-<style lang="scss" scoped>
-  .chat-list {
-    position: relative;
-    width: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
-
-    &__item {
-      position: relative;
-      width: 100%;
-      height: calc(var(--base-size) * 8);
-      display: flex;
-      padding: 0 calc(var(--base-size) * 2);
-    }
-  }
+<style lang="scss" module>
+.chatList {
+  position: relative;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 var(--spacing-xs);
+}
 </style>

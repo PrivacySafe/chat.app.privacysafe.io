@@ -16,7 +16,6 @@
 */
 
 /// <reference path="../core-defs/web3n.d.ts" />
-/// <reference path="./apps.d.ts" />
 /// <reference path="./shell.d.ts" />
 /// <reference path="./shell-dialogs.d.ts" />
 /// <reference path="./shell-notifications.d.ts" />
@@ -34,12 +33,28 @@ declare namespace web3n.caps {
 	 * to use it.
 	 */
 	interface W3N extends caps.common.W3N {
-		closeSelf?: () => void;
-		apps?: apps.Apps;
+
+		/**
+		 * closeSelf closes current component instance, which is self in the
+		 * context.
+		 */
+		closeSelf: () => void;
+
+		/**
+		 * myVersion returns version of current app.
+		 */
+		myVersion: () => Promise<string>;
+
+		// idea for lifecycle methods
+		// lifecycle: {
+		//   addListener: (event, hook) => void;
+		// };
+
 		logout?: Logout;
 		shell?: shell.ShellCAPs;
 		rpc?: rpc.RPC;
 		connectivity?: connectivity.Connectivity;
+
 	}
 
 	type Logout = (closePlatform: boolean) => Promise<void>;

@@ -92,7 +92,7 @@ declare namespace web3n.apps {
 		};
 	}
 
-	type DistAppFileContent = 'bin/zip' | 'bin/unpacked' | 'src/zip';	
+	type DistAppFileContent = 'bin/zip' | 'bin/unpacked' | 'src/zip';
 
 	interface DownloadProgress {
 		totalFiles: number;

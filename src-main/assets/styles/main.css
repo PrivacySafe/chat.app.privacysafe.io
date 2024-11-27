@@ -1,79 +1,36 @@
 @font-face {
-  font-family: OpenSans;
-  src: url("../fonts/OpenSans-Light.woff") format("woff");
+  font-family: Manrope, sans-serif;
+  src: url("../fonts/Manrope-Light.woff2") format("woff2");
   font-weight: 300;
   font-style: normal;
+  text-rendering: optimizelegibility;
 }
 @font-face {
-  font-family: OpenSans;
-  src: url("../fonts/OpenSans-LightItalic.woff") format("woff");
-  font-weight: 300;
-  font-style: italic;
-}
-@font-face {
-  font-family: OpenSans;
-  src: url("../fonts/OpenSans-Regular.woff") format("woff");
+  font-family: Manrope, sans-serif;
+  src: url("../fonts/Manrope-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
+  text-rendering: optimizelegibility;
 }
 @font-face {
-  font-family: OpenSans;
-  src: url("../fonts/OpenSans-Italic.woff") format("woff");
-  font-weight: 400;
-  font-style: italic;
-}
-@font-face {
-  font-family: OpenSans;
-  src: url("../fonts/OpenSans-SemiBold.woff") format("woff");
+  font-family: Manrope, sans-serif;
+  src: url("../fonts/Manrope-SemiBold.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
+  text-rendering: optimizelegibility;
 }
 @font-face {
-  font-family: OpenSans;
-  src: url("../fonts/OpenSans-SemiBoldItalic.woff") format("woff");
-  font-weight: 500;
-  font-style: italic;
-}
-@font-face {
-  font-family: OpenSans;
-  src: url("../fonts/OpenSans-Bold.woff") format("woff");
+  font-family: Manrope, sans-serif;
+  src: url("../fonts/Manrope-Bold.woff2") format("woff2");
   font-weight: 600;
   font-style: normal;
-}
-@font-face {
-  font-family: OpenSans;
-  src: url("../fonts/OpenSans-BoldItalic.woff") format("woff");
-  font-weight: 600;
-  font-style: italic;
-}
-
-:root {
-  --menu-bacgground-color: transparent;
-  --dialog-border-radius: 8px !important;
-  --dialog-title-padding: 0 !important;
-  --dialog-message-padding: 0 !important;
-  --dialog-actions-padding: 0 !important;
+  text-rendering: optimizelegibility;
 }
 
 html {
-  --half-size: 4px;
-  --base-size: 8px;
   --column-size: 95px;
-  --font-8: 8px;
-  --font-9: 9px;
-  --font-10: 10px;
-  --font-11: 11px;
-  --font-12: 12px;
-  --font-13: 13px;
-  --font-14: 14px;
-  --font-16: 16px;
-  --font-18: 18px;
-  --font-20: 20px;
-  --font-24: 24px;
-  --font-32: 32px;
 
   overflow: hidden;
-  font-family: OpenSans, sans-serif;
 }
 
 section,
@@ -83,121 +40,7 @@ div {
 
 #main {
   position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background-color: var(--system-white, #fff);
-}
-
-::-webkit-scrollbar-button {
-  background-image: url("");
-  background-repeat: no-repeat;
-  width: 4px;
-  height: 0;
-}
-
-::-webkit-scrollbar-track {
-  background-color: var(--black-30, #b3b3b3);
-}
-
-::-webkit-scrollbar-thumb {
-  border-radius: 2px;
-  height: 50px;
-  background-color: var(--gray-90, #444);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background-color: var(--black-90, #212121);
-}
-
-::-webkit-resizer {
-  background-image: url("");
-  background-repeat: no-repeat;
-  width: 4px;
-  height: 0;
-}
-
-::-webkit-scrollbar {
-  width: 4px;
-}
-
-/* overwriting CSS VARLET styles */
-.var-menu__menu {
-  border-radius: var(--half-size);
-}
-
-.var-dialog__popup {
-  position: relative;
-  max-height: 95%;
-  overflow: hidden;
-}
-
-/* other CSS style classes */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter,
-.fade-leave-active {
-  opacity: 0;
-}
-
-.notifications {
-  height: 90%;
-  top: 5% !important;
-  right: 2% !important;
-  overflow-y: auto;
-}
-
-.notification__success {
-  background-color: var(--green-grass-30, #bef2c1) !important;
-  color: var(--green-grass-100, #33c653) !important;
-}
-
-.notification__error {
-  background-color: var(--pear-30, #ffcfc8) !important;
-  color: var(--pear-100, #f75d53) !important;
-}
-
-.notification__info {
-  background-color: var(--blue-main-30, #b0dafc) !important;
-  color: var(--blue-main-120, #0065b3) !important;
-}
-
-.notification .action {
-  color: var(--blue-main, #0090ec) !important;
-}
-
-.n-tooltip--present {
-  --tooltip-max-width: 400px;
-}
-
-.n-tooltip--present::before {
-  /* needed - do not touch */
-  content: attr(data-tooltip);
-  position: absolute;
-  opacity: 0;
-  max-width: var(--tooltip-max-width);
-  word-break: break-word;
-
-  /* customizable */
-  transition: all 0.15s ease;
-  padding: 5px 10px;
-  font-size: 14px;
-  line-height: 1.4;
-  color: #fff;
-  border-radius: 4px;
-
-  /* box-shadow: 2px 2px 1px silver; */
-}
-
-.n-tooltip--present:hover::before {
-  /* needed - do not touch */
-  opacity: 1;
-
-  /* customizable */
-  background-color: var(--black-30, #b3b3b3);
-  margin-top: -50px;
+  inset: 0;
+  background-color: var(--color-bg-block-primary-default);
+  font-family: Manrope, sans-serif;
 }

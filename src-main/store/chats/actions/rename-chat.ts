@@ -1,24 +1,25 @@
-import { without } from 'lodash'
-import { ChatsActions } from './types'
-import { appChatsSrvProxy } from '../../../services/services-provider'
-import { chatIdLength } from '../../../constants'
-import { useAppStore } from '../..'
-import { getRandomId } from '@v1nt1248/3nclient-lib'
+import without from 'lodash/without';
+import type { ChatsActions } from './types';
+import { appChatsSrvProxy } from '@main/services/services-provider';
+import { chatIdLength } from '@main/constants';
+import { useAppStore } from '@main/store';
+import { getRandomId } from '@v1nt1248/3nclient-lib/utils';
+import type { ChatView, ChatMessageView } from '~/index';
 
-export const renameChat: ChatsActions['renameChat'] = async function (this, chat, newChatName) {
-  const appStore = useAppStore()
-  const me = appStore.user
+export const renameChat: ChatsActions['renameChat'] = async function(this, chat, newChatName) {
+  const appStore = useAppStore();
+  const me = appStore.user;
   const updatedChat: ChatView = {
     chatId: chat.chatId,
     name: newChatName,
     members: chat.members,
     admins: chat.admins,
     createdAt: chat.createdAt,
-  }
-  await appChatsSrvProxy.updateChat(updatedChat)
-  this.chatList[chat.chatId].name = newChatName
+  };
+  await appChatsSrvProxy.updateChat(updatedChat);
+  this.chatList[chat.chatId].name = newChatName;
 
-  const chatMessageId = getRandomId(chatIdLength)
+  const chatMessageId = getRandomId(chatIdLength);
   const msgId = await this.sendSystemMessage({
     chatId: chat.chatId,
     chatMessageId,
@@ -26,7 +27,7 @@ export const renameChat: ChatsActions['renameChat'] = async function (this, chat
     event: 'update:chatName',
     value: { name: newChatName },
     displayable: true,
-  })
+  });
   const msgView: ChatMessageView<'outgoing'> = {
     msgId,
     attachments: [],
@@ -39,10 +40,10 @@ export const renameChat: ChatsActions['renameChat'] = async function (this, chat
     initialMessageId: null,
     timestamp: Date.now(),
     status: 'received',
-  }
+  };
 
-  await appChatsSrvProxy.upsertMessage(msgView)
+  await appChatsSrvProxy.upsertMessage(msgView);
   if (chat.chatId === this.currentChatId) {
-    this.currentChatMessages.push(msgView)
+    this.currentChatMessages.push(msgView);
   }
-}
+};

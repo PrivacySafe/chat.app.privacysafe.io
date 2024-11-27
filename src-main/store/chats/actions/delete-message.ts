@@ -1,38 +1,38 @@
-import { without } from 'lodash'
-import { useAppStore } from '../..'
-import { ChatsActions } from './types'
-import { deleteChatMessage } from '../../helpers/delete-chat-message.helper'
+import without from 'lodash/without';
+import { useAppStore } from '@main/store';
+import type { ChatsActions } from './types';
+import { deleteChatMessage } from '@main/store/utils/delete-chat-message.helper';
 
-export const deleteMessage: ChatsActions['deleteMessage'] = async function (this, chatMsgId, deleteForEveryone) {
+export const deleteMessage: ChatsActions['deleteMessage'] = async function(this, chatMsgId, deleteForEveryone) {
   if (!chatMsgId) {
-    return
+    return;
   }
 
-  const appStore = useAppStore()
-  const message = this.currentChatMessages.find(m => m.chatMessageId === chatMsgId)
+  const appStore = useAppStore();
+  const message = this.currentChatMessages.find(m => m.chatMessageId === chatMsgId);
 
   if (!message) {
     appStore.$createNotice({
       type: 'error',
       content: appStore.$i18n.tr('chat.message.delete.error.text'),
-    })
-    return
+    });
+    return;
   }
 
-  const { members = [], chatId } = this.currentChat()!
-  await deleteChatMessage({ message, chatMsgId })
-  await this.getChat(chatId)
+  const { members = [], chatId } = this.currentChat()!;
+  await deleteChatMessage({ message, chatMsgId });
+  await this.getChat(chatId);
 
   if (!deleteForEveryone) {
-    return
+    return;
   }
 
-  const recipients = without(members, appStore.user)
+  const recipients = without(members, appStore.user);
   this.sendSystemMessage({
     chatId,
     chatMessageId: chatMsgId,
     recipients,
     event: 'delete:message',
     value: { chatMessageId: chatMsgId },
-  })
-}
+  });
+};

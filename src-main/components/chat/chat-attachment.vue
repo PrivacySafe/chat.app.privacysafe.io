@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,15 +16,15 @@
 -->
 
 <script lang="ts" setup>
-  import { Ui3nChip, Ui3nIcon } from '@v1nt1248/3nclient-lib'
+import { Ui3nChip, Ui3nIcon } from '@v1nt1248/3nclient-lib';
 
-  defineProps<{
-    name: string;
-    size: number;
-    deletable?: boolean;
-  }>()
+defineProps<{
+  name: string;
+  size: number;
+  deletable?: boolean;
+}>();
 
-  const emits = defineEmits(['delete'])
+const emits = defineEmits(['delete']);
 </script>
 
 <template>
@@ -35,7 +35,7 @@
   >
     <template #left>
       <ui3n-icon
-        icon="attach-file"
+        icon="round-attach-file"
         width="12"
         height="12"
       />
@@ -44,11 +44,11 @@
   </ui3n-chip>
 </template>
 
-<style lang="scss" scoped>
-  .chat-attachment {
-    --chip-default-color: var(--gray-50);
+<style lang="scss" module>
+.chatAttachment {
+  --chip-default-color: var(--color-icon-chat-bubble-user-default);
 
-    margin: 0 var(--half-size) var(--half-size) 0;
-    cursor: pointer;
-  }
+  margin: 0 var(--spacing-xs) var(--spacing-xs) 0;
+  cursor: pointer;
+}
 </style>

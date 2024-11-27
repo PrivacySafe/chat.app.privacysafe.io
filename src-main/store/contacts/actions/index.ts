@@ -1,15 +1,16 @@
-import { ContactsActions } from './types'
-import { get } from 'lodash'
-import { appContactsSrvProxy } from '../../../services/services-provider'
-import { randomStr } from '../../../libs/random'
+import { get } from 'lodash';
+import { getRandomId } from '@v1nt1248/3nclient-lib/utils';
+import type { ContactsActions } from './types';
+import { appContactsSrvProxy } from '@main/services/services-provider';
+import type { PersonView, Person } from '~/index';
 
 export const actions: ContactsActions = {
   async fetchContactList(): Promise<Array<PersonView & { displayName: string }>> {
-    let contactList: PersonView[] | undefined
+    let contactList: PersonView[] | undefined;
     try {
-      contactList = await appContactsSrvProxy.getContactList()
+      contactList = await appContactsSrvProxy.getContactList();
     } catch (e) {
-      console.error(e)
+      console.error(e);
     }
 
     this.contactList = contactList!
@@ -17,20 +18,20 @@ export const actions: ContactsActions = {
         ...contact,
         displayName: get(contact, 'name') || get(contact, 'mail') || ' ',
       }))
-      .sort((a, b) => (a.displayName > b.displayName ? 1 : -1))
+      .sort((a, b) => (a.displayName > b.displayName ? 1 : -1));
 
-    return this.contactList
+    return this.contactList;
   },
 
   async addContact(this, mail: string): Promise<void> {
     const person: Person = {
-      id: randomStr(6),
+      id: getRandomId(6),
       name: '',
       mail,
       notice: '',
       phone: '',
-    }
-    await appContactsSrvProxy.upsertContact(person)
-    await this.fetchContactList()
+    };
+    await appContactsSrvProxy.upsertContact(person);
+    await this.fetchContactList();
   },
-}
+};

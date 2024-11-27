@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,23 +16,26 @@
 -->
 
 <script lang="ts" setup>
-  import { ref } from 'vue'
-  import { Ui3nCheckbox } from '@v1nt1248/3nclient-lib'
+import { ref } from 'vue';
+import { Ui3nCheckbox } from '@v1nt1248/3nclient-lib';
 
-  const emits = defineEmits(['select'])
-  const deleteForEveryone = ref(false)
+const emits = defineEmits(['select']);
+const deleteForEveryone = ref(false);
 
-  const onFlagChange = (val: boolean | string | number) => emits('select', val)
+function onFlagChange(val: boolean | string | number) {
+  emits('select', val);
+}
 </script>
 
 <template>
-  <div class="message-delete-dialog">
-    <div class="message-delete-dialog__text">
+  <div :class="$style.messageDeleteDialog">
+    <div :class="$style.messageDeleteDialogText">
       {{ $tr('chat.message.delete.dialog.text') }}
     </div>
+
     <ui3n-checkbox
       v-model="deleteForEveryone"
-      class="message-delete-dialog__checkbox"
+      :class="$style.messageDeleteDialogCheckbox"
       @change="onFlagChange"
     >
       {{ $tr('chat.message.delete.dialog.additional') }}
@@ -40,20 +43,20 @@
   </div>
 </template>
 
-<style lang="scss" scoped>
-  .message-delete-dialog {
-    padding: 32px 16px;
+<style lang="scss" module>
+.messageDeleteDialog {
+  padding: var(--spacing-l) var(--spacing-m);
+}
 
-    &__text {
-      font-size: var(--font-12);
-      font-weight: 400;
-      line-height: var(--font-16);
-      color: var(--black-90);
-      margin-bottom: var(--half-size);
-    }
+.messageDeleteDialogText {
+  font-size: var(--font-12);
+  font-weight: 400;
+  line-height: var(--font-16);
+  color: var(--color-text-block-primary-default);
+  margin-bottom: var(--spacing-s);
+}
 
-    &__checkbox {
-      left: -5px;
-    }
-  }
+.messageDeleteDialogCheckbox {
+  --ui3n-checkbox-text-weight: 600;
+}
 </style>

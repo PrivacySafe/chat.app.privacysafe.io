@@ -1,17 +1,24 @@
-import { ChatsActions } from './types'
-import { appChatsSrvProxy } from '../../../services/services-provider'
+import type { ChatsActions } from './types';
+import { appChatsSrvProxy } from '@main/services/services-provider';
+import type { ChatMessageView } from '~/index';
 
-export const handleUpdateChatName: ChatsActions['handleUpdateChatName'] = async function (this, { chatId, chatMessageId, value, msgId, sender = '' }) {
+export const handleUpdateChatName: ChatsActions['handleUpdateChatName'] = async function(this, {
+  chatId,
+  chatMessageId,
+  value,
+  msgId,
+  sender = '',
+}) {
   if (!chatId || !msgId || !chatMessageId) {
-    return
+    return;
   }
 
-  const chat = await appChatsSrvProxy.getChat(chatId)
+  const chat = await appChatsSrvProxy.getChat(chatId);
   if (chat) {
-    const {name} = value as { name: string }
-    chat.name = name
-    await appChatsSrvProxy.updateChat(chat)
-    await this.getChatList()
+    const { name } = value as { name: string };
+    chat.name = name;
+    await appChatsSrvProxy.updateChat(chat);
+    await this.getChatList();
 
     const msgView: ChatMessageView<'incoming'> = {
       msgId,
@@ -25,11 +32,11 @@ export const handleUpdateChatName: ChatsActions['handleUpdateChatName'] = async 
       initialMessageId: null,
       timestamp: Date.now(),
       status: 'received',
-    }
+    };
 
-    await appChatsSrvProxy.upsertMessage(msgView)
+    await appChatsSrvProxy.upsertMessage(msgView);
     if (chatId === this.currentChatId) {
-      this.currentChatMessages.push(msgView)
+      this.currentChatMessages.push(msgView);
     }
   }
-}
+};

@@ -1,18 +1,19 @@
-import { ChatsActions } from './types'
-import { appChatsSrvProxy } from '../../../services/services-provider'
+import type { ChatsActions } from './types';
+import { appChatsSrvProxy } from '@main/services/services-provider';
+import type { ChatMessageView } from '~/index';
 
-export const handlerAddChatMembers: ChatsActions['handlerAddChatMembers'] = async function (this, params): Promise<void> {
-  const { sender, chatId, msgId, chatMessageId, value, displayable } = params
+export const handlerAddChatMembers: ChatsActions['handlerAddChatMembers'] = async function(this, params): Promise<void> {
+  const { sender, chatId, msgId, chatMessageId, value, displayable } = params;
   if (!chatId || (chatId && !value)) {
-    return
+    return;
   }
 
-  const chat = await appChatsSrvProxy.getChat(chatId)
+  const chat = await appChatsSrvProxy.getChat(chatId);
   if (chat) {
-    const { membersToAdd = [], updatedMembers } = value as { membersToAdd: string[], updatedMembers: string[] }
-    chat.members = updatedMembers
-    await appChatsSrvProxy.updateChat(chat)
-    await this.getChatList()
+    const { membersToAdd = [], updatedMembers } = value as { membersToAdd: string[], updatedMembers: string[] };
+    chat.members = updatedMembers;
+    await appChatsSrvProxy.updateChat(chat);
+    await this.getChatList();
 
     if (displayable) {
       const msgView: ChatMessageView<'incoming'> = {
@@ -27,12 +28,12 @@ export const handlerAddChatMembers: ChatsActions['handlerAddChatMembers'] = asyn
         initialMessageId: null,
         timestamp: Date.now(),
         status: 'received',
-      }
+      };
 
-      await appChatsSrvProxy.upsertMessage(msgView)
+      await appChatsSrvProxy.upsertMessage(msgView);
       if (chatId === this.currentChatId) {
-        this.currentChatMessages.push(msgView)
+        this.currentChatMessages.push(msgView);
       }
     }
   }
-}
+};

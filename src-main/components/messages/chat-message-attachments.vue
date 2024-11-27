@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,92 +16,95 @@
 -->
 
 <script lang="ts" setup>
-  import { computed } from 'vue'
-  import { isEmpty } from 'lodash'
-  import { Ui3nIcon } from '@v1nt1248/3nclient-lib'
+import { computed } from 'vue';
+import isEmpty from 'lodash/isEmpty';
+import type { ChatMessageAttachmentsInfo } from '~/index';
+import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
 
-  const props = defineProps<{
-    attachments?: ChatMessageAttachmentsInfo[];
-    disabled: boolean;
-  }>()
+const props = defineProps<{
+  attachments?: ChatMessageAttachmentsInfo[];
+  disabled: boolean;
+}>();
 
-  const items = computed(() => {
-    if (isEmpty(props.attachments)) {
-      return []
-    }
+const items = computed(() => {
+  if (isEmpty(props.attachments)) {
+    return [];
+  }
 
-    return props.attachments!.map(i => {
-      const lastDotPosition = i.name.lastIndexOf('.')
-      return {
-        filename: i.name.slice(0, lastDotPosition),
-        ext: i.name.slice(lastDotPosition + 1),
-      }
-    })
-  })
+  return props.attachments!.map(i => {
+    const lastDotPosition = i.name.lastIndexOf('.');
+    return {
+      filename: i.name.slice(0, lastDotPosition),
+      ext: i.name.slice(lastDotPosition + 1),
+    };
+  });
+});
 </script>
 
 <template>
-  <div
-    :class="[
-      'chat-message-attachments',
-      { 'chat-message-attachments--disabled': props.disabled },
-    ]"
-  >
+  <div :class="[$style.chatMessageAttachments, disabled && $style.disabled]">
     <div
       v-for="(item, index) in items"
       :key="index"
-      class="chat-message-attachments__item"
+      :class="$style.chatMessageAttachment"
     >
       <ui3n-icon
-        icon="baseline-attach-file"
+        :class="$style.icon"
+        icon="round-attach-file"
         width="16"
         height="16"
       />
-      <div class="chat-message-attachments__item-name">
+      <div :class="$style.chatMessageAttachmentName">
         {{ item.filename }}
       </div>
-      <div class="chat-message-attachments__item-ext">
+      <div :class="$style.chatMessageAttachmentExt">
         .{{ item.ext }}
       </div>
     </div>
   </div>
 </template>
 
-<style lang="scss" scoped>
-  @import "../../assets/styles/mixins";
+<style lang="scss" module>
+@use '../../assets/styles/mixins' as mixins;
 
-  .chat-message-attachments {
-    position: relative;
-    max-width: 100%;
+.chatMessageAttachments {
+  --attachments-item-height: calc(var(--spacing-s) * 2.5);
 
-    &__item {
-      position: relative;
-      display: flex;
-      justify-content: flex-start;
-      align-items: center;
-      height: calc(var(--base-size) * 2.5);
-      font-size: var(--font-14);
-      font-weight: 400;
-      color: var(--black-90);
+  position: relative;
+  max-width: 100%;
 
-      .iconify {
-        position: relative;
-        left: -4px;
-      }
-
-      &-name {
-        position: relative;
-        height: calc(var(--base-size) * 2.5);
-        text-align: left;
-        flex-shrink: 1;
-        line-height: var(--font-20);
-        @include text-overflow-ellipsis();
-      }
-
-      &-ext {
-        flex-shrink: 0;
-        line-height: var(--font-20);
-      }
-    }
+  &.disabled {
+    opacity: 0.5;
   }
+}
+
+.chatMessageAttachment {
+  position: relative;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  height: var(--attachments-item-height);
+  font-size: var(--font-14);
+  font-weight: 400;
+  color: var(--color-text-chat-bubble-user-default);
+}
+
+.icon {
+  position: relative;
+  left: -4px;
+}
+
+.chatMessageAttachmentName {
+  position: relative;
+  height: var(--attachments-item-height);
+  text-align: left;
+  flex-shrink: 1;
+  line-height: var(--font-20);
+  @include mixins.text-overflow-ellipsis();
+}
+
+.chatMessageAttachmentExt {
+  flex-shrink: 0;
+  line-height: var(--font-20);
+}
 </style>

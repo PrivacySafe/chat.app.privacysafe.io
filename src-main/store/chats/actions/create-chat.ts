@@ -1,13 +1,13 @@
-import { ChatsActions } from './types'
-import { appChatsSrvProxy } from '../../../services/services-provider'
+import type { ChatsActions } from './types';
+import { appChatsSrvProxy } from '@main/services/services-provider';
 
-export const createChat: ChatsActions['createChat'] = async function (this, { chatId, members, admins, name = '' }) {
-  let newChatId = ''
+export const createChat: ChatsActions['createChat'] = async function(this, { chatId, members, admins, name = '' }) {
+  let newChatId = '';
   try {
-    newChatId = await appChatsSrvProxy.createChat({ chatId, members, admins, name })
-    await this.getChatList()
+    newChatId = await appChatsSrvProxy.createChat({ chatId, members, admins, name });
+    await this.getChatList();
   } catch (e) {
-    console.error('CREATE CHAT ERROR: ', e)
+    console.error('CREATE CHAT ERROR: ', e);
   }
-  return newChatId
-}
+  return newChatId;
+};

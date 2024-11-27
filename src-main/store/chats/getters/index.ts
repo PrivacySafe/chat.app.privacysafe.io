@@ -1,15 +1,15 @@
-import { get } from 'lodash'
-import { ChatsGetters } from './types'
-import { getChatName } from '../../../helpers/chat-ui.helper'
+import get from 'lodash/get';
+import type { ChatsGetters } from './types';
+import { getChatName } from '@main/helpers/chat-ui.helper';
 
 export const getters: ChatsGetters = {
   currentChat: function(this, state) {
     return () => {
       if (state.currentChatId) {
-        return get(state, ['chatList', state.currentChatId], null)
+        return get(state, ['chatList', state.currentChatId], null);
       }
-      return null
-    }
+      return null;
+    };
   },
 
   namedChatList: function(this, state) {
@@ -20,10 +20,10 @@ export const getters: ChatsGetters = {
           displayName: getChatName(c),
         }))
         .sort((a, b) => {
-          const tA = a.timestamp || a.createdAt
-          const tB = b.timestamp || b.createdAt
-          return tB - tA
-        })
-    }
+          const tA = a.timestamp || a.createdAt;
+          const tB = b.timestamp || b.createdAt;
+          return tB - tA;
+        });
+    };
   },
-}
+};

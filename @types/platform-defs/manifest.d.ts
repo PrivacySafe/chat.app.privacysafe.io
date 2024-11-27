@@ -19,6 +19,10 @@
 
 declare namespace web3n.caps {
 
+	/**
+	 * Application manifest may have an explicit general form, or a simplified
+	 * form for a simple app.
+	 */
 	type AppManifest = GeneralAppManifest | SimpleGUIAppManifest;
 
 	interface GeneralAppManifest {
@@ -27,16 +31,43 @@ declare namespace web3n.caps {
 		name: string;
 		description: string;
 		icon: string;
+		/**
+		 * components object enumerates all components of the app. Keys are
+		 * entrypoint paths within app folder. Respective values are definitions.
+		 */
 		components: {
 			[entrypoint: string]: AppComponent;
 		};
-		launchers?: Launcher[];
+		/**
+		 * launchers is an array of explicit launchers that user can start.
+		 * If this array is missing and there is a component with default
+		 * entrypoint, then a default launcher is created from app's data in the
+		 * manifest (name, icon, description).
+		 * If there are no launchers, and there is no default component, then an
+		 * app can't be launched by user directly.
+		 */
+		launchers?: (Launcher|DynamicLaunchers)[];
+		/**
+		 * launchOnSystemStartup is an array of explicit launchers that platform
+		 * can start on system/platform's startup for a current user. This might
+		 * be useful to warmup/preload service components.
+		 */
 		launchOnSystemStartup?: Launcher[];
+		/**
+		 * exposedFSResources object enumerates exposed file system resources.
+		 * Keys are resource names. Respective values are definitions.
+		 */
 		exposedFSResources?: {
 			[resourceName: string]: FSResourceDescriptor;
 		};
 	}
 
+	/**
+	 * Simple app has only one implicit simgleton component, exposes no
+	 * services, has no commands, and must look nice in all UI form factors.
+	 * Entrypoint of an implicit component is index.html, hence, this file must
+	 * exist.
+	 */
 	interface SimpleGUIAppManifest {
 		appDomain: string;
 		version: string;
@@ -57,36 +88,101 @@ declare namespace web3n.caps {
 	 * cross-platform and cross-form-factor (has this ever existed?).
 	 */
 	interface Launcher {
+		/**
+		 * name that will be displayed with icon.
+		 * When app has several user-launchable components, different names with
+		 * respective icons will help user to "click the right action".
+		 */
 		name: string;
-		component?: string;
-		startCmd?: {
-			cmd: string;
-			params: any[];
-		}
+		/**
+		 * icon is a path to icon file within app folder.
+		 */
 		icon: string;
+		/**
+		 * component string identifies component that should be started by this
+		 * launcher.
+		 * Launcher can have either component, or startCmd, but not both.
+		 */
+		component?: string;
+		/**
+		 * startCmd object defines command that is invoked by this launcher.
+		 * Launcher can have either component, or startCmd, but not both.
+		 */
+		startCmd?: shell.commands.CmdParams;
+		/**
+		 * description is a place to tell user what this app/launcher does.
+		 */
 		description: string;
+		/**
+		 * formFactor is a form factor filter. When present, component can be
+		 * started only in enumerated user interface form factors. When filter is
+		 * not set, then component can be started with any UI.
+		 */
 		formFactor?: UserInterfaceFormFactor|UserInterfaceFormFactor[];
+	}
+
+	/**
+	 * Pointer to location with dynamically created launchers.
+	 */
+	interface DynamicLaunchers {
+		/**
+		 * appStorage tells in which app storage file system is located.
+		 */
+		appStorage: 'local'|'synced';
+		/**
+		 * launchersFolder is a path to launchers' folder in the app's storage.
+		 */
+		launchersFolder: string;
 	}
 
 	type UserInterfaceFormFactor = 'desktop' | 'tablet' | 'phone';
 
+	/**
+	 * File System Resource Descriptor points to file system item from app's
+	 * storage that can be accessed by other apps.
+	 * Resource can be a simpler option to making a service in situation of
+	 * passing some static file, and broadcasting events (file system events),
+	 * e.g. system-wide configurations.
+	 */
 	interface FSResourceDescriptor {
+		/**
+		 * allow tells who can access this resource.
+		 */
 		allow: AllowedCallers;
+		/**
+		 * appStorage tells in which app storage file system is located.
+		 */
 		appStorage: 'local'|'synced';
+		/**
+		 * path to file system item in the app's storage.
+		 */
 		path: string;
+		/**
+		 * itemType sets expected type of an exposed file system item.
+		 */
 		itemType: 'file'|'folder';
+		/**
+		 * initValueSrc is a path within app folder, from which resource can be
+		 * initialized, if it doesn't exist, yet.
+		 */
 		initValueSrc?: string;
 	}
 
-	interface GUIComponent extends CommonComponentSetting {
+	interface GUIComponent extends CommonGUIComponentSetting {
+		/**
+		 * startCmds object enumerates app commands that this component
+		 * implements. Keys are unique command names. Respective values tell what
+		 * apps/coponents are allowed to call each command.
+		 */
 		startCmds?: {
 			[cmd: string]: AllowedCallers;
 		};
-		runtime: GUIRuntime;
-		name: string;
-		description?: string;
-		icon?: string;
-		windowOpts?: ui.WindowOptions;
+		/**
+		 * multiInstances is a flag to allow multiple opened instances of this
+		 * component.
+		 * By default every component is a singleton, i.e. launching it second
+		 * time focuses an already started instance.
+		 */
 		multiInstances?: true;
 	}
 
@@ -97,10 +193,9 @@ declare namespace web3n.caps {
 		forOneConnectionOnly?: true;
 	}
 
-	interface GUIServiceComponent extends ServiceComponent {
+	interface GUIServiceComponent
+	extends ServiceComponent, CommonGUIComponentSetting {
 		runtime: GUIRuntime;
-		icon?: string;
-		windowOpts?: ui.WindowOptions;
 		childOfGUICaller?: true;
 	}
 
@@ -108,6 +203,19 @@ declare namespace web3n.caps {
 		runtime: NonGUIRuntime | GUIRuntime;
 		capsRequested?: RequestedCAPs;
 		sharedLibs?: SharedLibInfo[];
+	}
+
+	interface CommonGUIComponentSetting extends CommonComponentSetting {
+		runtime: GUIRuntime;
+		/**
+		 * icon is a path to icon file within app folder to use for opened window.
+		 * If missing, icon field from manifest is used.
+		 */
+		icon?: string;
+		/**
+		 * windowOpts are options to apply to window creation.
+		 */
+		windowOpts?: ui.WindowOptions;
 	}
 
 	type GUIRuntime = 'web-gui';
@@ -127,7 +235,6 @@ declare namespace web3n.caps {
 	}
 
 	interface RequestedCAPs extends common.RequestedCAPs {
-		apps?: AppsCAPSetting;
 		logout?: LogoutCAPSetting;
 		appRPC?: string[];
 		otherAppsRPC?: { app: string; service: string; }[];

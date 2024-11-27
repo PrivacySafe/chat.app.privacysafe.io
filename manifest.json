@@ -1,7 +1,10 @@
 {
-  "name": "Apps Chats",
+  "name": "Chat",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.7.7",
+  "version": "0.7.10",
+  "icon": "logo.png",
+  "description": "Chat securely in text and video form.",
+
   "components": {
 
     "/index.html": {
@@ -12,14 +15,18 @@
         "logout": "all",
         "log": "all",
         "mailerid": true,
+        "mail": {
+          "sendingTo": "all",
+          "receivingFrom": "all"
+        },
         "shell": {
           "fileDialog": "all",
           "userNotifications": true,
-					"fsResource": {
-						"otherApps": {
-							"launcher.app.privacysafe.io": "ui-settings"
-						}
-					}
+          "fsResource": {
+            "otherApps": {
+              "launcher.app.privacysafe.io": "ui-settings"
+            }
+          }
         },
         "storage": {
           "appFS": "default",
@@ -27,7 +34,9 @@
           "sysFS": "all"
         },
         "appRPC": [
-          "AppChatsInternal", "ChatDeliveryService", "VideoGUIOpener"
+          "AppChatsInternal",
+          "ChatDeliveryService",
+          "VideoGUIOpener"
         ],
         "otherAppsRPC": [
           {
@@ -44,14 +53,17 @@
         "minHeight": 512,
         "maxWidth": 1440
       },
-      "icon": "logo.png",
       "startCmds": {
         "open-chat-with": {
-          "thisAppComponents": [ "/background-instance.js" ],
-					"otherApps": "*"
-				},
+          "thisAppComponents": [
+            "/background-instance.js"
+          ],
+          "otherApps": "*"
+        },
         "incoming-call": {
-          "thisAppComponents": [ "/background-instance.js" ]
+          "thisAppComponents": [
+            "/background-instance.js"
+          ]
         }
       }
     },
@@ -59,14 +71,24 @@
     "/video-chat.html": {
       "services": {
         "VideoChatComponent": {
-          "thisAppComponents": [ "/background-instance.js" ]
+          "thisAppComponents": [
+            "/background-instance.js"
+          ]
         }
       },
       "runtime": "web-gui",
       "capsRequested": {
+        "mailerid": true,
         "appRPC": [
           "WebRTCSignalingCAP"
-        ]
+        ],
+        "shell": {
+          "fsResource": {
+            "otherApps": {
+              "launcher.app.privacysafe.io": "ui-settings"
+            }
+          }
+        }
       },
       "forOneConnectionOnly": true,
       "windowOpts": {
@@ -76,22 +98,32 @@
     "/background-instance.js": {
       "services": {
         "AppChatsInternal": {
-          "thisAppComponents": [ "/index.html" ]
+          "thisAppComponents": [
+            "/index.html"
+          ]
         },
         "ChatDeliveryService": {
-          "thisAppComponents": [ "/index.html" ]
+          "thisAppComponents": [
+            "/index.html"
+          ]
         },
         "VideoGUIOpener": {
-          "thisAppComponents": [ "/index.html" ]
+          "thisAppComponents": [
+            "/index.html"
+          ]
         },
         "WebRTCSignalingCAP": {
-          "thisAppComponents": [ "/video-chat.html" ]
+          "thisAppComponents": [
+            "/video-chat.html"
+          ]
         }
       },
       "runtime": "deno",
       "capsRequested": {
         "appRPC": [
-          "AppChatsInternal", "ChatDeliveryService", "VideoChatComponent"
+          "AppChatsInternal",
+          "ChatDeliveryService",
+          "VideoChatComponent"
         ],
         "log": "all",
         "mailerid": true,
@@ -101,7 +133,10 @@
         },
         "shell": {
           "startAppCmds": {
-            "thisApp": [ "incoming-call", "open-chat-with" ]
+            "thisApp": [
+              "incoming-call",
+              "open-chat-with"
+            ]
           }
         },
         "storage": {
@@ -111,14 +146,14 @@
         }
       }
     }
-
   },
+
   "launchOnSystemStartup": [
     {
       "name": "Messaging background service",
       "component": "/background-instance.js",
       "icon": "logo.png",
-      "description": "Starts backround process to observe messaging and show notifications when new messages arrive"
+      "description": "Starts background process to observe messaging and show notifications when new messages arrive"
     }
   ]
 }

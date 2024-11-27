@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,49 +16,55 @@
 -->
 
 <script lang="ts" setup>
-  import { computed, inject, ref } from 'vue'
-  import { I18nPlugin, I18N_KEY, Ui3nInput } from '@v1nt1248/3nclient-lib'
-  import { useContactsStore, useChatsStore } from '../../store'
-  import { readonlyContactIds } from '../../constants'
-  import ChatAvatar from '../chat/chat-avatar.vue'
-  import ContactIcon from '../contacts/contact-icon.vue'
+import { computed, inject, ref } from 'vue';
+import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { Ui3nInput } from '@v1nt1248/3nclient-lib';
+import { useContactsStore, useChatsStore } from '@main/store';
+import { readonlyContactIds } from '@main/constants';
+import ChatAvatar from '../chat/chat-avatar.vue';
+import ContactIcon from '../contacts/contact-icon.vue';
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
-  const emit = defineEmits(['select', 'confirm'])
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const emit = defineEmits(['select', 'confirm']);
 
-  const searchText = ref('')
-  const { contactList } = useContactsStore()
-  const { namedChatList, currentChatId } = useChatsStore()
+const { contactList } = useContactsStore();
+const { namedChatList, currentChatId } = useChatsStore();
 
-  const filteredContactList = computed(() => contactList
-    .filter(c => ( c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
-      && !readonlyContactIds.includes(c.id) )))
-  const filteredChatList = computed(() => namedChatList()
-    .filter(c => ( c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
-      && c.chatId !== currentChatId )))
+const searchText = ref('');
 
-  const selectItem = ({ type, data }: { type: 'chat' | 'contact', data: string }) => {
-    emit('select', { type, data })
-    emit('confirm')
-  }
+const filteredContactList = computed(() => contactList
+  .filter(c => (c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
+    && !readonlyContactIds.includes(c.id))));
+
+const filteredChatList = computed(() => namedChatList()
+  .filter(c => (c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
+    && c.chatId !== currentChatId)));
+
+function selectItem({ type, data }: { type: 'chat' | 'contact', data: string }) {
+  emit('select', { type, data });
+  emit('confirm');
+}
 </script>
 
 <template>
-  <div class="message-forward-dialog">
+  <div :class="$style.messageForwardDialog">
     <ui3n-input
-      v-model:value="searchText"
-      icon="search"
+      v-model="searchText"
+      icon="round-search"
       clearable
+      :class="$style.search"
     />
-    <div class="message-forward-dialog__body">
-      <h4 class="message-forward-dialog__section-title">
+
+    <div :class="$style.messageForwardDialogBody">
+      <h4 :class="$style.messageForwardDialogSubtitle">
         {{ $tr('chat.message.forward.dialog.chats.section.title') }}
       </h4>
+
       <template v-if="filteredChatList.length">
         <div
           v-for="chat in filteredChatList"
           :key="chat.chatId"
-          class="message-forward-dialog__item"
+          :class="$style.messageForwardDialogItem"
           @click="selectItem({ type: 'chat', data: chat.chatId })"
         >
           <chat-avatar
@@ -66,25 +72,27 @@
             :shape="chat.members.length > 2 ? 'decagon' : 'circle'"
             :size="28"
           />
-          <div class="message-forward-dialog__item-name">
+          <div :class="$style.messageForwardDialogItemName">
             {{ chat.displayName }}
           </div>
         </div>
       </template>
+
       <template v-else>
-        <div class="message-forward-dialog__empty">
+        <div :class="$style.messageForwardDialogEmpty">
           {{ $tr('chat.message.forward.dialog.chats.empty') }}
         </div>
       </template>
 
-      <h4 class="message-forward-dialog__section-title">
+      <h4 :class="$style.messageForwardDialogSubtitle">
         {{ $tr('chat.message.forward.dialog.contacts.section.title') }}
       </h4>
+
       <template v-if="filteredContactList.length">
         <div
           v-for="contact in filteredContactList"
           :key="contact.id"
-          class="message-forward-dialog__item"
+          :class="$style.messageForwardDialogItem"
           @click="selectItem({ type: 'contact', data: contact.mail })"
         >
           <contact-icon
@@ -92,13 +100,14 @@
             :size="28"
             :readonly="true"
           />
-          <div class="message-forward-dialog__item-name">
+          <div :class="$style.messageForwardDialogItemName">
             {{ contact.displayName }}
           </div>
         </div>
       </template>
+
       <template v-else>
-        <div class="message-forward-dialog__empty">
+        <div :class="$style.messageForwardDialogEmpty">
           {{ $tr('chat.message.forward.dialog.contacts.empty') }}
         </div>
       </template>
@@ -106,65 +115,68 @@
   </div>
 </template>
 
-<style lang="scss" scoped>
-  @import "../../assets/styles/mixins";
+<style lang="scss" module>
+@use '../../assets/styles/mixins' as mixins;
 
-  .message-forward-dialog {
-    position: relative;
-    max-height: 380px;
-    padding: 16px;
+.messageForwardDialog {
+  --forward-dialog-body-offset: calc(var(--spacing-s) * 8);
 
-    .ui3n-input {
-      margin-bottom: calc(var(--base-size) * 2);
-    }
+  position: relative;
+  height: 380px;
+  padding: 16px;
+  overflow: hidden;
+}
 
-    &__body {
-      position: relative;
-      max-height: calc(100% - calc(var(--base-size) * 7));
-      overflow-y: auto;
-      overflow-x: hidden;
-    }
+.search {
+  margin-bottom: var(--spacing-m);
+}
 
-    &__section-title {
-      font-size: var(--font-12);
-      font-weight: 500;
-      color: var(--system-black);
-      margin: 0 0 var(--base-size);
-    }
+.messageForwardDialogBody {
+  position: relative;
+  height: calc(100% - var(--forward-dialog-body-offset));
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 
-    &__item {
-      position: relative;
-      width: 100%;
-      display: flex;
-      justify-content: flex-start;
-      align-items: center;
-      height: calc(var(--base-size) * 5);
-      cursor: pointer;
+.messageForwardDialogSubtitle {
+  font-size: var(--font-12);
+  font-weight: 500;
+  color: var(--color-text-block-primary-default);
+  margin: 0 0 var(--spacing-s);
+}
 
-      &-name {
-        position: relative;
-        width: calc(100% - calc(var(--base-size) * 3.5));
-        margin-left: var(--half-size);
-        font-size: var(--font-12);
-        font-weight: 500;
-        color: var(--black-90);
-        @include text-overflow-ellipsis();
-      }
+.messageForwardDialogItem {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  height: var(--spacing-xl);
+  cursor: pointer;
 
-      &:hover {
-        background-color: var(--blue-main-30, #b0dafc);
-      }
-    }
-
-    &__empty {
-      position: relative;
-      width: 100%;
-      text-align: center;
-      font-size: var(--font-12);
-      font-weight: 500;
-      font-style: italic;
-      color: var(--black-30);
-      margin-bottom: var(--base-size);
-    }
+  &:hover {
+    background-color: var(--color-bg-chat-bubble-general-bg);
   }
+}
+
+.messageForwardDialogItemName {
+  position: relative;
+  width: calc(100% - calc(var(--spacing-s) * 3.5));
+  margin-left: var(--spacing-xs);
+  font-size: var(--font-12);
+  font-weight: 500;
+  color: var(--color-text-block-primary-default);
+  @include mixins.text-overflow-ellipsis();
+}
+
+.messageForwardDialogEmpty {
+  position: relative;
+  width: 100%;
+  text-align: center;
+  font-size: var(--font-12);
+  font-weight: 500;
+  font-style: italic;
+  color: var(--color-text-chat-bubble-other-default);
+  margin-bottom: var(--spacing-s);
+}
 </style>

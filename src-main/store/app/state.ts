@@ -1,13 +1,13 @@
-import { State } from './types'
+import type { State } from './types';
 
 export const state: State = {
+  appVersion: '',
   connectivityStatus: 'offline',
   user: '',
   lang: 'en',
-  theme: 'default',
-  colors: {},
+  colorTheme: 'default',
   appWindowSize: {
     width: 0,
     height: 0,
-  }
-}
+  },
+};

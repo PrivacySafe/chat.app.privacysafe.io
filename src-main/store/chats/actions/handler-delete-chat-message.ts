@@ -1,23 +1,26 @@
-import { appChatsSrvProxy } from '../../../services/services-provider'
-import { deleteChatMessage } from '../../helpers/delete-chat-message.helper'
-import { ChatsActions } from './types'
+import { appChatsSrvProxy } from '@main/services/services-provider';
+import { deleteChatMessage } from '@main/store/utils/delete-chat-message.helper';
+import type { ChatsActions } from './types';
 
-export const handlerDeleteChatMessage: ChatsActions['handlerDeleteChatMessage'] = async function (this, { chatId, value }) {
+export const handlerDeleteChatMessage: ChatsActions['handlerDeleteChatMessage'] = async function(this, {
+  chatId,
+  value,
+}) {
   if (!chatId || (chatId && !value)) {
-    return
+    return;
   }
 
-  const { chatMessageId } = value
-  const message = await appChatsSrvProxy.getMessage({ chatMsgId: chatMessageId })
+  const { chatMessageId } = value;
+  const message = await appChatsSrvProxy.getMessage({ chatMsgId: chatMessageId });
 
   if (!message) {
-    return
+    return;
   }
 
-  await deleteChatMessage({ message, chatMsgId: chatMessageId })
+  await deleteChatMessage({ message, chatMsgId: chatMessageId });
   if (chatId === this.currentChatId) {
-    this.getChat(chatId)
+    await this.getChat(chatId);
   } else {
-    this.getChatList()
+    await this.getChatList();
   }
-}
+};

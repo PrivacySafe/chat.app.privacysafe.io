@@ -1,4 +1,4 @@
-<!-- 
+<!--
  Copyright (C) 2020 - 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
@@ -16,119 +16,138 @@
 -->
 
 <script lang="ts" setup>
-  import { computed, inject, onMounted, ref, toRefs } from 'vue'
-  import { get } from 'lodash'
-  import { useChatsStore } from '../../store'
-  import { prepareDateAsSting, I18N_KEY, I18nPlugin, Ui3nHtml } from '@v1nt1248/3nclient-lib'
-  import { getChatSystemMessageText } from '../../helpers/chat-ui.helper'
-  import { getContactName } from '../../helpers/contacts.helper'
-  import { getMessageFromCurrentChat } from '../../helpers/chat-message-actions.helpers'
-  import ChatMessageStatus from './chat-message-status.vue'
-  import ChatMessageAttachments from './chat-message-attachments.vue'
+import { computed, inject, onMounted, ref } from 'vue';
+import { storeToRefs } from 'pinia';
+import get from 'lodash/get';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
+import { Ui3nHtml } from '@v1nt1248/3nclient-lib';
+import { useChatsStore } from '@main/store';
+import { getChatSystemMessageText } from '@main/helpers/chat-ui.helper';
+import { getContactName } from '@main/helpers/contacts.helper';
+import { getMessageFromCurrentChat } from '@main/helpers/chat-message-actions.helpers';
+import type { MessageType, ChatMessageView } from '~/index';
+import ChatMessageStatus from './chat-message-status.vue';
+import ChatMessageAttachments from './chat-message-attachments.vue';
 
-  const vUi3nHtml = Ui3nHtml
+const vUi3nHtml = Ui3nHtml;
 
-  const props = defineProps<{
-    msg: ChatMessageView<MessageType>;
-    prevMsgSender: string|undefined;
-  }>()
+const props = defineProps<{
+  msg: ChatMessageView<MessageType>;
+  prevMsgSender: string | undefined;
+}>();
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!
-  const { currentChat } = toRefs(useChatsStore())
-  const { getChatList, handleUpdateMessageStatus } = useChatsStore()
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const chatsStore = useChatsStore();
+const { currentChat } = storeToRefs(chatsStore);
+const { getChatList, handleUpdateMessageStatus } = chatsStore;
 
-  const chatMsgElement = ref<Element|null>(null)
-  const msgType = computed<MessageType>(() => get(props.msg, ['messageType'], 'outgoing'))
-  const isMsgSystem = computed<boolean>(() => get(props.msg, ['chatMessageType'], 'regular') === 'system')
-  const currentMsgSender = computed<string>(() => get(props.msg, ['sender'], ''))
-  const doesShowSender = computed<boolean>(() => currentMsgSender.value !== props.prevMsgSender && msgType.value === 'incoming' && !isMsgSystem.value)
-  const msgText = computed<string>(() => isMsgSystem.value
-    ? getChatSystemMessageText({ message: props.msg, chat: currentChat.value() })
-    : props.msg.body)
-  const initialMessage = computed(() => getMessageFromCurrentChat({ chatMessageId: props.msg.initialMessageId }))
-  const initialMessageText = computed(() => {
-    const { body, attachments } = initialMessage.value || {}
-    const attachmentsText = (attachments || []).map(a => a.name).join(', ')
-    return body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`
-  })
+const chatMsgElement = ref<Element | null>(null);
 
-  const intersectHandler = (entries: IntersectionObserverEntry[], observer: IntersectionObserver) => {
-    entries.forEach(async entry => {
-      if (entry.isIntersecting) {
-        const { id } = entry.target
-        const { chatMessageId, messageType, chatMessageType, status } = props.msg
-        if (chatMessageId === id.replace('msg-', '') && messageType === 'incoming' && chatMessageType !== 'system' && status === 'received') {
-          await handleUpdateMessageStatus({ chatMessageId, value: null })
-          await getChatList()
-        }
-        observer.unobserve(entry.target)
+const msgType = computed<MessageType>(() => get(props.msg, ['messageType'], 'outgoing'));
+
+const isMsgSystem = computed<boolean>(() => get(props.msg, ['chatMessageType'], 'regular') === 'system');
+
+const currentMsgSender = computed<string>(() => get(props.msg, ['sender'], ''));
+
+const doesShowSender = computed<boolean>(() => currentMsgSender.value !== props.prevMsgSender && msgType.value === 'incoming' && !isMsgSystem.value);
+
+const msgText = computed<string>(() => isMsgSystem.value
+  ? getChatSystemMessageText({ message: props.msg, chat: currentChat.value() })
+  : props.msg.body);
+
+const initialMessage = computed(() => getMessageFromCurrentChat({ chatMessageId: props.msg.initialMessageId }));
+
+const initialMessageText = computed(() => {
+  const { body, attachments } = initialMessage.value || {};
+  const attachmentsText = (attachments || []).map(a => a.name).join(', ');
+  return body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`;
+});
+
+function intersectHandler(entries: IntersectionObserverEntry[], observer: IntersectionObserver) {
+  entries.forEach(async entry => {
+    if (entry.isIntersecting) {
+      const { id } = entry.target;
+      const { chatMessageId, messageType, chatMessageType, status } = props.msg;
+      if (chatMessageId === id.replace('msg-', '') && messageType === 'incoming' && chatMessageType !== 'system' && status === 'received') {
+        await handleUpdateMessageStatus({ chatMessageId, value: null });
+        await getChatList();
       }
-    })
-  }
-
-  onMounted(() => {
-    const observer = new IntersectionObserver(intersectHandler, {
-      root: document.getElementById('chatMessages'),
-      rootMargin: '0px',
-      threshold: 0.5,
-    })
-    if (chatMsgElement.value) {
-      observer.observe(chatMsgElement.value as Element)
+      observer.unobserve(entry.target);
     }
-  })
+  });
+}
+
+onMounted(() => {
+  const observer = new IntersectionObserver(intersectHandler, {
+    root: document.getElementById('chatMessages'),
+    rootMargin: '0px',
+    threshold: 0.5,
+  });
+  if (chatMsgElement.value) {
+    observer.observe(chatMsgElement.value as Element);
+  }
+});
 </script>
 
 <template>
   <div
-    :id="`msg-${props.msg.chatMessageId}`"
+    :id="`msg-${msg.chatMessageId}`"
     ref="chatMsgElement"
     :class="[
-      'chat-message',
-      `chat-message--${isMsgSystem ? 'system' : msgType}`,
-      { 'chat-message--offset': currentMsgSender !== props.prevMsgSender && !isMsgSystem },
+      $style.chatMessage,
+      currentMsgSender !== prevMsgSender && !isMsgSystem && $style.withOffset,
+      isMsgSystem
+        ? $style.chatMessageSystem
+        : msgType === 'incoming' ? $style.chatMessageIncoming : $style.chatMessageOutgoing
     ]"
   >
-    <div class="chat-message__body">
+    <div :class="$style.chatMessageBody">
       <div
-        :id="props.msg.chatMessageId"
+        :id="msg.chatMessageId"
         class="chat-message__content"
+        :class="$style.chatMessageContent"
       >
         <div style="pointer-events: none;">
           <h4
             v-if="doesShowSender"
-            class="chat-message__sender"
+            :class="$style.chatMessageSender"
           >
-            {{ getContactName(props.msg.sender) }}
+            {{ getContactName(msg.sender) }}
           </h4>
+
           <div
             v-if="initialMessage"
-            class="chat-message__initial-msg"
+            :class="$style.chatMessageInitial"
           >
-            <span class="chat-message__initial-msg-sender">
+            <span :class="$style.chatMessageInitialSender">
               {{ getContactName(initialMessage.sender) }}
             </span>
             <span
               v-ui3n-html.sanitize.classes="initialMessageText"
-              class="chat-message__initial-msg-text"
+              :class="$style.chatMessageInitialText"
             />
           </div>
+
           <pre
             v-ui3n-html.sanitize.classes="msgText"
-            class="chat-message__text"
-          />
-          <chat-message-attachments
-            v-if="props.msg.attachments && !isMsgSystem"
-            :attachments="props.msg.attachments"
-            :disabled="props.msg.messageType === 'outgoing'"
+            :class="$style.chatMessageText"
           />
 
-          <div class="chat-message__time">
-            {{ prepareDateAsSting(props.msg.timestamp) }}
+          <chat-message-attachments
+            v-if="msg.attachments && !isMsgSystem"
+            :attachments="msg.attachments"
+            :disabled="msg.messageType === 'outgoing'"
+          />
+
+          <div :class="$style.chatMessageTime">
+            {{ prepareDateAsSting(msg.timestamp) }}
           </div>
+
           <chat-message-status
-            v-if="props.msg.messageType === 'outgoing' && !isMsgSystem"
-            class="chat-message__status"
-            :value="props.msg.status"
+            v-if="msg.messageType === 'outgoing' && !isMsgSystem"
+            :class="$style.chatMessageStatus"
+            :value="msg.status"
             icon-size="12"
           />
         </div>
@@ -137,152 +156,151 @@
   </div>
 </template>
 
-<style lang="scss" scoped>
-  .chat-message {
-    --message-max-width: 720px;
+<style lang="scss" module>
+.chatMessage {
+  --message-max-width: 720px;
+  --message-min-width: 112px;
+  --spacing-sm: calc(var(--spacing-s) * 1.5);
 
-    position: relative;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    padding: var(--half-size) var(--base-size);
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-s);
 
-    &--offset {
-      margin-top: var(--base-size);
-    }
+  &.chatMessageOutgoing {
+    justify-content: flex-end;
 
-    &__body {
-      position: relative;
-      width: 90%;
-      word-break: break-word;
-      margin: 0 5%;
-      display: flex;
-      align-items: flex-start;
-    }
-
-    &__content {
-      position: relative;
-      min-width: calc(var(--base-size) * 14);
-      border-radius: var(--base-size);
-      padding: var(--base-size) calc(var(--base-size) * 1.5) calc(var(--base-size) * 1.5) calc(var(--base-size) * 1.5);
-      font-size: var(--font-14);
-      line-height: var(--font-20);
-      color: var(--black-90);
-    }
-
-    &__initial-msg {
-      border-left: 2px solid var(--black-90);
-      padding-left: var(--half-size);
-      font-size: var(--font-12);
-      line-height: var(--font-14);
-      color: var(--black-90);
-
-      &-sender {
-        display: block;
-        font-style: italic;
-        font-weight: 500;
-      }
-
-      &-text {
-        display: block;
-      }
-    }
-
-    &.chat-message--outgoing {
+    .chatMessageBody {
       justify-content: flex-end;
-
-      .chat-message__body {
-        justify-content: flex-end;
-        max-width: calc(var(--message-max-width) - 120px);
-      }
-
-      .chat-message__content {
-        background-color: var(--blue-main-30);
-      }
+      max-width: calc(var(--message-max-width) - 120px);
     }
 
-    &.chat-message--incoming {
-      justify-content: flex-start;
-
-      .chat-message__body {
-        justify-content: flex-start;
-        max-width: calc(var(--message-max-width) - 95px);
-      }
-
-      .chat-message__content {
-        background-color: var(--system-white);
-      }
-    }
-
-    &__sender {
-      font-size: var(--font-13);
-      font-weight: 600;
-      line-height: var(--font-18);
-      color: var(--blue-main-120);
-      margin: 0 0 2px;
-    }
-
-    &__text {
-      font-family: OpenSans, sans-serif;
-      font-size: var(--font-14);
-      font-weight: 400;
-      line-height: var(--font-20);
-      margin: 0;
-      white-space: pre-wrap;
-    }
-
-    &__time {
-      position: absolute;
-      font-size: var(--font-10);
-      line-height: var(--font-12);
-      font-weight: 500;
-      color: var(--black-30);
-      right: var(--base-size);
-      bottom: calc(var(--half-size) / 2);
-
-      .chat-message--outgoing & {
-        right: calc(var(--base-size) * 3);
-      }
-    }
-
-    &__status {
-      position: absolute;
-      right: var(--base-size);
-      bottom: calc(var(--half-size) / 2);
-    }
-
-    &.chat-message--system {
-      .chat-message {
-        &__content {
-          padding: var(--base-size) calc(var(--base-size) * 1.5);
-          min-width: 100%;
-          width: 100%;
-          text-align: center;
-        }
-
-        &__text {
-          font-size: var(--font-12);
-          font-style: italic;
-          font-weight: 300;
-        }
-
-        &__time {
-          right: 0;
-          width: 100%;
-          text-align: center;
-          font-style: italic;
-          font-weight: 400;
-          font-size: var(--font-9);
-          line-height: var(--font-10);
-          padding-top: calc(var(--half-size) / 2);
-        }
-      }
-    }
-
-    &:not(.chat-message--system) {
-      .chat-message__content {
-        cursor: pointer;
-      }
+    .chatMessageContent {
+      background-color: var(--color-bg-chat-bubble-user-default);
     }
   }
+
+  &.chatMessageIncoming {
+    justify-content: flex-start;
+
+    .chatMessageBody {
+      justify-content: flex-start;
+      max-width: calc(var(--message-max-width) - 95px);
+    }
+
+    .chatMessageContent {
+      background-color: var(--color-bg-chat-bubble-other-default);
+    }
+  }
+
+  &.chatMessageSystem {
+    .chatMessageContent {
+      padding: var(--spacing-s) var(--spacing-sm);
+      min-width: 100%;
+      width: 100%;
+      text-align: center;
+    }
+
+    .chatMessageText {
+      font-size: var(--font-12);
+      font-style: italic;
+      font-weight: 300;
+    }
+
+    .chatMessageTime {
+      right: 0;
+      width: 100%;
+      text-align: center;
+      font-style: italic;
+      font-weight: 400;
+      font-size: var(--font-9);
+      line-height: var(--font-10);
+      padding-top: calc(var(--spacing-xs) / 2);
+    }
+  }
+
+  &:not(.chatMessageSystem) {
+    .chatMessageContent {
+      cursor: pointer;
+    }
+  }
+}
+
+.withOffset {
+  margin-top: var(--spacing-s);
+}
+
+.chatMessageBody {
+  position: relative;
+  width: 90%;
+  word-break: break-word;
+  margin: 0 5%;
+  display: flex;
+  align-items: flex-start;
+}
+
+.chatMessageContent {
+  position: relative;
+  min-width: var(--message-min-width);
+  border-radius: var(--spacing-s);
+  padding: var(--spacing-s) var(--spacing-sm) var(--spacing-sm) var(--spacing-sm);
+  font-size: var(--font-14);
+  line-height: var(--font-20);
+  color: var(--color-text-chat-bubble-other-default);
+}
+
+.chatMessageSender {
+  font-size: var(--font-13);
+  font-weight: 600;
+  line-height: var(--font-18);
+  margin: 0 0 2px;
+}
+
+.chatMessageText {
+  font-family: Manrope, sans-serif;
+  font-size: var(--font-14);
+  font-weight: 400;
+  line-height: var(--font-20);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.chatMessageInitial {
+  border-left: 2px solid var(--black-90);
+  padding-left: var(--half-size);
+  font-size: var(--font-12);
+  line-height: var(--font-14);
+  color: var(--color-text-control-primary-default);
+}
+
+.chatMessageInitialSender {
+  display: block;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.chatMessageInitialText {
+  display: block;
+}
+
+.chatMessageTime {
+  position: absolute;
+  font-size: var(--font-10);
+  line-height: var(--font-12);
+  font-weight: 500;
+  color: var(--color-text-chat-bubble-other-sub);
+  right: var(--spacing-s);
+  bottom: calc(var(--spacing-xs) / 2);
+
+  .chatMessageOutgoing & {
+    right: var(--spacing-ml);
+  }
+}
+
+.chatMessageStatus {
+  position: absolute;
+  right: var(--spacing-s);
+  bottom: calc(var(--spacing-xs) / 2);
+}
 </style>

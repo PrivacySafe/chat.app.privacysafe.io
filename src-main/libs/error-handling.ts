@@ -16,25 +16,25 @@
 */
 
 export function setupGlobalReportingOfUnhandledErrors(
-  skipDefaultHandling = false
+  skipDefaultHandling = false,
 ): void {
   self.onunhandledrejection = (ev) => {
-    w3n.log?.('error', `Captured unhandled promise rejection/error event`, ev.reason)
-    console.error(`Captured unhandled promise rejection/error event`, ev.reason)
+    w3n.log('error', `Captured unhandled promise rejection/error event`, ev.reason);
+    console.error(`Captured unhandled promise rejection/error event`, ev.reason);
     if (skipDefaultHandling) {
-      ev.preventDefault()
+      ev.preventDefault();
     }
-  }
+  };
   self.onerror = (ev) => {
     if (typeof ev === 'string') {
-      w3n.log?.('error', `Captured unhandled error event (string value)`, ev)
-      console.error(`Captured unhandled error event (string value)`, ev)
+      w3n.log('error', `Captured unhandled error event (string value)`, ev);
+      console.error(`Captured unhandled error event (string value)`, ev);
     } else {
-      w3n.log?.('error', `Captured unhandled error event`, (ev as any).error)
-      console.error(`Captured unhandled error event`, (ev as any).error)
+      w3n.log('error', `Captured unhandled error event`, (ev as any).error);
+      console.error(`Captured unhandled error event`, (ev as any).error);
       if (skipDefaultHandling) {
-        ev.preventDefault()
+        ev.preventDefault();
       }
     }
-  }
+  };
 }
