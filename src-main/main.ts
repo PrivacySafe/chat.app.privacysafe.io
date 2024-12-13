@@ -67,24 +67,5 @@ const init = () => {
       await ChatCommandsHandler.start(router);
     });
 };
-//
-// if ((w3n as web3n.testing.CommonW3N).testStand && mode !== 'production') {
-//   import('@vue/devtools')
-//     .then(devtools => {
-//       (w3n as web3n.testing.CommonW3N).testStand.staticTestInfo()
-//         .then((data: { userNum: number, userId: string }) => {
-//           const { userNum } = data;
-//           devtools.devtools.connect('http://localhost', 8098 + userNum);
-//           init();
-//         });
-//     });
-// } else if (mode !== 'production') {
-//   import('@vue/devtools')
-//     .then(devtools => {
-//       devtools.devtools.connect('http://localhost', 8098);
-//       init();
-//     });
-// } else {
-//   init();
-// }
+
 init();

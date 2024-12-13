@@ -94,8 +94,9 @@ export class ChatDeliveryService implements AppDeliverySrv {
   private async handleMissedInboxMessages(): Promise<void> {
     const { lastReceivedMessageTimestamp } = await this.getServiceDataFile();
     this.data.lastReceivedMessageTimestamp = Math.max(lastReceivedMessageTimestamp - 60 * 1000, 0);
-    const listMessages = await w3n.mail!.inbox.listMsgs(this.data.lastReceivedMessageTimestamp)
-      .catch(err => w3n.log('error', `LIST MESSAGES ERROR: `, err));
+    const listMessages = await w3n.mail!.inbox.listMsgs(
+      this.data.lastReceivedMessageTimestamp
+    ).catch(err => w3n.log('error', `Fail to list messages`, err));
 
     if (listMessages) {
       for (const item of listMessages) {
@@ -112,7 +113,7 @@ export class ChatDeliveryService implements AppDeliverySrv {
               }
             }
           } catch (e) {
-            w3n.log('error', `GET MSG ${msgId} ERROR: `, e);
+            w3n.log('error', `Fail to get message ${msgId}`, e);
           }
         }
       }
@@ -198,30 +199,27 @@ export class ChatDeliveryService implements AppDeliverySrv {
         }
       } catch (e) {
         await w3n.log('error', `Error adding the ${systemMessage ? 'message ' : ''} ${msgId} to the delivery list. `, e);
-        throw new Error(JSON.stringify(e));
+        throw e;
       }
     }
   }
 
   public async removeMessageFromDeliveryList(msgIds: string[] = []): Promise<void> {
-    if (msgIds.length) {
-      try {
-        for (const msgId of msgIds) {
-          w3n.mail!.delivery.rmMsg(msgId);
-        }
-      } catch (e) {
-        w3n.log('error', `Error deleting the messages ${msgIds.join(', ')} from the delivery list. `, e);
-        throw new Error(JSON.stringify(e));
+    if (msgIds.length > 0) {
+      for (const msgId of msgIds) {
+        await w3n.mail!.delivery.rmMsg(msgId)
+        .catch(async e => {
+          await w3n.log('error', `Error deleting the messages ${msgIds.join(', ')} from the delivery list. `, e);
+        });
       }
     }
   }
 
   public async getMessage(msgId: string): Promise<ChatIncomingMessage | undefined> {
     try {
-      return w3n.mail!.inbox.getMsg(msgId) as Promise<ChatIncomingMessage | undefined>;
+      return (await w3n.mail!.inbox.getMsg(msgId)) as ChatIncomingMessage;
     } catch (e) {
-      w3n.log('error', `Error getting the message ${msgId}.`);
-      throw new Error(JSON.stringify(e));
+      await w3n.log('error', `Error getting the message ${msgId}.`, e);
     }
   }
 
@@ -245,13 +243,11 @@ export class ChatDeliveryService implements AppDeliverySrv {
 
   public async removeMessageFromInbox(msgIds: string[] = []): Promise<void> {
     if (msgIds.length) {
-      try {
-        for (const msgId of msgIds) {
-          w3n.mail!.inbox.removeMsg(msgId);
-        }
-      } catch (e) {
-        w3n.log('error', `Error deleting the messages ${msgIds.join(', ')} from INBOX. `, e);
-        throw new Error(JSON.stringify(e));
+      for (const msgId of msgIds) {
+        await w3n.mail!.inbox.removeMsg(msgId)
+        .catch(async e => {
+          await w3n.log('error', `Error deleting the messages ${msgIds.join(', ')} from INBOX. `, e);
+        });
       }
     }
   }

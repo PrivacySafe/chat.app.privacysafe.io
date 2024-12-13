@@ -200,7 +200,7 @@ declare namespace web3n.caps {
 	}
 
 	interface CommonComponentSetting {
-		runtime: NonGUIRuntime | GUIRuntime;
+		runtime: Runtime;
 		capsRequested?: RequestedCAPs;
 		sharedLibs?: SharedLibInfo[];
 	}
@@ -222,6 +222,8 @@ declare namespace web3n.caps {
 
 	type NonGUIRuntime = 'wasm,mp1' | 'deno';
 
+	type Runtime = NonGUIRuntime | GUIRuntime;
+
 	interface AllowedCallers {
 		thisAppComponents?: '*' | string[];
 		otherApps?: '*' | string[];
@@ -240,6 +242,8 @@ declare namespace web3n.caps {
 		otherAppsRPC?: { app: string; service: string; }[];
 		shell?: ShellCAPsSetting;
 		connectivity?: ConnectivityCAPSetting;
+		mediaDevices?: MediaDevicesCAPSetting;
+		webrtc?: WebRTCCAPSetting;
 	}
 
 	type AppsCAPSetting = 'all' | (keyof apps.Apps)[];
@@ -264,6 +268,16 @@ declare namespace web3n.caps {
 		thisApp?: string|string[];
 		otherApps?: { [ appDomain: string ]: string|string[]; };
 	}
+
+	interface MediaDevicesCAPSetting {
+		cameras?: 'all'|'select'|'use';
+		microphones?: 'all'|'select'|'use';
+		speakers?: 'all'|'select'|'use';
+		screens?: 'all'|'select'|'use';
+		windows?: 'all'|'select'|'use';
+	}
+
+	type WebRTCCAPSetting = 'all';
 
 	interface SiteManifest {
 		siteDomain: string;

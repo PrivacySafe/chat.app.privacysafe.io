@@ -293,33 +293,28 @@ class ChatCallsController implements VideoGUIOpener {
   }
 
   async handleNewCall(msg: ChatIncomingMessage): Promise<void> {
-    console.log(`handleNewCall, p 1`);
     try {
       const { sender, jsonBody: { chatId, webrtcMsg } } = msg;
       if (!webrtcMsg || !chatId || (webrtcMsg.channel !== 'video/audio')) {
         return;
       }
 
-      console.log(`handleNewCall, p 2`);
       const foundChat = await this.chatsSrv.getChat(chatId);
       // @ts-ignore
       if (!foundChat?.members.find(addr => areAddressesEqual(addr, sender))) {
         return;
       }
 
-      console.log(`handleNewCall, p 3`);
       const call = await this.getOrCreateCallGUI(chatId);
       call.bufferFirstMsg(sender, webrtcMsg);
 
-      console.log(`handleNewCall, p 4`);
       const cmdArg: IncomingCallCmdArg = {
         chatId,
         peerAddress: sender,
       };
       await w3n.shell!.startAppWithParams!(null, 'incoming-call', cmdArg);
-      console.log(`handleNewCall, p 5`);
     } finally {
-      // XXX add eventual removal within few minutes
+      scheduleToRemoveMsgWithDelay(msg.msgId)
     }
   }
 }
@@ -347,4 +342,15 @@ export function setupAndStartVideoGUIOpener(
   ]);
   srvWrap.startIPC();
   return webrtcSignalsHandler;
+}
+
+const MSG_REMOVAL_DELAY_MILLIS = 10*1000;
+
+function scheduleToRemoveMsgWithDelay(msgId: string): void {
+  setTimeout(
+    () => w3n.mail!.inbox.removeMsg(msgId).catch(
+      e => w3n.log('error', `Fail to remove webrtc message ${msgId}`, e)
+    ),
+    MSG_REMOVAL_DELAY_MILLIS
+  );
 }

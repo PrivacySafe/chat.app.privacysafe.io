@@ -76,13 +76,11 @@ class WebRTCSignalingProc {
   }
 
   handleIncomingMsg(msg: ChatIncomingMessage): void {
-    console.log(`handleIncomingMsg, p 0`, msg.sender);
     try {
       const { chatId, webrtcMsg } = msg.jsonBody!;
       if (!chatId || !webrtcMsg || !webrtcMsg.channel || !webrtcMsg.data) {
         return;
       }
-      console.log(`handleIncomingMsg, p 1`);
       const chatChannels = this.channelsByChats.get(chatId);
       if (!chatChannels) {
         this.handleNewCall(msg);

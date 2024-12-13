@@ -15,11 +15,15 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+import { SingleProc, makeSyncedFunc } from "@v1nt1248/3nclient-lib/utils";
+
 export abstract class WebRTCPeerChannel {
+  protected syncProc = new SingleProc();
   protected isDataChannelAvailable = false;
 	private makingOffer = false;
 	private ignoreOffer = false;
   protected readonly conn: RTCPeerConnection;
+  private iceCandidatesBuffer: RTCIceCandidateInit[]|undefined = [];
   protected dataChannel: RTCDataChannel | undefined;
 
 	protected constructor(
@@ -29,79 +33,100 @@ export abstract class WebRTCPeerChannel {
 	) {
     this.conn = new RTCPeerConnection(rtcConfig);
 
-		this.conn.onnegotiationneeded = this.handleNegotiationNeeded.bind(this);
-		this.conn.onicecandidate = ({ candidate }) => {
-			if (candidate) {
-				console.log(`📤 sending out ICE candidate:`, candidate.toJSON());
-				this.offBandComm.send({ candidate });
-			} else {
-				console.log(`Falsy ice candidate:`, candidate);
-			}
-		};
-		this.conn.oniceconnectionstatechange = () => {
-			if (this.conn.iceConnectionState === 'failed') {
-				this.conn.restartIce();
-			}
-		};
-		this.conn.addEventListener('connectionstatechange', () => {
-			const connState = this.conn.connectionState;
-			if (connState === 'disconnected') {
-        this.onDisconnected();
-			}
-		});
+    this.conn.onnegotiationneeded = makeSyncedFunc(
+      this.syncProc, this, this.handleNegotiationNeeded
+    );
+    this.conn.onicecandidate = ({ candidate }) => {
+      if (candidate) {
+        console.log(`📤 sending out ICE candidate:`, candidate.toJSON());
+        this.offBandComm.send({ candidate });
+      } else {
+        console.log(`Falsy ice candidate:`, candidate);
+      }
+    };
+    this.conn.oniceconnectionstatechange = () => {
+      if (this.conn.iceConnectionState === 'failed') {
+        this.conn.restartIce();
+      }
+    };
+    this.conn.addEventListener('connectionstatechange', () => {
+      const connState = this.conn.connectionState;
+      if (connState === 'disconnected') {
+      this.onDisconnected();
+      }
+    });
     this.conn.addEventListener('track', this.onConnTrack.bind(this));
-		this.offBandComm.observeIncoming(this.handleOffBandSignal.bind(this));
-	}
+    this.offBandComm.observeIncoming(makeSyncedFunc(
+      this.syncProc, this, this.handleOffBandSignal
+    ));
+  }
 
-	private async handleNegotiationNeeded(): Promise<void> {
-		try {
-			this.makingOffer = true;
-			await this.conn.setLocalDescription();
-			this.offBandComm.send({
-				description: this.conn.localDescription!
-			});
-		 } catch (err) {
-			console.error(err);
-		 } finally {
-			this.makingOffer = false;
-		 }
-	}
+  private async handleNegotiationNeeded(): Promise<void> {
+    try {
+      this.makingOffer = true;
+      await this.conn.setLocalDescription();
+      this.offBandComm.send({
+        description: this.conn.localDescription!
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      this.makingOffer = false;
+    }
+  }
 
-	private async handleOffBandSignal(
-		{ description, candidate }: OffBandMessage
-	): Promise<void> {
-		try {
-			console.log(`📩 received description`, description, `candidate`, candidate)
-			if (description) {
-				const offerCollision =
-					(description.type === "offer") &&
-					(this.makingOffer || (this.conn.signalingState !== "stable"));
+  private async handleOffBandSignal(
+    { description, candidate }: OffBandMessage
+  ): Promise<void> {
+    try {
+      console.log(`📩 received description`, description, `candidate`, candidate)
+      if (description) {
+        const offerCollision =
+          (description.type === "offer") &&
+          (this.makingOffer || (this.conn.signalingState !== "stable"));
 
-				this.ignoreOffer = !this.isPolite && offerCollision;
-				if (this.ignoreOffer) {
-					return;
-				}
+        this.ignoreOffer = !this.isPolite && offerCollision;
+        if (this.ignoreOffer) {
+          return;
+        }
 
-				await this.conn.setRemoteDescription(description);
-				if (description.type === "offer") {
-					await this.conn.setLocalDescription();
-					this.offBandComm.send({
-						description: this.conn.localDescription!
-					});
-				}
-			} else if (candidate) {
-				try {
-					await this.conn.addIceCandidate(candidate);
-				} catch (err) {
-					if (!this.ignoreOffer) {
-						throw err;
-					}
-				}
-			}
-		 } catch (err) {
-			console.error(err);
-		 }
-	}
+        await this.conn.setRemoteDescription(description);
+        await this.drainCandidatesBufferIfPresent();
+        if (description.type === "offer") {
+          await this.conn.setLocalDescription();
+          this.offBandComm.send({
+            description: this.conn.localDescription!
+          });
+        }
+      } else if (candidate) {
+        try {
+          if (this.iceCandidatesBuffer) {
+            this.iceCandidatesBuffer.push(candidate);
+          } else {
+            await this.conn.addIceCandidate(candidate);
+          }
+        } catch (err) {
+          if (!this.ignoreOffer) {
+            throw err;
+          }
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  private async drainCandidatesBufferIfPresent(): Promise<void> {
+    if (this.iceCandidatesBuffer) {
+      try {
+        for (const iceCandidate of this.iceCandidatesBuffer) {
+          await this.conn.addIceCandidate(iceCandidate);
+        }
+      } finally {
+        this.iceCandidatesBuffer = undefined;
+      }
+    }
+  }
 
   protected abstract onConnTrack(ev: RTCTrackEvent): void;
 
@@ -109,13 +134,13 @@ export abstract class WebRTCPeerChannel {
     setTimeout(() => this.close());
   }
 
-	async close(): Promise<void> {
-		try {
-			this.conn.close();
-			this.offBandComm.close();
+  async close(): Promise<void> {
+    try {
+      this.conn.close();
+      this.offBandComm.close();
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-		} catch (err) { /* empty */ }
-	}
+    } catch (err) { /* empty */ }
+  }
 
   protected abstract onDataChannelMessage(ev: { data: string }): void;
 
@@ -135,16 +160,16 @@ export abstract class WebRTCPeerChannel {
 
 
 export interface OffBandMessage {
-	description?: RTCSessionDescription;
-	candidate?: RTCIceCandidateInit;
+  description?: RTCSessionDescription;
+  candidate?: RTCIceCandidateInit;
 }
 
 export interface OffBandSignalingChannel {
 
-	observeIncoming(listener: (msg: OffBandMessage) => Promise<void>): void;
+  observeIncoming(listener: (msg: OffBandMessage) => Promise<void>): void;
 
-	send(msg: OffBandMessage): void;
+  send(msg: OffBandMessage): void;
 
-	close(): void;
+  close(): void;
 
 }

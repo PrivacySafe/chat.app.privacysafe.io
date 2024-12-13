@@ -24,12 +24,14 @@ const {
   user,
   ownVideoTag,
   peerVideoTag,
+  isFullscreen,
   streams,
   peerVideoAvailable,
   peerAudioMuted,
   toggleMicStatus,
   toggleCamStatus,
   endCall,
+  toggleFullscreen,
 } = useCall();
 </script>
 
@@ -82,10 +84,10 @@ const {
         <ui3n-button
           type="custom"
           color="var(--color-bg-button-tritery-default)"
-          icon="expand-screen"
+          :icon="isFullscreen ? 'shrink' : 'expand-screen'"
           icon-color="var(--color-icon-button-tritery-default)"
           :class="$style.btn"
-          @click="() => console.log('CLICK ON EXPAND SCREEN BUTTON!')"
+          @click.stop.prevent="toggleFullscreen"
         />
       </div>
 

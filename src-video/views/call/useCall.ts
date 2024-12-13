@@ -1,9 +1,16 @@
-import { computed, inject, onMounted, ref } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { VUEBUS_KEY, VueBusPlugin, type VueEventBus } from '@v1nt1248/3nclient-lib/plugins';
 import { useAppStore } from '@video/store/app';
 import { Peer, useStreamsStore } from '@video/store/streams';
 import type { VideoAudioEvents } from '@video/services/events';
+import { sleep } from '@v1nt1248/3nclient-lib/utils';
+
+export interface DataChannelMsg {
+  mic?: 'on' | 'off';
+  camera?: 'on' | 'off';
+  state?: 'disconnected';
+}
 
 export default function useCall() {
   const appStore = useAppStore();
@@ -13,6 +20,7 @@ export default function useCall() {
 
   const ownVideoTag = ref<HTMLVideoElement>();
   const peerVideoTag = ref<HTMLVideoElement>();
+  const isFullscreen = ref(false);
 
   const peerVideoMuted = computed(() => {
     const peerAddr = streams.fstPeer.peerAddr;
@@ -46,18 +54,38 @@ export default function useCall() {
     sendMessageViaDataChannel({ camera: streams.isCamOn ? 'on' : 'off' });
   }
 
-  function endCall() {
+  async function endCall() {
     peerVideoTag.value && peerVideoTag.value?.srcObject && (peerVideoTag.value!.srcObject = null);
     sendMessageViaDataChannel({ state: 'disconnected' });
+    await sleep(100);
+    await streams.fstPeer.vaChannel.close();
     w3n.closeSelf();
   }
 
-  function sendMessageViaDataChannel(data: { mic?: 'on' | 'off'; camera?: 'on' | 'off'; state?: 'disconnected' }) {
+  async function endCallWhenPeerCloses() {
+    peerVideoTag.value && peerVideoTag.value?.srcObject && (peerVideoTag.value!.srcObject = null);
+    await streams.fstPeer.vaChannel.close();
+    w3n.closeSelf();
+  }
+
+  function sendMessageViaDataChannel(data: DataChannelMsg) {
     const message = {
       user: user.value,
       ...data,
     };
     streams.fstPeer.vaChannel.sendMessageViaDataChannel(JSON.stringify(message));
+  }
+
+  function fullscreenchangeHandler() {
+    isFullscreen.value = !!document.fullscreenElement;
+  }
+
+  async function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await document.documentElement.requestFullscreen();
+    }
   }
 
   $emitter.on('va:disconnected', ({ peerAddr }) => {
@@ -81,7 +109,7 @@ export default function useCall() {
     }
 
     if (state === 'disconnected') {
-      endCall();
+      endCallWhenPeerCloses();
       return;
     }
 
@@ -100,12 +128,19 @@ export default function useCall() {
   onMounted(() => {
     ownVideoTag.value!.srcObject = streams.ownVAStream;
     setupPeerVideo(streams.fstPeer);
+
+    document.addEventListener('fullscreenchange', fullscreenchangeHandler);
+  });
+
+  onBeforeUnmount(() => {
+    document.removeEventListener('fullscreenchange', fullscreenchangeHandler);
   });
 
   return {
     user,
     ownVideoTag,
     peerVideoTag,
+    isFullscreen,
     streams,
     peerVideoAvailable,
     peerVideoMuted,
@@ -113,5 +148,6 @@ export default function useCall() {
     toggleMicStatus,
     toggleCamStatus,
     endCall,
+    toggleFullscreen,
   };
 }

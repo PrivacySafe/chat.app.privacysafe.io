@@ -20,7 +20,7 @@
     "test:watch": "pnpm clean:coverage && jest --watch"
   },
   "dependencies": {
-    "@v1nt1248/3nclient-lib": "0.1.35",
+    "@v1nt1248/3nclient-lib": "0.1.36",
     "dayjs": "1.11.13",
     "lodash": "4.17.21",
     "pinia": "2.2.4",
