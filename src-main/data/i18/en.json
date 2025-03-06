@@ -58,8 +58,10 @@
   "add.members.system.message": "{user} added {members} to this chat",
   "remove.members.system.message": "{user} removed {members} from this chat",
   "dropzone.default.title": "Upload",
-  "va.presettings.title": "Call Presettings",
+  "va.setup.title": "Call Setup",
+  "va.setup.no-cameras": "No video cameras available",
   "va.presettings.btn.start": "Start Call",
   "va.presettings.btn.join": "Join",
-  "va.end.call": "End Call"
+  "va.end.call": "End Call",
+  "sharing.choice.title": "Select to share"
 }

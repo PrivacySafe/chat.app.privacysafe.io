@@ -15,8 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { getRandomId } from '@v1nt1248/3nclient-lib/utils';
-import { NamedProcs } from '../libs/processes/named-procs';
+import { NamedProcs, getRandomId } from '@v1nt1248/3nclient-lib/utils';
 
 type FileException = web3n.files.FileException;
 type XAttrsChanges = web3n.files.XAttrsChanges;

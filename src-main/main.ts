@@ -28,7 +28,7 @@ import {
   storeNotifications,
   vueBus,
 } from '@v1nt1248/3nclient-lib/plugins';
-import { ChatCommandsHandler } from './services/commands-handler.ts';
+import { ChatCommandsHandler } from './services/commands-handler';
 import { initializationServices } from './services/services-provider';
 import App from './views/app.vue';
 
@@ -37,8 +37,6 @@ import '@v1nt1248/3nclient-lib/style.css';
 import './assets/styles/main.css';
 
 import en from './data/i18/en.json';
-
-// const mode = process.env.NODE_ENV;
 
 const init = () => {
   initializationServices()

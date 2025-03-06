@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024 3NSoft Inc.
+ Copyright (C) 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,8 +19,10 @@ import { createApp } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import { createPinia } from 'pinia';
 import {
+  dialogs,
   i18n,
   I18nOptions,
+  notifications,
   vueBus,
   VueEventBus,
 } from '@v1nt1248/3nclient-lib/plugins';
@@ -31,11 +33,10 @@ import './assets/styles/video-chat.css';
 
 import { VideoChat } from './services/video-component-srv';
 import { useStreamsStore } from './store/streams';
-import { VideoAudioEvents } from '@video/services/events.ts';
+import { PeerEvents } from './services/events';
 import VideoApp from './views/video-app.vue';
 import VASetup from './views/va-setup.vue';
 import Call from './views/call/call.vue';
-import GroupCall from './views/group-call.vue';
 
 import en from '@main/data/i18/en.json';
 
@@ -58,11 +59,6 @@ const router = createRouter({
       path: '/call',
       component: Call,
     },
-    {
-      name: 'group-call',
-      path: '/group-call',
-      component: GroupCall,
-    },
   ],
 });
 
@@ -70,12 +66,12 @@ app
   .use(pinia)
   .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
   .use(vueBus)
+  .use(dialogs)
+  .use(notifications)
   .use(router)
   .mount('#video-main');
 
 srvStart.then(srv => srv.attachToVue(
   useStreamsStore(),
-  app.config.globalProperties.$emitter as VueEventBus<VideoAudioEvents>,
+  app.config.globalProperties.$emitter as VueEventBus<PeerEvents>,
 ));
-
-// router.replace('va-setup');

@@ -15,23 +15,22 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-// @deno-types="./libs/ipc/ipc-service.d.ts"
-import { MultiConnectionIPCWrap } from '../libs/ipc/ipc-service'
-import { StreamsStore } from '../store/streams';
+// @deno-types="@shared/ipc/ipc-service.d.ts"
+import { MultiConnectionIPCWrap } from '@shared/ipc/ipc-service'
+import { StreamsStore, makePeerState } from '@video/store/streams';
 import { OffBandSignalingChannel } from './webrtc-peer-channel';
-import { toCanonicalAddress } from '../libs/address-utils';
-import { SingleProc, makeSyncedFunc } from '../libs/processes/single';
-import { defer } from '../libs/processes/deferred';
 import type { VueEventBus } from '@v1nt1248/3nclient-lib/plugins';
-import { VideoAudioChannel } from './video-audio-channel';
 import type {
   ChatInfoForCall,
   CallGUIEvent,
   VideoChatComponent,
   WebRTCMsg,
   WebRTCOffBandMessage,
-} from '../../types/index';
-import { VideoAudioEvents } from '@video/services/events';
+} from '~/index';
+import { PeerEvents } from '@video/services/events';
+import { PeerChannelWithStreams } from './streaming-channel';
+import { SingleProc, defer, makeSyncedFunc } from '@v1nt1248/3nclient-lib/utils';
+import { toCanonicalAddress } from '@shared/address-utils';
 
 
 export let videoChatSrv: VideoChat;
@@ -44,7 +43,7 @@ export class VideoChat {
   private chat: ChatInfoForCall|undefined = undefined;
   private readonly connectors = new PeerSignalsListeners();
   private store: StreamsStore|undefined = undefined;
-  private eventBus: VueEventBus<VideoAudioEvents>|undefined = undefined;
+  private eventBus: VueEventBus<PeerEvents>|undefined = undefined;
 
   private constructor() {
     Object.seal(this);
@@ -123,7 +122,9 @@ export class VideoChat {
     w3n.closeSelf!();
   }
 
-  attachToVue(store: StreamsStore, eventBus: VueEventBus<VideoAudioEvents>): void {
+  attachToVue(
+    store: StreamsStore, eventBus: VueEventBus<PeerEvents>
+  ): void {
     if (this.store) {
       throw new Error(`Store has already been attached`);
     }
@@ -135,16 +136,14 @@ export class VideoChat {
     store.ownAddr = ownAddr;
     store.peers = peers.map(({
       addr: peerAddr, name: peerName
-    }) => ({
-      peerAddr,
-      peerName,
-      vaStream: null,
-      vaChannel: VideoAudioChannel.makeWith(
+    }) => makePeerState(
+      peerAddr, peerName,
+      PeerChannelWithStreams.makeWith(
         peerAddr, this.store!, this.eventBus!, rtcConfig,
         this.makeConnector(vaChannelType, peerAddr),
         fstIsPolite(ownAddr, peerAddr)
       )
-    }));
+    ));
   }
 
   notifyBkgrndInstanceOnCallStart(): void {

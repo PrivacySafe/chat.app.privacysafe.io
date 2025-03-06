@@ -19,10 +19,11 @@
 import { computed, inject, ref } from 'vue';
 import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nInput } from '@v1nt1248/3nclient-lib';
-import { useContactsStore, useChatsStore } from '@main/store';
 import { readonlyContactIds } from '@main/constants';
 import ChatAvatar from '../chat/chat-avatar.vue';
 import ContactIcon from '../contacts/contact-icon.vue';
+import { useChatsStore } from '@main/store/chats';
+import { useContactsStore } from '@main/store/contacts';
 
 const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const emit = defineEmits(['select', 'confirm']);
@@ -36,7 +37,7 @@ const filteredContactList = computed(() => contactList
   .filter(c => (c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
     && !readonlyContactIds.includes(c.id))));
 
-const filteredChatList = computed(() => namedChatList()
+const filteredChatList = computed(() => namedChatList
   .filter(c => (c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
     && c.chatId !== currentChatId)));
 

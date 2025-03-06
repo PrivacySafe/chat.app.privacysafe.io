@@ -19,7 +19,7 @@
 import ChatAvatar from '@main/components/chat/chat-avatar.vue';
 
 interface VideoPlaceholderProps {
-  user: string;
+  userName: string;
   width?: number | string;
 }
 
@@ -32,15 +32,17 @@ withDefaults(defineProps<VideoPlaceholderProps>(), {
   <div :class="$style.videoPlaceholder">
     <chat-avatar
       :size="width"
-      :name="user ?? ' '"
+      :name="userName ?? ' '"
     />
 
-    {{ user }}
+    {{ userName }}
   </div>
 </template>
 
 <style lang="scss" module>
 .videoPlaceholder {
+  max-width: 100%;
+  max-height: 100%;
   position: relative;
   width: max-content;
   display: flex;

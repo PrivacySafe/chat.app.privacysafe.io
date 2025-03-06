@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { UISettings } from '@main/helpers/ui-settings';
-import type { AvailableColorTheme, AvailableLanguage } from '~/app.types.ts';
+import type { AvailableColorTheme, AvailableLanguage } from '~/index';
 
 export const useAppStore = defineStore('app', {
   state: () => ({

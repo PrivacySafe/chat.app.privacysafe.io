@@ -18,7 +18,7 @@
 <script lang="ts" setup>
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { useChatsStore } from '@main/store';
+import { useChatsStore } from '@main/store/chats';
 import ChatListItem from './chat-list-item.vue';
 
 const router = useRouter();
@@ -33,7 +33,7 @@ function goChat(ev: MouseEvent, chatId: string) {
 <template>
   <div :class="$style.chatList">
     <chat-list-item
-      v-for="chat in namedChatList()"
+      v-for="chat in namedChatList"
       :key="chat.chatId"
       :data="chat"
       @click="goChat($event, chat.chatId)"

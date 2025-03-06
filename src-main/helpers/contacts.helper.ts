@@ -1,4 +1,4 @@
-import { useContactsStore } from '../store';
+import { useContactsStore } from '../store/contacts';
 
 export function getContactName(mail: string): string {
   const { contactList } = useContactsStore();

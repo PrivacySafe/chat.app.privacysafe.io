@@ -1,5 +1,5 @@
 import { get } from 'lodash';
-import { useChatsStore } from '../store';
+import { useChatsStore } from '../store/chats';
 import { fileLinkStoreSrv } from '../services/services-provider';
 import type { ChatMessageView, MessageType } from '~/index';
 

@@ -1,7 +1,7 @@
 {
   "name": "Chat",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.7.14",
+  "version": "0.8.11",
   "icon": "logo.png",
   "description": "Chat securely in text and video form.",
 

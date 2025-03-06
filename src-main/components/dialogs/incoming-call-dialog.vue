@@ -16,12 +16,13 @@
 -->
 
 <script lang="ts" setup>
-import { computed, inject } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted } from 'vue';
 import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nButton } from '@v1nt1248/3nclient-lib';
 import { videoOpenerProxy } from '@main/services/services-provider';
 import { getContactName } from '@main/helpers/contacts.helper';
 import ChatAvatar from '../chat/chat-avatar.vue';
+import { Sound } from '@shared/sounds';
 
 interface IncomingCallDialogProps {
   chatId: string;
@@ -44,6 +45,19 @@ async function joinCall() {
   await videoOpenerProxy.joinCallInRoom({ chatId: props.chatId, peerAddress: props.peerAddress });
   emits('close');
 }
+
+let ring: Sound|undefined = undefined;
+const ringFileUrl = `/sounds/ring_tone.mp3`;
+
+onMounted(async () => {
+  ring = await Sound.from(ringFileUrl);
+  ring.playInLoop();
+});
+
+onBeforeUnmount(() => {
+  ring?.stop();
+})
+
 </script>
 
 <template>

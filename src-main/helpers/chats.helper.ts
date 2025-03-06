@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import dayjs from 'dayjs';
 import { isEmpty, size } from 'lodash';
-import { useChatsStore } from '../store';
 import { fileLinkStoreSrv } from '../services/services-provider';
 import { addFileTo } from '../services/base/attachments-container';
 import { getRandomId, html2text } from '@v1nt1248/3nclient-lib/utils';
@@ -17,6 +16,7 @@ import type {
   MessageType,
   MessageDeliveryStatus,
 } from '~/index';
+import { sendMessage } from '@main/ctrl-funcs';
 
 export function createAttachmentsContainer(files: web3n.files.ReadonlyFile[]): AttachmentsContainer {
   const container = {} as AttachmentsContainer;
@@ -101,7 +101,6 @@ export async function sendChatMessage(
       files?: web3n.files.ReadonlyFile[] | undefined, initialMessageId?: string
     },
 ) {
-  const { sendMessage } = useChatsStore();
   const messages = [];
   if (text) {
     const messageWithText = prepareOutgoingMessage({

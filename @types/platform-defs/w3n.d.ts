@@ -23,6 +23,7 @@
 /// <reference path="./connectivity.d.ts" />
 /// <reference path="./rpc.d.ts" />
 /// <reference path="./ui.d.ts" />
+/// <reference path="./media.d.ts" />
 /// <reference path="./test-stand.d.ts" />
 
 declare namespace web3n.caps {
@@ -54,6 +55,7 @@ declare namespace web3n.caps {
 		shell?: shell.ShellCAPs;
 		rpc?: rpc.RPC;
 		connectivity?: connectivity.Connectivity;
+		mediaDevices?: media.MediaDevices;
 
 	}
 

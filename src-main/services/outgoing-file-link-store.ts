@@ -1,5 +1,4 @@
-import { getRandomId } from '@v1nt1248/3nclient-lib/utils';
-import { SingleProc } from '../libs/processes/single';
+import { SingleProc, getRandomId } from '@v1nt1248/3nclient-lib/utils';
 import type { FileLinkStoreService } from '~/index';
 
 export async function outgoingFileLinkStore(): Promise<FileLinkStoreService> {

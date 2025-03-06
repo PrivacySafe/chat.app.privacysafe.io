@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { makeServiceCaller } from '@main/libs/ipc/ipc-service-caller';
+import { makeServiceCaller } from '@shared/ipc/ipc-service-caller';
 import { outgoingFileLinkStore } from './outgoing-file-link-store';
 import type { AppContacts, AppChatsSrv, AppDeliverySrv, FileLinkStoreService, VideoGUIOpener } from '~/index';
 

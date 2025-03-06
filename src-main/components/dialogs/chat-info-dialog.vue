@@ -24,11 +24,14 @@ import size from 'lodash/size';
 import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nButton, Ui3nIcon, Ui3nInput } from '@v1nt1248/3nclient-lib';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
-import { useAppStore, useContactsStore, useChatsStore } from '@main/store';
 import { getChatName } from '@main/helpers/chat-ui.helper';
 import type { ChatView, ChatMessageView, MessageType, PersonView } from '~/index';
 import ChatAvatar from '../chat/chat-avatar.vue';
 import ContactList from '../contacts/contact-list.vue';
+import { updateMembers } from '@main/ctrl-funcs';
+import { useChatsStore } from '@main/store/chats';
+import { useAppStore } from '@main/store/app';
+import { useContactsStore } from '@main/store/contacts';
 
 const props = defineProps<{
   chat: ChatView & { unread: number } & ChatMessageView<MessageType>;
@@ -40,7 +43,7 @@ const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 const { contactList: allContact } = storeToRefs((useContactsStore()));
 const { user } = storeToRefs(useAppStore());
-const { updateMembers } = useChatsStore();
+const chatsStore = useChatsStore();
 
 const nonSelectableUserMails = ['support@3nweb.com'];
 
@@ -106,7 +109,7 @@ function _updateMembers() {
     }
     return res;
   }, [] as string[]);
-  updateMembers(props.chat, updatedMembers);
+  updateMembers(chatsStore, props.chat, updatedMembers);
   closeDialog();
 }
 </script>

@@ -20,13 +20,16 @@ import { ref, computed, onBeforeMount, inject } from 'vue';
 import { storeToRefs } from 'pinia';
 import get from 'lodash/get';
 import keyBy from 'lodash/keyBy';
-import { useAppStore, useContactsStore, useChatsStore } from '@main/store';
 import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nButton, Ui3nChip, Ui3nInput, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
 import type { PersonView } from '~/index';
 import ContactList from '../contacts/contact-list.vue';
 import ContactIcon from '../contacts/contact-icon.vue';
+import { createChat } from '@main/ctrl-funcs';
+import { useChatsStore } from '@main/store/chats';
+import { useAppStore } from '@main/store/app';
+import { useContactsStore } from '@main/store/contacts';
 
 interface ChatCreateDialogEmits {
   (ev: 'select', val: string): void;
@@ -43,7 +46,7 @@ const { user } = storeToRefs(useAppStore());
 const contactsStore = useContactsStore();
 const { contactList: allContacts } = storeToRefs(contactsStore);
 const { fetchContactList, addContact } = contactsStore;
-const { createChat } = useChatsStore();
+const chatsStore = useChatsStore();
 
 const searchText = ref<string>('');
 const selectedContacts = ref<string[]>([]);
@@ -121,7 +124,7 @@ async function onActionRightBtnClick() {
     user.value,
     ...selectedContacts.value.map(contactId => get(contacts.value, [contactId, 'mail'])),
   ];
-  const chatId = await createChat({
+  const chatId = await createChat(chatsStore, {
     members,
     admins: [user.value],
     name: isMultipleMode.value ? chatName.value.trim() : members[1],

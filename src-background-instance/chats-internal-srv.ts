@@ -247,17 +247,22 @@ export class ChatService {
     if (!msgId && !chatMsgId)
       return null;
 
-    const [sqlValue] = chatMsgId
-      ? this.sqlite.db.exec(messageByChatMsgIdQuery, { $chatMessageId: chatMsgId })
-      : this.sqlite.db.exec(messageByMsgIdQuery, { $msgId: msgId! });
+    const [ sqlValue ] = (chatMsgId ?
+      this.sqlite.db.exec(
+        messageByChatMsgIdQuery, { $chatMessageId: chatMsgId }
+      ) :
+      this.sqlite.db.exec(messageByMsgIdQuery, { $msgId: msgId! })
+    );
+
+    if (!sqlValue) {
+      return null;
+    }
 
     const message = objectFromQueryExecResult<ChatMessageViewForDB<MessageType>>(sqlValue)[0];
-    return message
-      ? {
-        ...message,
-        attachments: message.attachments ? JSON.parse(message.attachments) : null,
-      }
-      : null;
+    return {
+      ...message,
+      attachments: message.attachments ? JSON.parse(message.attachments) : null,
+    };
   }
 
   async deleteMessage({ msgId, chatMsgId }: { msgId?: string, chatMsgId?: string }): Promise<void> {

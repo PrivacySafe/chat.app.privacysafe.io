@@ -15,29 +15,30 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-export interface VideoAudioEvents {
+import { StreamType } from "@video/store/streams";
 
-  /**
-   * Event when peer sends video-audio stream, and it is already available
-   * in streams store.
-   */
-  'va:stream-connected': {
-    peerAddr: string;
+export interface PeerEvents {
+
+  'peer:connecting': PeerEvent;
+  'peer:connected': PeerEvent;
+  'peer:disconnected': PeerEvent;
+
+  'peer:info-msg': PeerEvent & { msg: any; };
+
+  'stream:added': PeerStreamEvent & { streamType: StreamType };
+  'stream:removed': PeerStreamEvent;
+
+  'stream:track-event': PeerStreamEvent & {
+    audio: boolean;
+    video: boolean;
   };
 
-  /**
-   * Event when peer stops video-audio stream, and it is removed from a store.
-   */
-  'va:disconnected': {
-    peerAddr: string;
-  };
+}
 
-  'va:peer-ui-state': {
-    user: string;
-    mic?: 'on' | 'off';
-    camera?: 'on' | 'off';
-    isInitial?: 'on',
-    state?: 'disconnected';
-  };
+export interface PeerEvent {
+  peerAddr: string;
+}
 
+export interface PeerStreamEvent extends PeerEvent {
+  streamId: string;
 }

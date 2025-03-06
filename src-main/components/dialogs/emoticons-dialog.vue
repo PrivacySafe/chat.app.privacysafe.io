@@ -69,7 +69,7 @@ function selectEmoticon({ id, value }: { id: string, value: string }) {
             v-for="emoticon in emoticonsByGroups[group]"
             :key="emoticon.id"
             :emoji="emoticon.id"
-            :size="24"
+            :size="28"
             @click="selectEmoticon({ id: emoticon.id, value: emoticon.value })"
           />
         </div>
@@ -85,13 +85,13 @@ function selectEmoticon({ id, value }: { id: string, value: string }) {
   --emoticons-dialog-padding: calc(var(--spacing-s) * 1.5);
 
   position: absolute;
-  width: 200px;
+  width: 204px;
   height: 200px;
   padding: var(--emoticons-dialog-padding) var(--spacing-s) var(--emoticons-dialog-padding);
   background-color: var(--color-bg-block-primary-default);
   border-radius: var(--spacing-xs);
   bottom: 100%;
-  left: calc(var(--spacing-xs) * 1.5);
+  left: calc(var(--spacing-xs) / 2);
   z-index: 5;
   @include mixins.block-shadow();
 

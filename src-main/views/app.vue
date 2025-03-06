@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,17 +18,20 @@
 <script lang="ts" setup>
 import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import get from 'lodash/get';
 import size from 'lodash/size';
 import { Ui3nMenu, Ui3nRipple } from '@v1nt1248/3nclient-lib';
 import { getDeliveryErrors } from '@v1nt1248/3nclient-lib/utils';
 import prLogo from '../assets/images/privacysafe-logo.svg';
 import { makeServiceCaller } from '@shared/ipc/ipc-service-caller';
 import { appDeliverySrvProxy } from '@main/services/services-provider';
-import { useAppStore, useContactsStore, useChatsStore } from '@main/store';
 import { UISettings } from '@main/helpers/ui-settings';
 import type { AppDeliveryService } from '~/index';
 import ContactIcon from '../components/contacts/contact-icon.vue';
+import { makeIncomingMessageHandler } from '@main/ctrl-funcs/handle-incoming-message';
+import { handleUpdateMessageStatus } from '@main/ctrl-funcs/system-message-handlers/handle-update-message-status';
+import { useChatsStore } from '@main/store/chats';
+import { useAppStore } from '@main/store/app';
+import { useContactsStore } from '@main/store/contacts';
 
 const vUi3nRipple = Ui3nRipple;
 
@@ -38,10 +41,8 @@ const chatsStore = useChatsStore();
 
 const { appVersion, user: me, connectivityStatus } = storeToRefs(appStore);
 const {
-  getAppConfig,
-  getAppVersion,
-  getUser,
-  getConnectivityStatus,
+  fetchInitData,
+  fetchConnectivityStatus,
   setLang,
   setColorTheme,
   setAppWindowSize,
@@ -49,8 +50,7 @@ const {
 
 const { fetchContactList } = contactsStore;
 
-const { currentChatId, chatList } = storeToRefs(chatsStore);
-const { getChatList, receiveMessage, handleUpdateMessageStatus } = chatsStore;
+const { fetchChatList: refreshChatList } = chatsStore;
 
 const appElement = ref<Element | null>(null);
 
@@ -77,12 +77,10 @@ async function appExit() {
 onBeforeMount(async () => {
   try {
     await fetchContactList();
-    await getAppVersion();
-    await getUser();
-    await getAppConfig();
-    await getConnectivityStatus();
+    await fetchInitData();
+    await fetchConnectivityStatus();
 
-    connectivityTimerId.value = setInterval(getConnectivityStatus, 60000);
+    connectivityTimerId.value = setInterval(fetchConnectivityStatus, 60000);
 
     const config = await UISettings.makeResourceReader();
     config.watchConfig({
@@ -93,7 +91,7 @@ onBeforeMount(async () => {
       },
     });
 
-    await getChatList();
+    await refreshChatList();
 
     const deliverySrvConnection = await w3n.rpc!.thisApp!('ChatDeliveryService');
     const deliverSrv = makeServiceCaller(
@@ -103,25 +101,7 @@ onBeforeMount(async () => {
     ) as AppDeliveryService;
 
     deliverSrv.watchIncomingMessages({
-      next: (msg) => {
-        const { jsonBody, msgId } = msg;
-        const { chatMessageType, chatId, members = [] } = jsonBody;
-
-        const membersFromDb = get(chatList.value, [chatId, 'members']);
-        const realMembers = membersFromDb || members;
-        if (
-          chatMessageType === 'system' ||
-          (chatMessageType === 'regular' && realMembers.includes(me.value))
-        ) {
-          receiveMessage({
-            me: me.value,
-            msg,
-            currentChatId: currentChatId.value,
-          });
-        } else {
-          appDeliverySrvProxy.removeMessageFromInbox([msgId]);
-        }
-      },
+      next: makeIncomingMessageHandler(chatsStore, contactsStore, me.value),
       error: (e) => console.error(e),
       complete: () => deliverySrvConnection.close(),
     });
@@ -140,7 +120,7 @@ onBeforeMount(async () => {
             // TODO it's necessary to change when we will add new delivery status (not only 'sent' or 'error')
             const status = size(errors) === 0 || size(recipients) > size(errors) ? 'sent' : 'error';
 
-            handleUpdateMessageStatus({ msgId: id, value: status });
+            handleUpdateMessageStatus(chatsStore, { msgId: id, value: status });
           }
         }
       },
@@ -273,6 +253,7 @@ onBeforeUnmount(() => {
   position: relative;
   top: -2px;
   margin-right: var(--spacing-m);
+  height: var(--spacing-l);
 }
 
 .delimiter {

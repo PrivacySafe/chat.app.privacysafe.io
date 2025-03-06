@@ -22,13 +22,14 @@ import get from 'lodash/get';
 import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { useChatsStore } from '@main/store';
+import { useChatsStore } from '@main/store/chats';
 import { getChatSystemMessageText } from '@main/helpers/chat-ui.helper';
 import { getContactName } from '@main/helpers/contacts.helper';
 import { getMessageFromCurrentChat } from '@main/helpers/chat-message-actions.helpers';
 import type { MessageType, ChatMessageView } from '~/index';
 import ChatMessageStatus from './chat-message-status.vue';
 import ChatMessageAttachments from './chat-message-attachments.vue';
+import { handleUpdateMessageStatus } from '@main/ctrl-funcs/system-message-handlers/handle-update-message-status';
 
 const vUi3nHtml = Ui3nHtml;
 
@@ -40,7 +41,7 @@ const props = defineProps<{
 const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const chatsStore = useChatsStore();
 const { currentChat } = storeToRefs(chatsStore);
-const { getChatList, handleUpdateMessageStatus } = chatsStore;
+const { fetchChatList: refreshChatList } = chatsStore;
 
 const chatMsgElement = ref<Element | null>(null);
 
@@ -53,7 +54,7 @@ const currentMsgSender = computed<string>(() => get(props.msg, ['sender'], ''));
 const doesShowSender = computed<boolean>(() => currentMsgSender.value !== props.prevMsgSender && msgType.value === 'incoming' && !isMsgSystem.value);
 
 const msgText = computed<string>(() => isMsgSystem.value
-  ? getChatSystemMessageText({ message: props.msg, chat: currentChat.value() })
+  ? getChatSystemMessageText({ message: props.msg, chat: currentChat.value })
   : props.msg.body);
 
 const initialMessage = computed(() => getMessageFromCurrentChat({ chatMessageId: props.msg.initialMessageId }));
@@ -70,8 +71,8 @@ function intersectHandler(entries: IntersectionObserverEntry[], observer: Inters
       const { id } = entry.target;
       const { chatMessageId, messageType, chatMessageType, status } = props.msg;
       if (chatMessageId === id.replace('msg-', '') && messageType === 'incoming' && chatMessageType !== 'system' && status === 'received') {
-        await handleUpdateMessageStatus({ chatMessageId, value: null });
-        await getChatList();
+        await handleUpdateMessageStatus(chatsStore, { chatMessageId, value: null });
+        await refreshChatList();
       }
       observer.unobserve(entry.target);
     }
@@ -267,11 +268,14 @@ onMounted(() => {
 }
 
 .chatMessageInitial {
-  border-left: 2px solid var(--black-90);
-  padding-left: var(--half-size);
+  border-top-right-radius: var(--spacing-xs);
+  border-bottom-right-radius: var(--spacing-xs);
+  border-left: 2px solid var(--color-icon-chat-bubble-other-default);
+  padding: var(--spacing-xs) 6px var(--spacing-xs) var(--spacing-xs);
   font-size: var(--font-12);
   line-height: var(--font-14);
   color: var(--color-text-control-primary-default);
+  background-color: var(--color-bg-chat-bubble-other-quote);
 }
 
 .chatMessageInitialSender {

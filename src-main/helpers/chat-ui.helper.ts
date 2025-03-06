@@ -1,5 +1,5 @@
 import { get, without } from 'lodash';
-import { useAppStore } from '../store';
+import { useAppStore } from '../store/app';
 import { getContactName } from './contacts.helper';
 import type { ChatMessageView, ChatView, MessageType } from '~/index';
 

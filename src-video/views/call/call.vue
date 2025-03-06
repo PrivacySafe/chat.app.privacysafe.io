@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2024 3NSoft Inc.
+ Copyright (C) 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,120 +16,129 @@
 -->
 
 <script lang="ts" setup>
-import { Ui3nButton, Ui3nIcon } from '@v1nt1248/3nclient-lib';
-import useCall from './useCall';
-import VideoPlaceholder from '@video/components/video-placeholder.vue';
+import { computed, useCssModule } from 'vue';
+import { Ui3nButton } from '@v1nt1248/3nclient-lib';
+import { useCommonCallElements, useGroupCall, useCall } from './use-in-calls';
+import IconButton from "@video/components/icon-button.vue";
+import OwnVideo from "@video/components/own-video.vue";
+import PeerVideo from "@video/components/peer-video.vue";
+import PeerSharing from "@video/components/peer-sharing.vue";
+import OwnSharing from "@video/components/own-sharing.vue";
 
 const {
-  user,
-  ownVideoTag,
-  peerVideoTag,
+  ownName,
   isFullscreen,
+  peerSharedStreams,
+  peerVideos,
   streams,
-  peerVideoAvailable,
-  peerAudioMuted,
-  toggleMicStatus,
+  openScreenShareChoice,
   toggleCamStatus,
-  endCall,
   toggleFullscreen,
-} = useCall();
+  toggleMicStatus
+} = useCommonCallElements();
+
+const isGroupChat = streams.isGroupChat;
+
+const {
+  endCall
+} = (isGroupChat ? useGroupCall() : useCall());
+
+const peersShare = computed(() => (peerSharedStreams.value.length > 0));
+const ownSharing = computed(() => !!streams.ownScreens);
+const screenShare = computed(() => (
+  peersShare.value || ownSharing.value
+));
+
+const classes = useCssModule();
+const videoWhenNoScreens = computed(() => {
+  const num = peerVideos.value.length + 1;
+  if (num === 2) {
+    return classes.twoParties;
+  } else if ((num === 3) || (num === 4)) {
+    return classes.threePlus;
+  } else if ((num >= 5) && (num < 7)) {
+    return classes.fivePlus;
+  } else if ((num >= 7) && (num < 10)) {
+    return classes.sevenPlus;
+  } else {
+    return classes.sevenPlus;
+  }
+});
+
 </script>
 
 <template>
-  <section :class="$style.call">
-    <div :class="$style.body">
-      <div :class="$style.person">
-        <video
-          v-show="peerVideoAvailable"
-          ref="peerVideoTag"
-          :class="$style.video"
-          playsinline
-          autoplay
-        />
+  <section :class=$style.call>
+    <div :class="[ $style.participants, {
+      [videoWhenNoScreens]: !screenShare,
+      [$style.participantsWithSharing]: screenShare
+    }]">
+      <peer-video
+        :style-class=$style.participant
+        v-for="{
+          vaStream, audioMuted, peerAddr, peerName, videoMuted
+        } in peerVideos"
+        :is-video-on="!videoMuted"
+        :is-audio-on="!audioMuted"
+        :stream=vaStream
+        :peerName=peerName
+        :peerAddr=peerAddr
+      />
 
-        <video-placeholder
-          v-show="!peerVideoAvailable"
-          :user="streams.fstPeer.peerName"
-        />
-
-        <ui3n-icon
-          v-if="peerAudioMuted"
-          icon="round-mic-off"
-          icon-color="var(--color-icon-button-tritery-default)"
-          width="24"
-          height="24"
-          :class="$style.muted"
-        />
-      </div>
-
-      <div :class="$style.person">
-        <video
-          v-show="streams.isCamOn"
-          ref="ownVideoTag"
-          :class="[$style.video, $style.mirrorFlip]"
-          playsinline
-          autoplay
-          muted
-        />
-
-        <video-placeholder
-          v-show="!streams.isCamOn"
-          :user="user"
-        />
-      </div>
+      <own-video :class=$style.participant
+        :is-cam-on="streams.isCamOn"
+        :stream="streams.ownVA!.stream"
+        :user=ownName
+      />
     </div>
 
-    <div :class="$style.actions">
-      <div :class="$style.actionGroup">
-        <ui3n-button
-          type="custom"
-          color="var(--color-bg-button-tritery-default)"
+    <div :class=$style.sharedScreens
+      v-if=screenShare
+    >
+      <own-sharing
+        v-if="!!streams.ownScreens"
+      />
+      <peer-sharing
+        v-for="{ stream, peerAddr, peerName } in peerSharedStreams"
+        :key=stream.id
+        :stream=stream
+        :peerAddr=peerAddr
+        :peerName=peerName
+      />
+    </div>
+
+    <div :class=$style.actions>
+      <div :class=$style.actionGroup>
+        <icon-button
           :icon="isFullscreen ? 'shrink' : 'expand-screen'"
-          icon-color="var(--color-icon-button-tritery-default)"
-          :class="$style.btn"
           @click.stop.prevent="toggleFullscreen"
         />
       </div>
 
-      <div :class="$style.actionGroup">
-        <ui3n-button
-          type="custom"
-          color="var(--color-bg-button-tritery-default)"
+      <div :class=$style.actionGroup>
+        <icon-button
           :icon="streams.isMicOn ? 'round-mic-none' : 'round-mic-off'"
-          icon-color="var(--color-icon-button-tritery-default)"
-          :class="$style.btn"
           @click.stop.prevent="toggleMicStatus"
         />
 
-        <ui3n-button
-          type="custom"
-          color="var(--color-bg-button-tritery-default)"
+        <icon-button
           :icon="streams.isCamOn ? 'outline-videocam' : 'outline-videocam-off'"
-          icon-color="var(--color-icon-button-tritery-default)"
-          :class="$style.btn"
           @click.stop.prevent="toggleCamStatus"
         />
 
-        <ui3n-button
-          type="custom"
-          color="var(--color-bg-button-tritery-default)"
+        <icon-button
           icon="outline-screen-share"
-          icon-color="var(--color-icon-button-tritery-default)"
-          :class="$style.btn"
-          disabled
+          @click.stop.prevent="openScreenShareChoice"
         />
 
-        <ui3n-button
-          type="custom"
-          color="var(--color-bg-button-tritery-default)"
+        <icon-button
+          v-if=isGroupChat
           icon="sharp-people"
-          icon-color="var(--color-icon-button-tritery-default)"
-          :class="$style.btn"
           disabled
         />
       </div>
 
-      <div :class="$style.actionGroup">
+      <div :class=$style.actionGroup>
         <ui3n-button
           type="custom"
           color="var(--error-content-default)"
@@ -145,38 +154,72 @@ const {
 </template>
 
 <style lang="scss" module>
+
 .call {
   --call-actions-height: 64px;
+  --sharing-screens-height: 70%;
 
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-.body {
+.participants {
   position: relative;
   width: 100%;
   height: calc(100% - var(--call-actions-height));
   padding: 0 var(--spacing-m);
-  display: flex;
+  /* display: flex; */
   justify-content: center;
   align-items: center;
   column-gap: var(--spacing-m);
 }
 
-.person {
-  position: relative;
-  width: calc(100% - var(--spacing-l));
-  height: calc(100% - var(--spacing-l));
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.participantsWithSharing {
+  height: calc(
+    100% - var(--call-actions-height) - var(--sharing-screens-height)
+  );
+  --participant-max-height: calc(100% - var(--spacing-s));
+  --participant-width: calc(25% - var(--spacing-s));
+  white-space: nowrap;
+  overflow-x: auto;
 }
 
-.muted {
-  position: absolute;
-  left: calc(50% - 12px);
-  top: var(--spacing-s);
+.twoParties {
+  --participant-max-height: calc(100% - var(--spacing-l));
+  --participant-width: calc(50% - var(--spacing-s));
+}
+
+.threePlus {
+  --participant-max-height: calc(50% - var(--spacing-s));
+  --participant-width: calc(50% - var(--spacing-s));
+}
+
+.fivePlus {
+  --participant-max-height: calc(50% - var(--spacing-s));
+  --participant-width: calc(33% - var(--spacing-s));
+}
+
+.sevenPlus {
+  --participant-max-height: calc(33% - var(--spacing-s));
+  --participant-width: calc(33% - var(--spacing-s));
+}
+
+.participant {
+  position: relative;
+  display: inline-block;
+  width: var(--participant-width);
+  max-height: var(--participant-max-height);
+  margin-bottom: var(--spacing-s);
+  margin-right: var(--spacing-s);
+}
+
+.sharedScreens {
+  position: relative;
+  width: 100%;
+  height: var(--sharing-screens-height);
+  padding: 0 var(--spacing-m);
+  overflow-y: auto;
 }
 
 .actions {
@@ -197,18 +240,4 @@ const {
   column-gap: var(--spacing-l);
 }
 
-.btn {
-  padding: 0 var(--spacing-s) !important;
-  column-gap: 0 !important;
-}
-
-.video {
-  width: 100%;
-  background-color: var(--color-bg-control-secondary-default);
-  border-radius: var(--spacing-m);
-}
-
-.mirrorFlip {
-  transform: rotateY(180deg);
-}
 </style>

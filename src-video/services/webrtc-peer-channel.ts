@@ -15,16 +15,27 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { SingleProc, makeSyncedFunc } from "@v1nt1248/3nclient-lib/utils";
+import { SingleProc, makeSyncedFunc, defer, Deferred } from "@v1nt1248/3nclient-lib/utils";
+
+// XXX we may add a concept of callId in a chat room, to allow background
+//     process to note signalling that may be reconnecting what has been closed 
+//     explicitly, and may tell peer to take it easy.
+
+const CONNECTION_ACK_STR = 'connection-acknowledgement';
 
 export abstract class WebRTCPeerChannel {
   protected syncProc = new SingleProc();
-  protected isDataChannelAvailable = false;
 	private makingOffer = false;
 	private ignoreOffer = false;
   protected readonly conn: RTCPeerConnection;
   private iceCandidatesBuffer: RTCIceCandidateInit[]|undefined = [];
+
+  /**
+   * "chat" data channel.
+   */
   protected dataChannel: RTCDataChannel | undefined;
+
+  private deferredStart: Deferred<void>|undefined = defer();
 
 	protected constructor(
     rtcConfig: RTCConfiguration,
@@ -32,7 +43,6 @@ export abstract class WebRTCPeerChannel {
 		private readonly isPolite: boolean
 	) {
     this.conn = new RTCPeerConnection(rtcConfig);
-
     this.conn.onnegotiationneeded = makeSyncedFunc(
       this.syncProc, this, this.handleNegotiationNeeded
     );
@@ -45,20 +55,32 @@ export abstract class WebRTCPeerChannel {
       }
     };
     this.conn.oniceconnectionstatechange = () => {
-      if (this.conn.iceConnectionState === 'failed') {
+      const { iceConnectionState } = this.conn;
+      if (iceConnectionState === 'failed') {
         this.conn.restartIce();
       }
     };
-    this.conn.addEventListener('connectionstatechange', () => {
-      const connState = this.conn.connectionState;
-      if (connState === 'disconnected') {
-      this.onDisconnected();
+    this.conn.onconnectionstatechange = () => {
+      const { connectionState } = this.conn;
+      if (connectionState === 'disconnected') {
+        this.onWebRTCConnectionDisconnected();
+      } else if (connectionState === 'connected') {
+        this.onWebRTCConnected();
       }
-    });
-    this.conn.addEventListener('track', this.onConnTrack.bind(this));
+    };
+    this.conn.ontrack = this.onConnectionTrack.bind(this);
     this.offBandComm.observeIncoming(makeSyncedFunc(
       this.syncProc, this, this.handleOffBandSignal
     ));
+    this.conn.ondatachannel = ({ channel }) => {
+      if (this.connectionWasAcknowledged) {
+        return;
+      }
+      if (!this.dataChannel || this.isPolite) {
+        this.dataChannel = channel;
+        this.setupDataChannel(true);
+      }
+    };
   }
 
   private async handleNegotiationNeeded(): Promise<void> {
@@ -79,7 +101,7 @@ export abstract class WebRTCPeerChannel {
     { description, candidate }: OffBandMessage
   ): Promise<void> {
     try {
-      console.log(`📩 received description`, description, `candidate`, candidate)
+      console.log(`📩 received description`, description, `candidate`, candidate);
       if (description) {
         const offerCollision =
           (description.type === "offer") &&
@@ -128,11 +150,23 @@ export abstract class WebRTCPeerChannel {
     }
   }
 
-  protected abstract onConnTrack(ev: RTCTrackEvent): void;
+  /**
+   * This is called on connection's track event.
+   * @param ev 
+   */
+  protected abstract onConnectionTrack(ev: RTCTrackEvent): void;
 
-  protected onDisconnected(): void {
-    setTimeout(() => this.close());
-  }
+  /**
+   * This is called on connectionstatechange event, when connection state
+   * is disconnected.
+   */
+  protected abstract onWebRTCConnectionDisconnected(): void;
+
+  /**
+   * This is called on connectionstatechange event, when connection state
+   * is connected.
+   */
+  protected abstract onWebRTCConnected(): void;
 
   async close(): Promise<void> {
     try {
@@ -142,22 +176,71 @@ export abstract class WebRTCPeerChannel {
     } catch (err) { /* empty */ }
   }
 
+  /**
+   * This is called on message event on "chat" data channel.
+   * @param ev 
+   */
   protected abstract onDataChannelMessage(ev: { data: string }): void;
 
-  protected setDataChannel(initialMessage?: string): void {
-    this.dataChannel = this.conn.createDataChannel('chat', { negotiated: true, id: 0 });
-
-    this.dataChannel.addEventListener('open', async () => {
-      this.isDataChannelAvailable = true;
-      initialMessage && this.dataChannel?.send(initialMessage);
-    });
-
-    this.dataChannel.addEventListener('message', this.onDataChannelMessage.bind(this));
-
-    this.conn.addEventListener('track', this.onConnTrack.bind(this));
+  private setupDataChannel(sendConnectionAcknowledge: boolean): void {
+    if (!this.dataChannel) {
+      this.dataChannel = this.conn.createDataChannel('chat');
+    }
+    if (sendConnectionAcknowledge) {
+      this.dataChannel.onopen = async () => {
+        this.dataChannel!.send(CONNECTION_ACK_STR);
+        this.deferredStart!.resolve();
+        this.deferredStart = undefined;
+      };
+    }
+    this.dataChannel.onmessage = ev => {
+      if (this.connectionWasAcknowledged) {
+        this.onDataChannelMessage(ev);
+      } else if (ev.data === CONNECTION_ACK_STR) {
+        this.deferredStart?.resolve();
+        this.deferredStart = undefined;
+      } else {
+        this.deferredStart?.reject(new Error(
+          `Unexpected connection acknowledgement msg: ${ev.data}`
+        ));
+      }
+    };
+    this.dataChannel.onerror = ev => {
+      this.deferredStart?.reject(ev);
+    };
   }
+
+  get connectionWasAcknowledged(): boolean {
+    return !this.deferredStart;
+  }
+
+  /**
+   * Connect opens chat data channel, triggering WebRTC negotiations.
+   */
+  async connect(): Promise<void> {
+    if (this.connectionWasAcknowledged) {
+      return;
+    }
+    assert(!this.dataChannel);
+    this.setupDataChannel(false);
+    return this.deferredStart!.promise;
+  }
+
+  get isConnected(): boolean {
+    return (this.conn.connectionState === 'connected');
+  }
+
+  get connectionState(): RTCPeerConnection['connectionState'] {
+    return this.conn.connectionState;
+  }
+
 }
 
+function assert(ok: boolean): void {
+  if (!ok) {
+    throw new Error(`assertion in code state fails`);
+  }
+}
 
 export interface OffBandMessage {
   description?: RTCSessionDescription;

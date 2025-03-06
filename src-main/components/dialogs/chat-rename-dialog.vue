@@ -59,7 +59,7 @@ watch(
   <div :class="$style.chatRenameDialog">
     <ui3n-input
       v-model="data.newName"
-      :rules="[checkRequired, checkLength]"
+      :rules="[ checkRequired as any, checkLength as any ]"
       :placeholder="$tr('chat.rename.dialog.input.placeholder')"
       @change="onChange"
       @update:valid="val => isValid = val"

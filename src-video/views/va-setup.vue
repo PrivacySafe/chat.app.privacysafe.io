@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2024 3NSoft Inc.
+ Copyright (C) 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,23 +16,35 @@
 -->
 
 <script lang="ts" setup>
-import { onBeforeMount, onMounted, shallowRef } from 'vue';
+import { onBeforeMount, onMounted, shallowRef, ref, computed, inject } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { Ui3nButton } from '@v1nt1248/3nclient-lib';
-import { useStreamsStore } from '../store/streams';
-import { useAppStore } from '../store/app';
-import { startCall } from '../ctrl-funcs/startCall';
+import { Ui3nButton, Ui3nMenu } from '@v1nt1248/3nclient-lib';
+import { useStreamsStore } from '@video/store/streams';
+import { useAppStore } from '@video/store/app';
+import { startCall } from '@video/ctrl-funcs';
 import VideoPlaceholder from '@video/components/video-placeholder.vue';
+import { I18N_KEY, I18nPlugin, NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 
 const router = useRouter();
+const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 const appStore = useAppStore();
 const { user } = storeToRefs(appStore);
 const { getUser, getAppConfig } = appStore;
 const streams = useStreamsStore();
-const { ownVAStream, isMicOn, isCamOn, isAnyOneConnected, isGroupChat } = storeToRefs(streams);
+const { ownVA, isMicOn, isCamOn, isAnyOneConnected, isGroupChat } = storeToRefs(streams);
 const { setOwnVAStream, setMicOn, setCamOn } = streams;
+
+const choicesWithVideoInput = ref<DeviceOption[]>([]);
+const webcamMenuChoices = computed(() => choicesWithVideoInput.value.filter(
+  ({ videoDevLabel }) => (videoDevLabel !== ownVA.value?.deviceId)
+));
+const haveVideo = computed(() => (choicesWithVideoInput.value.length > 0));
+const haveCamerasToChoose = computed(() => (
+  choicesWithVideoInput.value.length > 1
+));
 
 const ownVideo = shallowRef<HTMLVideoElement>();
 
@@ -40,18 +52,63 @@ async function cancel() {
   w3n.closeSelf();
 }
 
-async function setOwnVideo() {
-  if (ownVAStream.value) {
-    ownVideo.value!.srcObject = ownVAStream.value;
-  } else {
-    const ownStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
-    setOwnVAStream(ownStream);
+interface DeviceOption {
+  videoDevLabel: string;
+  opt: MediaStreamConstraints;
+}
 
-    ownVideo.value!.srcObject = ownVAStream.value;
+async function setupDeviceChoices(onMount = true): Promise<void> {
+  if (onMount) {
+    await updateVideoDeviceChoices();
+    if (ownVA.value) {
+      ownVideo.value!.srcObject = ownVA.value.stream;
+    } else if (haveVideo.value) {
+      await changeVideoDeviceTo(choicesWithVideoInput.value[0]);
+      setCamOn(true);
+    } else {
+      await setAudioOnlyDevice();
+      setCamOn(false);
+    }
+    setMicOn(true);
+  } else {
+    await updateVideoDeviceChoices();
+    if (choicesWithVideoInput.value.find(
+      d => (d.videoDevLabel === ownVA.value?.deviceId)
+    )) {
+      return;
+    }
+    if (haveVideo.value) {
+      await changeVideoDeviceTo(choicesWithVideoInput.value[0]);
+      setCamOn(true);
+    } else {
+      await setAudioOnlyDevice();
+      setCamOn(false);
+    }
+    setMicOn(true);
   }
+}
+
+async function updateVideoDeviceChoices(): Promise<void> {
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  choicesWithVideoInput.value = devices
+  .filter(({ kind }) => (kind === 'videoinput'))
+  .map(({ deviceId, label: videoDevLabel }) => ({
+    videoDevLabel,
+    opt: { audio: true, video: { deviceId } }
+  }));
+}
+
+async function changeVideoDeviceTo(
+  { videoDevLabel, opt }: DeviceOption
+): Promise<void>  {
+  const ownStream = await navigator.mediaDevices.getUserMedia(opt);
+  setOwnVAStream(ownStream, videoDevLabel);
+  ownVideo.value!.srcObject = ownVA.value!.stream;
+}
+
+async function setAudioOnlyDevice(): Promise<void> {
+  const ownStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  setOwnVAStream(ownStream, null);
 }
 
 function toggleMicStatus() {
@@ -59,23 +116,26 @@ function toggleMicStatus() {
 }
 
 function toggleCamStatus() {
-  setCamOn(!isCamOn.value);
+  if (!isCamOn.value && !haveVideo.value) {
+    notification.$createNotice({
+      type: 'error',
+      content: $tr('va.setup.no-cameras'),
+    });
+  } else {
+    setCamOn(!isCamOn.value);
+  }
 }
 
 async function startChatCall() {
-  await startCall();
-
-  if (isGroupChat.value) {
-    await router.push('group-call');
-  } else {
-    await router.push('call');
-  }
+  startCall();
+  await router.push('call');
 }
 
 onBeforeMount(async () => {
   try {
     await getUser();
     await getAppConfig();
+    navigator.mediaDevices.ondevicechange = () => setupDeviceChoices(false);
   } catch (e) {
     console.error('ON_BEFORE_MOUNT ERROR: ', e);
     throw e;
@@ -83,14 +143,14 @@ onBeforeMount(async () => {
 });
 
 onMounted(async () => {
-  await setOwnVideo();
+  await setupDeviceChoices();
 });
 </script>
 
 <template>
   <section :class="$style.vaSetup">
     <div :class="$style.header">
-      {{ $tr('va.presettings.title') }}
+      {{ $tr('va.setup.title') }}
 
       <Ui3nButton
         type="icon"
@@ -102,8 +162,9 @@ onMounted(async () => {
     </div>
 
     <div :class="$style.content">
-      <video
-        v-show="isCamOn"
+
+       <video
+        v-show="haveVideo && isCamOn"
         ref="ownVideo"
         :class="$style.video"
         playsinline
@@ -111,8 +172,8 @@ onMounted(async () => {
       />
 
       <video-placeholder
-        v-show="!isCamOn"
-        :user="user"
+        v-show="!haveVideo || !isCamOn"
+        :userName="user"
       />
 
       <div :class="$style.settings">
@@ -133,6 +194,29 @@ onMounted(async () => {
           :class="$style.settingsBtn"
           @click="toggleCamStatus"
         />
+
+        <ui3n-menu
+          v-show="haveCamerasToChoose"
+        >
+          <div :class=$style.currentWebcam>
+            {{ ownVA?.deviceId }}
+            <ui3n-icon
+              :class="$style.dropDownIcon"
+              icon="outline-arrow-drop-down"
+              width="24"
+              height="24"
+            />
+          </div>
+          <template #menu>
+            <div :class=$style.webcamChoice
+              v-for="dev in webcamMenuChoices"
+              :key="dev.videoDevLabel"
+              @click="changeVideoDeviceTo(dev)"
+            >
+              {{ dev.videoDevLabel }}
+            </div>
+          </template>
+        </ui3n-menu>
       </div>
     </div>
 
@@ -224,5 +308,22 @@ onMounted(async () => {
   border-top: 1px solid var(--color-border-block-primary-default);
 }
 
+.dropDownIcon {
+  position: absolute;
+  right: var(--spacing-xs);
+}
+
+.currentWebcam {
+  color: var(--color-icon-button-tritery-default);
+  background-color: var(--color-bg-button-tritery-default);
+  padding: var(--spacing-s);
+  align-items: center;
+}
+
+.webcamChoice {
+  color: var(--color-icon-button-tritery-default);
+  background-color: var(--color-bg-button-tritery-default);
+  padding: var(--spacing-s);
+}
 
 </style>

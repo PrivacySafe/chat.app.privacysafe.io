@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -25,6 +25,7 @@ import { prepareMessageDeliveryInfo } from './helpers/delivery.helpers.ts';
 import { ObserversSet } from './libs/observer-utils.ts';
 import { WebRTCSignalHandler } from './webrtc-messaging.ts';
 import type {
+  AppDeliveryService,
   AppDeliverySrv,
   ChatIncomingMessage,
   ChatMessageLocalMeta,
@@ -43,7 +44,7 @@ declare const w3n: web3n.testing.CommonW3N;
 
 const deliveryServiceDataFileName = 'delivery-service-data.json';
 
-export class ChatDeliveryService implements AppDeliverySrv {
+export class ChatDeliveryService implements AppDeliverySrv, AppDeliveryService {
 
   public readonly fileProc = new SingleProc();
   private readonly incomingChatMessageObservers = new ObserversSet<ChatIncomingMessage>();
@@ -192,8 +193,8 @@ export class ChatDeliveryService implements AppDeliverySrv {
           w3n.mail!.delivery.observeDelivery(
             msgId,
             {
-              error: async () => await this.removeMessageFromDeliveryList([msgId]),
-              complete: async () => await this.removeMessageFromDeliveryList([msgId]),
+              error: () => this.removeMessageFromDeliveryList([msgId]),
+              complete: () => this.removeMessageFromDeliveryList([msgId]),
             },
           );
         }

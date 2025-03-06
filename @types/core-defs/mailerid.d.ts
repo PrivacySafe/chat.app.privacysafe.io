@@ -26,4 +26,12 @@ declare namespace web3n.mailerid {
 
 	}
 
+	interface MailerIdAssertionLoad {
+		user: string;
+		rpDomain: string;
+		sessionId: string;
+		issuedAt: number;
+		expiresAt: number;
+	}
+
 }

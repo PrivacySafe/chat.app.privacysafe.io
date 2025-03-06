@@ -1,4 +1,4 @@
-import { defineAsyncComponent, inject, nextTick, onBeforeMount, onBeforeUnmount, ref } from 'vue';
+import { defineAsyncComponent, inject, nextTick, onMounted, onBeforeUnmount, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import {
@@ -11,7 +11,7 @@ import {
   VUEBUS_KEY,
   VueBusPlugin,
 } from '@v1nt1248/3nclient-lib/plugins';
-import { useAppStore, useChatsStore } from '@main/store';
+import { useAppStore } from '@main/store/app';
 import type { AppGlobalEvents, ChatMessageAction, ChatMessageActionType, ChatMessageView, MessageType } from '~/index';
 import {
   copyMessageToClipboard,
@@ -21,6 +21,8 @@ import {
 import { getMessageActions } from '@main/helpers/chats.helper';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import type { ChatMessagesEmits } from './types';
+import { createChat, deleteMessage } from '@main/ctrl-funcs';
+import { useChatsStore } from '@main/store/chats';
 
 export default function useChatMessages(emit: ChatMessagesEmits) {
   const router = useRouter();
@@ -32,7 +34,6 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
 
   const chatsStore = useChatsStore();
   const { currentChatId } = storeToRefs(chatsStore);
-  const { createChat, deleteMessage } = chatsStore;
   const { user } = storeToRefs(useAppStore());
 
   const listElement = ref<HTMLDivElement | null>(null);
@@ -115,7 +116,11 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
         confirmButtonBackground: 'var(--system-white)',
         cancelButtonColor: 'var(--system-white)',
         cancelButtonBackground: 'var(--blue-main)',
-        onConfirm: (deleteForEveryone?: boolean) => deleteMessage(chatMessageId, deleteForEveryone),
+        onConfirm: (
+          (deleteForEveryone?: boolean) => deleteMessage(
+            chatsStore, chatMessageId, deleteForEveryone
+          )
+      ) as any,
       },
     });
   }
@@ -145,14 +150,19 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
         title: $tr('chat.message.forward.dialog.title'),
         confirmButton: false,
         cancelButton: false,
-        onConfirm: async ({ type, data }: { type: 'chat' | 'contact', data: string }) => {
+        onConfirm: (async (
+          { type, data }: { type: 'chat' | 'contact', data: string }
+        ) => {
           let chatId = type === 'chat' ? data : undefined;
           if (type === 'contact') {
-            chatId = await createChat({ members: [user.value, data], admins: [user.value] });
+            chatId = await createChat(
+              chatsStore,
+              { members: [user.value, data], admins: [user.value] }
+            );
           }
 
           router.push(`/chats/${chatId}?initialMsgId=${chatMessageId}`);
-        },
+        }) as any,
       },
     });
   }
@@ -169,7 +179,7 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
     messageActions[action] && messageActions[action]!(chatMessageId);
   }
 
-  onBeforeMount(() => {
+  onMounted(() => {
     bus.$emitter.on('send:message', scrollList);
   });
 

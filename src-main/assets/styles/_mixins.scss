@@ -6,23 +6,23 @@
 }
 
 @mixin block-shadow {
-  box-shadow: 0 3px 3px -2px rgba(0, 0, 0, 0.2),
-  0 3px 4px 0 rgba(0, 0, 0, 0.14),
-  0 1px 8px 0 rgba(0, 0, 0, 0.12);
+  box-shadow: 0 3px 3px -2px var(--shadow-key-1),
+  0 3px 4px 0 var(--shadow-key-2),
+  0 1px 8px 0 var(--shadow-key-3),
 }
 
 @mixin elevation($number: 1) {
   @if $number == 3 {
-    box-shadow: 0 3px 3px -2px var(--shadow-key-umbra-opacity, rgba(0, 0, 0, 0.2)),
-    0 3px 4px 0 var(--shadow-key-penumbra-opacity, rgba(0, 0, 0, 0.14)),
-    0 1px 8px 0 var(--shadow-key-ambient-opacity, rgba(0, 0, 0, 0.12));
+    box-shadow: 0 3px 3px -2px var(--shadow-key-1),
+    0 3px 4px 0 var(--shadow-key-2),
+    0 1px 8px 0 var(--shadow-key-3),
   } @else if $number == 2 {
-    box-shadow: 0 2px 1px -2px var(--shadow-key-umbra-opacity, rgba(0, 0, 0, 0.2)),
-    0 2px 2px 0 var(--shadow-key-penumbra-opacity, rgba(0, 0, 0, 0.14)),
-    0 1px 5px 0 var(--shadow-key-ambient-opacity, rgba(0, 0, 0, 0.12));
+    box-shadow: 0 2px 1px -2px var(--shadow-key-1),
+    0 2px 2px 0 var(--shadow-key-2),
+    0 1px 5px 0 var(--shadow-key-3),
   } @else {
-    box-shadow: 0 2px 1px -1px var(--shadow-key-umbra-opacity, rgba(0, 0, 0, 0.2)),
-    0 1px 1px 0 var(--shadow-key-penumbra-opacity, rgba(0, 0, 0, 0.14)),
-    0 1px 3px 0 var(--shadow-key-ambient-opacity, rgba(0, 0, 0, 0.12));
+    box-shadow: 0 2px 1px -1px var(--shadow-key-1),
+    0 1px 1px 0 var(--shadow-key-2),
+    0 1px 3px 0 var(--shadow-key-3),
   }
 }

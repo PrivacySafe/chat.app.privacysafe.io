@@ -1,16 +1,34 @@
+/*
+Copyright (C) 2020 - 2025 3NSoft Inc.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 import { computed, defineAsyncComponent, inject, onBeforeMount, ref, watch } from 'vue';
 import { onBeforeRouteUpdate, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import get from 'lodash/get';
 import size from 'lodash/size';
-import without from 'lodash/without';
 import isEmpty from 'lodash/isEmpty';
 import { I18N_KEY, I18nPlugin, DIALOGS_KEY, DialogsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { transformFileToWeb3NFile } from '@v1nt1248/3nclient-lib/utils';
-import { useAppStore, useChatsStore } from '@main/store';
+import { useAppStore } from '@main/store/app';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { getAttachmentFilesInfo, sendChatMessage } from '@main/helpers/chats.helper';
 import type { ChatMessageAttachmentsInfo, ChatMessageView, MessageType, Ui3nTextEnterEvent } from '~/index';
+import { includesAddress, areAddressesEqual } from '@shared/address-utils';
+import { useChatsStore } from '@main/store/chats';
 
 export default function useChatPage() {
   const route = useRoute();
@@ -21,7 +39,7 @@ export default function useChatPage() {
   const chatsStore = useChatsStore();
   const { user } = storeToRefs(appStore);
   const { currentChat, currentChatMessages } = storeToRefs(chatsStore);
-  const { getChat, getChatMessage } = chatsStore;
+  const { fetchChat: refreshChat, getChatMessage } = chatsStore;
 
   const inputEl = ref<Nullable<HTMLTextAreaElement>>(null);
   const msgText = ref<string>('');
@@ -34,13 +52,13 @@ export default function useChatPage() {
   const peerAddress = ref('');
 
   const chatName = computed<string>(() => {
-    const value = currentChat.value();
+    const value = currentChat.value;
     return get(value, 'name', '');
   });
 
   const readonly = computed(() => {
-    const { members = [] } = currentChat.value() || {};
-    return !members.includes(user.value);
+    const { members = [] } = currentChat.value || {};
+    return !includesAddress(members, user.value);
   });
 
   const sendBtnDisabled = computed<boolean>(() => {
@@ -118,8 +136,7 @@ export default function useChatPage() {
   }
 
   async function sendMessage(ev?:Ui3nTextEnterEvent, force = false) {
-    const chatMembers = currentChat.value()?.members || [];
-    if (disabled.value || readonly.value || !chatMembers.includes(user.value)) {
+    if (disabled.value || readonly.value) {
       return;
     }
 
@@ -129,10 +146,13 @@ export default function useChatPage() {
       msgText.value += '\n';
     } else if (force || (!force && !shiftKey)) {
       const { chatId } = route.params as { chatId: string };
-      const chatAdmins = currentChat.value()?.admins || [];
-      const recipients = without(chatMembers, user.value);
+      const chatAdmins = currentChat.value?.admins || [];
+      const chatMembers = currentChat.value?.members || [];
+      const recipients = chatMembers.filter(
+        addr => !areAddressesEqual(addr, user.value)
+      );
 
-      if (recipients.length) {
+      if (recipients.length > 0) {
         disabled.value = true;
         sendChatMessage({
           chatId,
@@ -168,7 +188,7 @@ export default function useChatPage() {
         closeOnClickOverlay: false,
       },
       componentProps: {
-        chatId: route.params.chatId,
+        chatId: route.params.chatId as string,
         peerAddress: peerAddress.value,
         onClose: () => {
           peerAddress.value = '';
@@ -179,7 +199,7 @@ export default function useChatPage() {
 
   onBeforeMount(async () => {
     const { chatId } = route.params as { chatId: string };
-    chatId && await getChat(chatId);
+    chatId && await refreshChat(chatId);
     const { initialMsgId } = route.query as { initialMsgId?: string };
     await prepareInfoFromForwardingMessage(initialMsgId);
   });
@@ -188,7 +208,7 @@ export default function useChatPage() {
     const chatIdFrom = from.params.chatId as string;
     const chatIdTo = to.params.chatId as string;
     if (chatIdTo && chatIdTo !== chatIdFrom) {
-      await getChat(chatIdTo);
+      await refreshChat(chatIdTo);
       msgText.value = '';
 
       const { initialMsgId } = to.query as { initialMsgId?: string };

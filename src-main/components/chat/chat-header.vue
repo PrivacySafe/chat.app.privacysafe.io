@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -32,14 +32,17 @@ import {
 } from '@v1nt1248/3nclient-lib/plugins';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nButton, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { useAppStore, useChatsStore } from '@main/store';
+import { useAppStore } from '@main/store/app';
 import { exportChatMessages } from '@main/helpers/chats.helper';
 import { getChatName } from '@main/helpers/chat-ui.helper';
 import { videoOpenerProxy } from '@main/services/services-provider';
-import { areAddressesEqual } from '@main/libs/address-utils';
+import { areAddressesEqual } from '@shared/address-utils';
 import type { ChatView, ChatMessageView, MessageType } from '~/index';
 import ChatAvatar from './chat-avatar.vue';
 import ChatHeaderActions from './chat-header-actions.vue';
+import { clearChat, deleteChat, leaveChat } from '@main/ctrl-funcs';
+import { renameChat } from '@main/ctrl-funcs/rename-chat';
+import { useChatsStore } from '@main/store/chats';
 
 const vUi3nHtml = Ui3nHtml;
 
@@ -57,7 +60,7 @@ const router = useRouter();
 const chatsStore = useChatsStore();
 const { user } = storeToRefs(useAppStore());
 const { currentChatId } = storeToRefs(chatsStore);
-const { getChat, deleteChat, leaveChat, clearChat, renameChat, getChatList } = chatsStore;
+const { fetchChat: getChat, fetchChatList: refreshChatList } = chatsStore;
 
 const text = computed<string>(() => {
   if (!props.chat.msgId) {
@@ -88,7 +91,7 @@ async function runChatHistoryCleaning() {
     dialogProps: {
       title: $tr('chat.history.clean.dialog.title'),
       onConfirm: async () => {
-        await clearChat(props.chat.chatId);
+        await clearChat(chatsStore, props.chat.chatId);
       },
     },
   });
@@ -119,11 +122,13 @@ function runChatRenaming() {
     dialogProps: {
       title: $tr('chat.rename.dialog.title'),
       confirmButtonText: $tr('chat.rename.dialog.button.text'),
-      onConfirm: async ({ oldName, newName }: { oldName: string, newName: string }) => {
+      onConfirm: (async (
+        { oldName, newName }: { oldName: string, newName: string }
+      ) => {
         if (newName !== oldName) {
-          await renameChat(props.chat, newName);
+          await renameChat(chatsStore, props.chat, newName);
         }
-      },
+      }) as any,
     },
   });
 }
@@ -144,12 +149,12 @@ function runChatDeleting() {
       cancelButtonColor: 'var(--color-text-button-primary-default)',
       cancelButtonBackground: 'var(--color-bg-button-primary-default)',
       onConfirm: async () => {
-        await deleteChat(props.chat.chatId);
+        await deleteChat(chatsStore, props.chat.chatId);
         if (props.chat.chatId === currentChatId.value) {
           await router.push('/chats');
           await getChat(null);
         }
-        await getChatList();
+        await refreshChatList();
       },
     },
   });
@@ -161,18 +166,18 @@ function runChatLeave() {
     component,
     dialogProps: {
       title: $tr('chat.leave.dialog.title'),
-      confirmButtonText: 'chat.leave.dialog.button',
+      confirmButtonText: $tr('chat.leave.dialog.button'),
       confirmButtonColor: 'var(--color-text-button-secondary-default)',
       confirmButtonBackground: 'var(--color-bg-button-secondary-default)',
       cancelButtonColor: 'var(--color-text-button-primary-default)',
       cancelButtonBackground: 'var(--color-bg-button-primary-default)',
       onConfirm: async () => {
-        await leaveChat(props.chat, [user.value]);
+        await leaveChat(chatsStore, props.chat, [user.value]);
         if (props.chat.chatId === currentChatId.value) {
           await router.push('/chats');
           await getChat(null);
         }
-        await getChatList();
+        await refreshChatList();
       },
     },
   });

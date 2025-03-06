@@ -57,139 +57,143 @@ const {
 </script>
 
 <template>
-  <div :class="$style.chat">
+  <section :class="$style.chat">
     <chat-header
-      v-if="currentChat()"
+      v-if="currentChat"
       :class="$style.chatHeader"
-      :chat="currentChat()!"
+      :chat="currentChat!"
       :messages="currentChatMessages"
     />
 
-    <section :class="$style.messages">
-      <ui3n-drop-files
-        @select="addFilesViaDnD"
-      >
-        <chat-messages
-          v-if="currentChatMessages && currentChat()"
-          :chat="currentChat()!"
-          :messages="currentChatMessages"
-          @reply="prepareReplyMessage"
-        />
-      </ui3n-drop-files>
-    </section>
 
-    <div :class="$style.input">
-      <div :class="$style.emoticonsBtnWrapper">
-        <ui3n-button
-          type="icon"
-          color="transparent"
-          icon="outline-insert-emoticon"
-          icon-size="20"
-          icon-color="var(--color-icon-block-secondary-default)"
-          :disabled="disabled || readonly"
-          @click.stop.prevent="isEmoticonsDialogOpen = true"
-        />
-
-        <emoticons-dialog
-          :open="isEmoticonsDialogOpen"
-          @close="isEmoticonsDialogOpen = false"
-          @select="onEmoticonSelect"
-        />
-      </div>
-
-      <ui3n-button
-        type="icon"
-        color="transparent"
-        icon="round-attach-file"
-        icon-size="20"
-        icon-color="var(--color-icon-block-secondary-default)"
-        :disabled="disabled || readonly"
-        @click="addFiles"
-      />
-
-      <ui3n-text
-        v-model:text="msgText"
-        :rows="1"
-        :max-rows="3"
-        :disabled="readonly"
-        :class="$style.inputField"
-        @init="inputEl = $event"
-        @enter="sendMessage"
-      />
-
-      <ui3n-button
-        type="icon"
-        color="transparent"
-        icon="round-send "
-        icon-size="20"
-        :icon-color="!sendBtnDisabled ? 'var(--color-icon-block-accent-default)' : 'var(--color-icon-block-secondary-default)'"
-        :disabled="sendBtnDisabled"
-        @click="sendMessage(undefined, true)"
-      />
-
-      <div :class="$style.inputAdditional">
-        <div
-          v-if="initialMessage"
-          :class="$style.inputInitial"
-        >
-          <div :class="$style.inputInitialIcon">
-            <ui3n-icon
-              icon="outline-reply"
-              width="24"
-              height="24"
-              :h-flip="initialMessageType === 'forward'"
-              color="var(--color-icon-block-accent-default)"
+    <div :class="$style.bodyWrapper">
+      <ui3n-drop-files @select="addFilesViaDnD">
+        <div :class="$style.body">
+          <div :class="$style.messages">
+            <chat-messages
+              v-if="currentChatMessages && currentChat"
+              :chat="currentChat!"
+              :messages="currentChatMessages"
+              @reply="prepareReplyMessage"
             />
           </div>
 
-          <div :class="$style.inputInitialData">
-            <div :class="$style.inputInitialUser">
-              {{ getContactName(initialMessage.sender) }}
+          <div :class="$style.input">
+            <div :class="$style.emoticonsBtnWrapper">
+              <ui3n-button
+                type="icon"
+                color="transparent"
+                icon="outline-insert-emoticon"
+                icon-size="20"
+                icon-color="var(--color-icon-block-secondary-default)"
+                :disabled="disabled || readonly"
+                @click.stop.prevent="isEmoticonsDialogOpen = !isEmoticonsDialogOpen"
+              />
+
+              <emoticons-dialog
+                :open="isEmoticonsDialogOpen"
+                @close="isEmoticonsDialogOpen = false"
+                @select="onEmoticonSelect"
+              />
             </div>
-            <div
-              v-ui3n-html.sanitize="textOfInitialMessage"
-              :class="$style.inputInitialText"
+
+            <ui3n-button
+              type="icon"
+              color="transparent"
+              icon="round-attach-file"
+              icon-size="20"
+              icon-color="var(--color-icon-block-secondary-default)"
+              :disabled="disabled || readonly"
+              @click="addFiles"
             />
+
+            <div :class="$style.inputField">
+              <ui3n-text
+                v-model:text="msgText"
+                :rows="1"
+                :max-rows="3"
+                :disabled="readonly"
+                @init="inputEl = $event"
+                @enter="sendMessage"
+              />
+            </div>
+
+            <ui3n-button
+              type="icon"
+              color="transparent"
+              icon="round-send "
+              icon-size="20"
+              :icon-color="!sendBtnDisabled ? 'var(--color-icon-block-accent-default)' : 'var(--color-icon-block-secondary-default)'"
+              :disabled="sendBtnDisabled"
+              @click="sendMessage(undefined, true)"
+            />
+
+            <div :class="$style.inputAdditional">
+              <div
+                v-if="initialMessage"
+                :class="$style.inputInitial"
+              >
+                <div :class="$style.inputInitialIcon">
+                  <ui3n-icon
+                    icon="outline-reply"
+                    width="24"
+                    height="24"
+                    :h-flip="initialMessageType === 'forward'"
+                    color="var(--color-icon-block-accent-default)"
+                  />
+                </div>
+
+                <div :class="$style.inputInitialData">
+                  <div :class="$style.inputInitialUser">
+                    {{ getContactName(initialMessage.sender) }}
+                  </div>
+                  <div
+                    v-ui3n-html.sanitize="textOfInitialMessage"
+                    :class="$style.inputInitialText"
+                  />
+                </div>
+
+                <ui3n-button
+                  :class="$style.attachmentsClear"
+                  type="icon"
+                  color="transparent"
+                  size="small"
+                  icon="round-close "
+                  icon-size="16"
+                  icon-color="var(--color-icon-control-secondary-default)"
+                  @click="clearInitialInfo"
+                />
+              </div>
+
+              <div
+                v-if="attachmentsInfo"
+                :class="$style.attachments"
+              >
+                <chat-attachment
+                  v-for="(attachmentInfo, index) in attachmentsInfo!"
+                  :key="index"
+                  :name="attachmentInfo.name"
+                  :size="attachmentInfo.size"
+                  :deletable="true"
+                  @delete="deleteAttachment(index)"
+                />
+
+                <ui3n-button
+                  :class="$style.attachmentsClear"
+                  type="icon"
+                  color="transparent"
+                  icon="round-close "
+                  icon-size="16"
+                  icon-color="#828282"
+                  @click="clearAttachments"
+                />
+              </div>
+            </div>
           </div>
-
-          <ui3n-button
-            :class="$style.attachmentsClear"
-            type="icon"
-            color="transparent"
-            size="small"
-            icon="round-close "
-            icon-size="16"
-            icon-color="var(--color-icon-control-secondary-default)"
-            @click="clearInitialInfo"
-          />
         </div>
-
-        <div
-          v-if="attachmentsInfo"
-          :class="$style.attachments"
-        >
-          <chat-attachment
-            v-for="(attachmentInfo, index) in attachmentsInfo!"
-            :key="index"
-            :name="attachmentInfo.name"
-            :size="attachmentInfo.size"
-            :deletable="true"
-            @delete="deleteAttachment(index)"
-          />
-
-          <ui3n-button
-            :class="$style.attachmentsClear"
-            type="icon"
-            color="transparent"
-            icon="round-close "
-            icon-size="16"
-            icon-color="#828282"
-            @click="clearAttachments"
-          />
-        </div>
-      </div>
+      </ui3n-drop-files>
     </div>
-  </div>
+  </section>
 </template>
 
 <style lang="scss" module>
@@ -208,10 +212,27 @@ const {
   margin-bottom: var(--space-s);
 }
 
+.bodyWrapper {
+  position: relative;
+  width: 100%;
+  height: calc(100% - 64px);
+}
+
+.body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  row-gap: var(--spacing-xs);
+}
+
 .messages {
   position: relative;
   width: 100%;
-  flex-basis: calc(100% - var(--spacing-xxl));
+  flex-basis: calc(100% - 68px);
   overflow-y: auto;
 }
 
@@ -219,13 +240,12 @@ const {
   position: relative;
   width: 100%;
   display: flex;
-  padding: var(--spacing-s) var(--spacing-m);
+  padding: var(--spacing-m);
   justify-content: center;
   align-items: center;
   max-height: calc(var(--spacing-s) * 11);
   flex-grow: 1;
   background-color: var(--color-bg-block-primary-default);
-  margin-top: var(--spacing-s);
 }
 
 .emoticonsBtnWrapper {
@@ -233,7 +253,8 @@ const {
 }
 
 .inputField {
-  max-width: 55%;
+  position: relative;
+  width: 55%;
   margin: 0 var(--spacing-m);
 }
 

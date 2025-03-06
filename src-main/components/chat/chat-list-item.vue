@@ -23,7 +23,7 @@ import size from 'lodash/size';
 import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nBadge, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { useChatsStore } from '@main/store';
+import { useChatsStore } from '@main/store/chats';
 import { getChatSystemMessageText } from '@main/helpers/chat-ui.helper';
 import type { ChatListItemView, ChatMessageView, MessageType } from '~/index';
 import ChatAvatar from './chat-avatar.vue';
@@ -38,7 +38,7 @@ const emit = defineEmits(['click']);
 const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const { currentChat } = storeToRefs(useChatsStore());
 
-const selectedChatId = computed<string>(() => get(currentChat.value(), ['chatId'], ''));
+const selectedChatId = computed<string>(() => get(currentChat.value, ['chatId'], ''));
 const isGroupChat = computed<boolean>(() => size(props.data.members) > 2);
 
 const message = computed<string>(() => {

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024 3NSoft Inc.
+ Copyright (C) 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -44,4 +44,9 @@ export function toCanonicalAddress(address: string): string {
     user = address.substring(0, indOfAt).replace(whiteSpace, '');
   }
   return (user + '@' + domain).toLowerCase();
+}
+
+export function includesAddress(arr: string[], address: string): boolean {
+  const canonAddr = toCanonicalAddress(address);
+  return arr.map(toCanonicalAddress).includes(canonAddr);
 }
