@@ -19,15 +19,15 @@
 /// <reference path="../@types/platform-defs/injected-w3n.d.ts" />
 /// <reference path="../@types/platform-defs/test-stand.d.ts" />
 // @deno-types="./sqlite-on-3nstorage/index.d.ts"
-import { SQLiteOn3NStorage } from './libs/sqlite-on-3nstorage/index.js';
+import { SQLiteOn3NStorage } from '../shared-libs/sqlite-on-3nstorage/index.js';
 // @deno-types="./ipc-service.d.ts"
-import { MultiConnectionIPCWrap } from './libs/ipc/ipc-service.js';
+import { MultiConnectionIPCWrap } from '../shared-libs/ipc/ipc-service.js';
 import {
   chatValueToSqlInsertParams,
   messageValueToSqlInsertParams,
   objectFromQueryExecResult,
-} from './helpers/chats.helpers.ts';
-import { randomStr } from './libs/randomStr.ts';
+} from './utils/for-chats-db.ts';
+import { randomStr } from '../shared-libs/randomStr.ts';
 import type { ChatViewForDB, ChatView, ChatMessageViewForDB, ChatMessageView, MessageType } from '../types/index.ts';
 
 type FSSyncException = web3n.files.FSSyncException;
@@ -222,7 +222,7 @@ export class ChatService {
     }
   }
 
-  async clearChat(chatId: string): Promise<void> {
+  async deleteMessagesInChat(chatId: string): Promise<void> {
     if (chatId) {
       this.sqlite.db.exec(clearChatQuery, { $chatId: chatId });
       await this.saveDbFile();
@@ -301,7 +301,7 @@ export async function setupAndStartAppChatsInternalService():
     'getChatsUnreadMessagesCount',
     'getChat',
     'deleteChat',
-    'clearChat',
+    'deleteMessagesInChat',
     'getMessage',
     'deleteMessage',
     'getMessagesByChat',

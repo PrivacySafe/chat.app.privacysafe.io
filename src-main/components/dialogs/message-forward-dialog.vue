@@ -22,14 +22,17 @@ import { Ui3nInput } from '@v1nt1248/3nclient-lib';
 import { readonlyContactIds } from '@main/constants';
 import ChatAvatar from '../chat/chat-avatar.vue';
 import ContactIcon from '../contacts/contact-icon.vue';
-import { useChatsStore } from '@main/store/chats';
-import { useContactsStore } from '@main/store/contacts';
+import { useChatsStore } from '@main/store/chats.store';
+import { useContactsStore } from '@main/store/contacts.store';
+import { storeToRefs } from 'pinia';
+import { useChatStore } from '@main/store/chat.store';
 
 const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const emit = defineEmits(['select', 'confirm']);
 
 const { contactList } = useContactsStore();
-const { namedChatList, currentChatId } = useChatsStore();
+const { namedChatList } = storeToRefs(useChatsStore());
+const { currentChatId } = storeToRefs(useChatStore());
 
 const searchText = ref('');
 
@@ -37,9 +40,10 @@ const filteredContactList = computed(() => contactList
   .filter(c => (c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
     && !readonlyContactIds.includes(c.id))));
 
-const filteredChatList = computed(() => namedChatList
-  .filter(c => (c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
-    && c.chatId !== currentChatId)));
+const filteredChatList = computed(() => namedChatList.value.filter(c => (
+  c.displayName.toLowerCase().includes(searchText.value.toLowerCase()) &&
+  (c.chatId !== currentChatId.value)
+)));
 
 function selectItem({ type, data }: { type: 'chat' | 'contact', data: string }) {
   emit('select', { type, data });

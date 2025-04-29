@@ -20,9 +20,8 @@ import { onBeforeMount, onMounted, shallowRef, ref, computed, inject } from 'vue
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { Ui3nButton, Ui3nMenu } from '@v1nt1248/3nclient-lib';
-import { useStreamsStore } from '@video/store/streams';
-import { useAppStore } from '@video/store/app';
-import { startCall } from '@video/ctrl-funcs';
+import { useStreamsStore } from '@video/store/streams.store';
+import { useAppStore } from '@video/store/app.store';
 import VideoPlaceholder from '@video/components/video-placeholder.vue';
 import { I18N_KEY, I18nPlugin, NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 
@@ -32,10 +31,9 @@ const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 const appStore = useAppStore();
 const { user } = storeToRefs(appStore);
-const { getUser, getAppConfig } = appStore;
 const streams = useStreamsStore();
-const { ownVA, isMicOn, isCamOn, isAnyOneConnected, isGroupChat } = storeToRefs(streams);
-const { setOwnVAStream, setMicOn, setCamOn } = streams;
+const { ownVA, isMicOn, isCamOn, isAnyOneConnected } = storeToRefs(streams);
+const { setOwnVAStream, setMicOn, setCamOn, startCall } = streams;
 
 const choicesWithVideoInput = ref<DeviceOption[]>([]);
 const webcamMenuChoices = computed(() => choicesWithVideoInput.value.filter(
@@ -133,8 +131,6 @@ async function startChatCall() {
 
 onBeforeMount(async () => {
   try {
-    await getUser();
-    await getAppConfig();
     navigator.mediaDevices.ondevicechange = () => setupDeviceChoices(false);
   } catch (e) {
     console.error('ON_BEFORE_MOUNT ERROR: ', e);
@@ -145,6 +141,7 @@ onBeforeMount(async () => {
 onMounted(async () => {
   await setupDeviceChoices();
 });
+
 </script>
 
 <template>

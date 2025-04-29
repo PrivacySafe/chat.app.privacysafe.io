@@ -17,8 +17,9 @@
 
 import { setupAndStartChatDeliveryService } from './chat-delivery-srv.ts';
 import { setupAndStartAppChatsInternalService } from './chats-internal-srv.ts';
-import { setupGlobalReportingOfUnhandledErrors } from './libs/error-handling.ts';
+import { setupGlobalReportingOfUnhandledErrors } from '../shared-libs/error-handling.ts';
 import { setupAndStartVideoGUIOpener } from './video-gui-controller.ts';
+import { ensureDefaultAnonSenderMaxMsgSize } from './workarounds.ts';
 
 setupGlobalReportingOfUnhandledErrors(true);
 
@@ -38,3 +39,8 @@ try {
   w3n.log('error', `Error in a startup of instance with main services for chat. Can't proceed, and will close the whole component.`, err);
   setTimeout(() => w3n.closeSelf!(), 100);
 }
+
+// work around incomplete/missing inbox configuration
+ensureDefaultAnonSenderMaxMsgSize(100*1024*1024).catch(err => {
+  w3n.log('error', `Fail in checking and setting anonymous sender max message size`, err);
+});

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,55 +15,17 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { createApp } from 'vue';
-import { createPinia } from 'pinia';
-import { router } from './router';
-import {
-  dialogs,
-  i18n,
-  I18nOptions,
-  notifications,
-  storeVueBus,
-  storeI18n,
-  storeNotifications,
-  vueBus,
-} from '@v1nt1248/3nclient-lib/plugins';
-import { ChatCommandsHandler } from './services/commands-handler';
-import { initializationServices } from './services/services-provider';
-import App from './views/app.vue';
-
 import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
 import './assets/styles/main.css';
 
-import en from './data/i18/en.json';
+import { setupMainApp } from './app-setup';
+import { initializeServices } from './services/services-provider';
+import { ChatCommandsHandler } from './services/commands-handler';
 
-const init = () => {
-  initializationServices()
-    .then(async () => {
-      const pinia = createPinia();
-      pinia.use(storeVueBus);
-      pinia.use(storeI18n);
-      pinia.use(storeNotifications);
-
-      const app = createApp(App);
-
-      app.config.globalProperties.$router = router;
-      app.config.compilerOptions.isCustomElement = tag => {
-        return tag.startsWith('ui3n-');
-      };
-
-      app
-        .use(pinia)
-        .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
-        .use(vueBus)
-        .use(dialogs)
-        .use(notifications)
-        .use(router)
-        .mount('#main');
-
-      await ChatCommandsHandler.start(router);
-    });
-};
-
-init();
+initializeServices()
+.then(async () => {
+  const { app, router } = setupMainApp();
+  app.mount('#main');
+  await ChatCommandsHandler.start(router);
+});

@@ -16,10 +16,11 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 import { DIALOGS_KEY, DialogsPlugin, I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import { useStreamsStore } from '@video/store/streams';
+import { useStreamsStore } from '@video/store/streams.store';
 import { EmitFn, defineAsyncComponent, inject, onBeforeMount, onBeforeUnmount, ref } from 'vue';
 import { ScreenShareOption, SharedStream, WindowShareOption } from '@video/components/types';
 import { Deferred, defer } from '@v1nt1248/3nclient-lib/utils';
+import { storeToRefs } from 'pinia';
 
 export function screenSharingChoiceDialogMaker() {
 
@@ -29,6 +30,8 @@ export function screenSharingChoiceDialogMaker() {
   const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
   const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
   const streams = useStreamsStore();
+  const { ownScreens, isSharingOwnDeskSound } = storeToRefs(streams);
+  const { removeOwnScreen, addOwnScreen, setOwnDeskSoundSharing } = streams;
 
   function absorbSelectedChoices(
     data: { selected: SharedStream[]; selectedDeskSound: boolean; }|null
@@ -38,25 +41,25 @@ export function screenSharingChoiceDialogMaker() {
     }
     const { selected, selectedDeskSound } = data;
     // unshare those not among selected
-    streams.ownScreens
+    ownScreens.value
     ?.filter(({ srcId }) => !selected.find(s => (s.srcId === srcId)))
-    .forEach(({ srcId }) => streams.removeOwnScreen(srcId));
+    .forEach(({ srcId }) => removeOwnScreen(srcId));
     // add selected if not already shared
     for (const { srcId, stream, type, name } of selected) {
-      if (!streams.ownScreens?.find(s => (s.srcId === srcId))) {
-        streams.addOwnScreen(stream, type, srcId, name);
+      if (!ownScreens.value?.find(s => (s.srcId === srcId))) {
+        addOwnScreen(stream, type, srcId, name);
       }
     }
-    streams.setOwnDeskSoundSharing(
-      streams.ownScreens ? selectedDeskSound : false
+    setOwnDeskSoundSharing(
+      ownScreens.value ? selectedDeskSound : false
     );
   }
 
   return () => dialog.$openDialog({
     component,
     componentProps: {
-      intiallyShared: (streams.ownScreens ? streams.ownScreens.concat() : []),
-      initialDeskSoundShared: streams.ownDeskSound
+      intiallyShared: (ownScreens.value ? ownScreens.value.concat() : []),
+      initialDeskSoundShared: isSharingOwnDeskSound.value
     },
     dialogProps: {
       title: $tr("sharing.choice.title"),

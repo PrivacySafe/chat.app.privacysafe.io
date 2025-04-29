@@ -19,8 +19,8 @@
 import { computed, inject, onBeforeUnmount, onMounted } from 'vue';
 import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nButton } from '@v1nt1248/3nclient-lib';
-import { videoOpenerProxy } from '@main/services/services-provider';
-import { getContactName } from '@main/helpers/contacts.helper';
+import { videoOpenerSrv } from '@main/services/services-provider';
+import { getContactName } from '@main/utils/contacts.helper';
 import ChatAvatar from '../chat/chat-avatar.vue';
 import { Sound } from '@shared/sounds';
 
@@ -42,7 +42,7 @@ const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const user = computed(() => getContactName(props.peerAddress));
 
 async function joinCall() {
-  await videoOpenerProxy.joinCallInRoom({ chatId: props.chatId, peerAddress: props.peerAddress });
+  await videoOpenerSrv.joinCallInRoom({ chatId: props.chatId, peerAddress: props.peerAddress });
   emits('close');
 }
 

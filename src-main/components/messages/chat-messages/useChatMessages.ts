@@ -1,3 +1,20 @@
+/*
+Copyright (C) 2024 - 2025 3NSoft Inc.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 import { defineAsyncComponent, inject, nextTick, onMounted, onBeforeUnmount, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
@@ -11,18 +28,18 @@ import {
   VUEBUS_KEY,
   VueBusPlugin,
 } from '@v1nt1248/3nclient-lib/plugins';
-import { useAppStore } from '@main/store/app';
+import { useAppStore } from '@main/store/app.store';
 import type { AppGlobalEvents, ChatMessageAction, ChatMessageActionType, ChatMessageView, MessageType } from '~/index';
 import {
   copyMessageToClipboard,
   downloadFile,
   getMessageFromCurrentChat,
-} from '@main/helpers/chat-message-actions.helpers';
-import { getMessageActions } from '@main/helpers/chats.helper';
+} from '@main/utils/chat-message-actions.helpers';
+import { getMessageActions } from '@main/utils/chats.helper';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import type { ChatMessagesEmits } from './types';
-import { createChat, deleteMessage } from '@main/ctrl-funcs';
-import { useChatsStore } from '@main/store/chats';
+import { useChatsStore } from '@main/store/chats.store';
+import { useChatStore } from '@main/store/chat.store';
 
 export default function useChatMessages(emit: ChatMessagesEmits) {
   const router = useRouter();
@@ -32,9 +49,11 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
   const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY);
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
 
-  const chatsStore = useChatsStore();
-  const { currentChatId } = storeToRefs(chatsStore);
   const { user } = storeToRefs(useAppStore());
+  const { createChat } = useChatsStore();
+  const chatStore = useChatStore();
+  const { currentChatId } = storeToRefs(chatStore);
+  const { deleteMessageInChat } = chatStore;
 
   const listElement = ref<HTMLDivElement | null>(null);
   const msgActionsMenuProps = ref<{
@@ -75,13 +94,13 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
 
   function openMessageMenu(ev: MouseEvent) {
     const msg = handleClick(ev);
-    if (msg && msg.chatMessageType !== 'system') {
+    if (msg && (msg.chatMessageType !== 'system')) {
       // const messageElement = document.getElementById(`msg-${msg.chatMessageId}`)
       // messageElement && messageElement.scrollIntoView();
 
       msgActionsMenuProps.value = {
         open: true,
-        actions: getMessageActions(msg!),
+        actions: getMessageActions(msg, $tr),
         msg,
       };
     }
@@ -117,8 +136,8 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
         cancelButtonColor: 'var(--system-white)',
         cancelButtonBackground: 'var(--blue-main)',
         onConfirm: (
-          (deleteForEveryone?: boolean) => deleteMessage(
-            chatsStore, chatMessageId, deleteForEveryone
+          (deleteForEveryone?: boolean) => deleteMessageInChat(
+            chatMessageId, deleteForEveryone
           )
       ) as any,
       },
@@ -156,7 +175,6 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
           let chatId = type === 'chat' ? data : undefined;
           if (type === 'contact') {
             chatId = await createChat(
-              chatsStore,
               { members: [user.value, data], admins: [user.value] }
             );
           }
@@ -169,7 +187,7 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
 
   const messageActions: Partial<Record<ChatMessageActionType, Function>> = {
     copy: copyMsgText,
-    'delete_message': deleteMsg,
+    delete_message: deleteMsg,
     download: downloadAttachment,
     reply: replyMsg,
     forward: forwardMsg,

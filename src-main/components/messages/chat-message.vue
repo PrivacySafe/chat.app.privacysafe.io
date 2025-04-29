@@ -22,14 +22,14 @@ import get from 'lodash/get';
 import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { useChatsStore } from '@main/store/chats';
-import { getChatSystemMessageText } from '@main/helpers/chat-ui.helper';
-import { getContactName } from '@main/helpers/contacts.helper';
-import { getMessageFromCurrentChat } from '@main/helpers/chat-message-actions.helpers';
+import { useChatsStore } from '@main/store/chats.store';
+import { getChatSystemMessageText } from '@main/utils/chat-ui.helper';
+import { getContactName } from '@main/utils/contacts.helper';
+import { getMessageFromCurrentChat } from '@main/utils/chat-message-actions.helpers';
 import type { MessageType, ChatMessageView } from '~/index';
 import ChatMessageStatus from './chat-message-status.vue';
 import ChatMessageAttachments from './chat-message-attachments.vue';
-import { handleUpdateMessageStatus } from '@main/ctrl-funcs/system-message-handlers/handle-update-message-status';
+import { useChatStore } from '@main/store/chat.store';
 
 const vUi3nHtml = Ui3nHtml;
 
@@ -40,8 +40,8 @@ const props = defineProps<{
 
 const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const chatsStore = useChatsStore();
-const { currentChat } = storeToRefs(chatsStore);
-const { fetchChatList: refreshChatList } = chatsStore;
+const { currentChat } = storeToRefs(useChatStore());
+const { fetchChatList, updateMessageStatus } = chatsStore;
 
 const chatMsgElement = ref<Element | null>(null);
 
@@ -71,8 +71,8 @@ function intersectHandler(entries: IntersectionObserverEntry[], observer: Inters
       const { id } = entry.target;
       const { chatMessageId, messageType, chatMessageType, status } = props.msg;
       if (chatMessageId === id.replace('msg-', '') && messageType === 'incoming' && chatMessageType !== 'system' && status === 'received') {
-        await handleUpdateMessageStatus(chatsStore, { chatMessageId, value: null });
-        await refreshChatList();
+        await updateMessageStatus({ chatMessageId, value: null });
+        await fetchChatList();
       }
       observer.unobserve(entry.target);
     }

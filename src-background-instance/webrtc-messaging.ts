@@ -15,8 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { toCanonicalAddress } from './libs/address-utils.ts';
-import { sendMsg } from './libs/asmail-utils.ts';
+import { toCanonicalAddress } from '../shared-libs/address-utils.ts';
+import { sendMsg } from '../shared-libs/asmail-utils.ts';
 import type { ChatIncomingMessage, ChatMessageJsonBody, WebRTCMsg, WebRTCOffBandMessage } from '../types/index.ts';
 
 export type WebRTCSignalHandler = (msg: ChatIncomingMessage) => void;

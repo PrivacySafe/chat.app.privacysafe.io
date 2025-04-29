@@ -32,7 +32,7 @@ import '@v1nt1248/3nclient-lib/style.css';
 import './assets/styles/video-chat.css';
 
 import { VideoChat } from './services/video-component-srv';
-import { useStreamsStore } from './store/streams';
+import { useStreamsStore } from './store/streams.store';
 import { PeerEvents } from './services/events';
 import VideoApp from './views/video-app.vue';
 import VASetup from './views/va-setup.vue';

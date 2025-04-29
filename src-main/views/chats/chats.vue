@@ -15,11 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import useChatsPage from './useChatsPage';
+import useChatsView from './useChatsView';
 import { Ui3nButton } from '@v1nt1248/3nclient-lib';
 import ChatList from '@main/components/chat/chat-list.vue';
 
-const { openCreateChatDialog } = useChatsPage();
+const { openCreateChatDialog } = useChatsView();
 </script>
 
 <template>

@@ -16,134 +16,25 @@
 -->
 
 <script lang="ts" setup>
-import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref } from 'vue';
-import { storeToRefs } from 'pinia';
-import size from 'lodash/size';
-import { Ui3nMenu, Ui3nRipple } from '@v1nt1248/3nclient-lib';
-import { getDeliveryErrors } from '@v1nt1248/3nclient-lib/utils';
+import { onBeforeMount, onBeforeUnmount } from 'vue';
+import { Ui3nMenu, Ui3nRipple as vUi3nRipple } from '@v1nt1248/3nclient-lib';
 import prLogo from '../assets/images/privacysafe-logo.svg';
-import { makeServiceCaller } from '@shared/ipc/ipc-service-caller';
-import { appDeliverySrvProxy } from '@main/services/services-provider';
-import { UISettings } from '@main/helpers/ui-settings';
-import type { AppDeliveryService } from '~/index';
 import ContactIcon from '../components/contacts/contact-icon.vue';
-import { makeIncomingMessageHandler } from '@main/ctrl-funcs/handle-incoming-message';
-import { handleUpdateMessageStatus } from '@main/ctrl-funcs/system-message-handlers/handle-update-message-status';
-import { useChatsStore } from '@main/store/chats';
-import { useAppStore } from '@main/store/app';
-import { useContactsStore } from '@main/store/contacts';
+import { useAppView } from './useAppView';
 
-const vUi3nRipple = Ui3nRipple;
-
-const appStore = useAppStore();
-const contactsStore = useContactsStore();
-const chatsStore = useChatsStore();
-
-const { appVersion, user: me, connectivityStatus } = storeToRefs(appStore);
 const {
-  fetchInitData,
-  fetchConnectivityStatus,
-  setLang,
-  setColorTheme,
-  setAppWindowSize,
-} = appStore;
+  appExit,
+  appElement,
+  appVersion,
+  connectivityStatusText,
+  doBeforeMount,
+  doBeforeUnmount,
+  me
+} = useAppView();
 
-const { fetchContactList } = contactsStore;
+onBeforeMount(doBeforeMount);
+onBeforeUnmount(doBeforeUnmount);
 
-const { fetchChatList: refreshChatList } = chatsStore;
-
-const appElement = ref<Element | null>(null);
-
-const connectivityStatusText = computed(() =>
-  connectivityStatus.value === 'online' ? 'app.status.connected.online' : 'app.status.connected.offline',
-);
-const connectivityTimerId = ref<ReturnType<typeof setInterval> | undefined>();
-
-const resizeObserver = new ResizeObserver((entries) => {
-  for (const entry of entries) {
-    const { contentRect, target } = entry;
-    const { className } = target;
-    const { width, height } = contentRect;
-    if (className === 'app') {
-      setAppWindowSize({ width, height });
-    }
-  }
-});
-
-async function appExit() {
-  w3n.closeSelf!();
-}
-
-onBeforeMount(async () => {
-  try {
-    await fetchContactList();
-    await fetchInitData();
-    await fetchConnectivityStatus();
-
-    connectivityTimerId.value = setInterval(fetchConnectivityStatus, 60000);
-
-    const config = await UISettings.makeResourceReader();
-    config.watchConfig({
-      next: appConfig => {
-        const { lang, colorTheme } = appConfig;
-        setLang(lang);
-        setColorTheme(colorTheme);
-      },
-    });
-
-    await refreshChatList();
-
-    const deliverySrvConnection = await w3n.rpc!.thisApp!('ChatDeliveryService');
-    const deliverSrv = makeServiceCaller(
-      deliverySrvConnection,
-      [],
-      ['watchIncomingMessages', 'watchOutgoingMessages'],
-    ) as AppDeliveryService;
-
-    deliverSrv.watchIncomingMessages({
-      next: makeIncomingMessageHandler(chatsStore, contactsStore, me.value),
-      error: (e) => console.error(e),
-      complete: () => deliverySrvConnection.close(),
-    });
-
-    deliverSrv.watchOutgoingMessages({
-      next: (val) => {
-        const { id, progress } = val;
-        const { allDone, recipients } = progress;
-        if (allDone) {
-          appDeliverySrvProxy.removeMessageFromDeliveryList([id]);
-          const errors = getDeliveryErrors(progress);
-          const { localMeta = {} } = progress;
-          const { path } = localMeta;
-
-          if (!path.includes('system')) {
-            // TODO it's necessary to change when we will add new delivery status (not only 'sent' or 'error')
-            const status = size(errors) === 0 || size(recipients) > size(errors) ? 'sent' : 'error';
-
-            handleUpdateMessageStatus(chatsStore, { msgId: id, value: status });
-          }
-        }
-      },
-      error: (e) => console.error(e),
-      complete: () => deliverySrvConnection.close(),
-    });
-  } catch (e) {
-    console.error('MOUNT ERROR: ', e);
-    throw e;
-  }
-});
-
-onMounted(() => {
-  if (appElement.value) {
-    const { width, height } = appElement.value.getBoundingClientRect();
-    setAppWindowSize({ width, height });
-    resizeObserver.observe(appElement.value as Element);
-  }
-});
-
-onBeforeUnmount(() => {
-  connectivityTimerId.value && clearInterval(connectivityTimerId.value!);
-});
 </script>
 
 <template>

@@ -16,7 +16,7 @@
 -->
 
 <script lang="ts" setup>
-import { computed, useCssModule } from 'vue';
+import { computed, onBeforeUnmount, onMounted, useCssModule } from 'vue';
 import { Ui3nButton } from '@v1nt1248/3nclient-lib';
 import { useCommonCallElements, useGroupCall, useCall } from './use-in-calls';
 import IconButton from "@video/components/icon-button.vue";
@@ -30,21 +30,23 @@ const {
   isFullscreen,
   peerSharedStreams,
   peerVideos,
-  streams,
+  streams: {
+    isGroupChat, ownScreens, isCamOn, isMicOn, ownVA
+  },
   openScreenShareChoice,
   toggleCamStatus,
   toggleFullscreen,
-  toggleMicStatus
+  toggleMicStatus,
+  doBeforeUnmount,
+  doOnMounted
 } = useCommonCallElements();
-
-const isGroupChat = streams.isGroupChat;
 
 const {
   endCall
 } = (isGroupChat ? useGroupCall() : useCall());
 
 const peersShare = computed(() => (peerSharedStreams.value.length > 0));
-const ownSharing = computed(() => !!streams.ownScreens);
+const ownSharing = computed(() => !!ownScreens);
 const screenShare = computed(() => (
   peersShare.value || ownSharing.value
 ));
@@ -64,6 +66,9 @@ const videoWhenNoScreens = computed(() => {
     return classes.sevenPlus;
   }
 });
+
+onMounted(doOnMounted);
+onBeforeUnmount(doBeforeUnmount);
 
 </script>
 
@@ -86,8 +91,8 @@ const videoWhenNoScreens = computed(() => {
       />
 
       <own-video :class=$style.participant
-        :is-cam-on="streams.isCamOn"
-        :stream="streams.ownVA!.stream"
+        :is-cam-on=isCamOn
+        :stream="ownVA!.stream"
         :user=ownName
       />
     </div>
@@ -96,7 +101,7 @@ const videoWhenNoScreens = computed(() => {
       v-if=screenShare
     >
       <own-sharing
-        v-if="!!streams.ownScreens"
+        v-if="!!ownScreens"
       />
       <peer-sharing
         v-for="{ stream, peerAddr, peerName } in peerSharedStreams"
@@ -117,12 +122,12 @@ const videoWhenNoScreens = computed(() => {
 
       <div :class=$style.actionGroup>
         <icon-button
-          :icon="streams.isMicOn ? 'round-mic-none' : 'round-mic-off'"
+          :icon="isMicOn ? 'round-mic-none' : 'round-mic-off'"
           @click.stop.prevent="toggleMicStatus"
         />
 
         <icon-button
-          :icon="streams.isCamOn ? 'outline-videocam' : 'outline-videocam-off'"
+          :icon="isCamOn ? 'outline-videocam' : 'outline-videocam-off'"
           @click.stop.prevent="toggleCamStatus"
         />
 

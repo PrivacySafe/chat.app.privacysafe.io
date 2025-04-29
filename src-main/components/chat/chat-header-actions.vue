@@ -20,14 +20,14 @@ import { computed, inject } from 'vue';
 import { storeToRefs } from 'pinia';
 import size from 'lodash/size';
 import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import { useChatsStore } from '@main/store/chats';
 import { chatMenuItems } from '@main/constants';
 import { Ui3nButton, Ui3nMenu, Ui3nIcon } from '@v1nt1248/3nclient-lib';
+import { useChatStore } from '@main/store/chat.store';
 
 const emit = defineEmits(['select:action']);
 
 const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-const { currentChat } = storeToRefs(useChatsStore());
+const { currentChat } = storeToRefs(useChatStore());
 
 const chatType = computed(() => {
   const currentChatValue = currentChat.value;
@@ -35,7 +35,13 @@ const chatType = computed(() => {
   return size(members) > 2 ? 'group' : 'single';
 });
 
-const availableMenuItems = computed(() => chatMenuItems.filter(i => i.chatTypes.includes(chatType.value)));
+const availableMenuItems = computed(() => chatMenuItems
+  .filter(i => i.chatTypes.includes(chatType.value))
+  .map(item => ({
+    ...item,
+    text: $tr(item.text)
+  }))
+);
 
 function selectAction(compositeAction: string) {
   emit('select:action', compositeAction);

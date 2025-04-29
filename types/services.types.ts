@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024 3NSoft Inc.
+ Copyright (C) 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -52,7 +52,7 @@ export interface AppChatsSrv {
   updateChat(value: ChatView): Promise<void>;
   getChat(chatId: string): Promise<ChatView | null>;
   deleteChat(chatId: string): Promise<void>;
-  clearChat(chatId: string): Promise<void>;
+  deleteMessagesInChat(chatId: string): Promise<void>;
   getMessage(
     { msgId, chatMsgId }: { msgId?: string, chatMsgId?: string },
   ): Promise<ChatMessageView<MessageType>|null>;
@@ -67,6 +67,7 @@ export interface AppChatsSrv {
  * This service does ASMail sending.
  */
 export interface AppDeliverySrv {
+  checkAddressExistenceForASMail(addr: string): Promise<AddressCheckResult>;
   addMessageToDeliveryList(
     message: ChatOutgoingMessage, localMetaPath: ChatMessageLocalMeta, systemMessage?: boolean,
   ): Promise<void>;
@@ -75,6 +76,8 @@ export interface AppDeliverySrv {
   getDeliveryList(localMetaPath: ChatMessageLocalMeta): Promise<SendingMessageStatus[]>;
   removeMessageFromInbox(msgIds: string[]): Promise<void>;
 }
+
+export type AddressCheckResult = 'found' | 'found-but-access-restricted' | 'not-present-at-domain' | 'no-service-for-domain';
 
 /**
  * This app's service.
@@ -160,4 +163,11 @@ export interface ChatInfoForCall {
   }[];
   chatName: string;
   rtcConfig: RTCConfiguration;
+}
+
+export interface ContactsException extends web3n.RuntimeException {
+  type: 'contacts';
+  contactAlreadyExists?: true;
+  invalidValue?: true;
+  failASMailCheck?: true;
 }

@@ -20,59 +20,60 @@ import { outgoingFileLinkStore } from './outgoing-file-link-store';
 import type { AppContacts, AppChatsSrv, AppDeliverySrv, FileLinkStoreService, VideoGUIOpener } from '~/index';
 
 export let fileLinkStoreSrv: FileLinkStoreService;
-export let appContactsSrvProxy: AppContacts;
-export let appChatsSrvProxy: AppChatsSrv;
-export let appDeliverySrvProxy: AppDeliverySrv;
-export let videoOpenerProxy: VideoGUIOpener;
+export let appContactsSrv: AppContacts;
+export let appChatsSrv: AppChatsSrv;
+export let appDeliverySrv: AppDeliverySrv;
+export let videoOpenerSrv: VideoGUIOpener;
 
-export async function initializationServices() {
+export async function initializeServices() {
   try {
 
     ([
       fileLinkStoreSrv,
-      appContactsSrvProxy,
-      appChatsSrvProxy,
-      appDeliverySrvProxy,
-      videoOpenerProxy,
+      appContactsSrv,
+      appChatsSrv,
+      appDeliverySrv,
+      videoOpenerSrv,
     ] = await Promise.all([
 
       outgoingFileLinkStore(),
 
       w3n.rpc!.otherAppsRPC!('contacts.app.privacysafe.io', 'AppContacts')
-        .then(srvConn => makeServiceCaller<AppContacts>(
-          srvConn, ['getContact', 'getContactList', 'upsertContact'],
-        ) as AppContacts),
+      .then(srvConn => makeServiceCaller<AppContacts>(
+        srvConn, ['getContact', 'getContactList', 'upsertContact'],
+      ) as AppContacts),
 
       w3n.rpc!.thisApp!('AppChatsInternal')
-        .then(srvConn => makeServiceCaller<AppChatsSrv>(srvConn, [
-          'getChatList',
-          'createChat',
-          'updateChat',
-          'getChatsUnreadMessagesCount',
-          'getChat',
-          'deleteChat',
-          'clearChat',
-          'getMessage',
-          'deleteMessage',
-          'getMessagesByChat',
-          'upsertMessage',
-        ]) as AppChatsSrv),
+      .then(srvConn => makeServiceCaller<AppChatsSrv>(srvConn, [
+        'getChatList',
+        'createChat',
+        'updateChat',
+        'getChatsUnreadMessagesCount',
+        'getChat',
+        'deleteChat',
+        'deleteMessagesInChat',
+        'getMessage',
+        'deleteMessage',
+        'getMessagesByChat',
+        'upsertMessage',
+      ]) as AppChatsSrv),
 
       w3n.rpc!.thisApp!('ChatDeliveryService')
-        .then(srvConn => makeServiceCaller<AppDeliverySrv>(srvConn, [
-          'addMessageToDeliveryList',
-          'removeMessageFromDeliveryList',
-          'getMessage',
-          'getDeliveryList',
-          'removeMessageFromInbox',
-        ]) as AppDeliverySrv),
+      .then(srvConn => makeServiceCaller<AppDeliverySrv>(srvConn, [
+        'checkAddressExistenceForASMail',
+        'addMessageToDeliveryList',
+        'removeMessageFromDeliveryList',
+        'getMessage',
+        'getDeliveryList',
+        'removeMessageFromInbox',
+      ]) as AppDeliverySrv),
 
       w3n.rpc!.thisApp!('VideoGUIOpener')
-        .then(srvConn => makeServiceCaller<VideoGUIOpener>(srvConn, [
-          'startVideoCallForChatRoom', 'joinCallInRoom',
-        ], [
-          'watchVideoChats',
-        ]) as VideoGUIOpener),
+      .then(srvConn => makeServiceCaller<VideoGUIOpener>(srvConn, [
+        'startVideoCallForChatRoom', 'joinCallInRoom',
+      ], [
+        'watchVideoChats',
+      ]) as VideoGUIOpener),
 
     ]));
 

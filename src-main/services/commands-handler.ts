@@ -16,7 +16,7 @@
 */
 
 import type { Router } from 'vue-router';
-import { appChatsSrvProxy } from '@main/services/services-provider';
+import { appChatsSrv } from '@main/services/services-provider';
 import { areAddressesEqual } from '@shared/address-utils';
 import type { IncomingCallCmdArg, MainWindowCommand, OpenChatCmdArg } from '~/index';
 
@@ -89,7 +89,7 @@ export class ChatCommandsHandler {
 }
 
 async function findChatWithPeer(peerAddr: string): Promise<string | undefined> {
-  const chats = await appChatsSrvProxy.getChatList();
+  const chats = await appChatsSrv.getChatList();
   let smallestChat: string | undefined = undefined;
   let smallestChatSize = Number.MAX_SAFE_INTEGER;
   for (const { members, chatId } of chats) {

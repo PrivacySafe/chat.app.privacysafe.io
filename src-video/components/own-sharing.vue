@@ -17,7 +17,7 @@
 
 <script lang="ts" setup>
 import { computed } from 'vue';
-import { useStreamsStore } from '@video/store/streams';
+import { useStreamsStore } from '@video/store/streams.store';
 import IconButton from "@video/components/icon-button.vue";
 import VideoStream from "@video/components/video-stream.vue";
 

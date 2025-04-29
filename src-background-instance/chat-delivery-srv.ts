@@ -18,13 +18,14 @@
 /* eslint-disable @typescript-eslint/triple-slash-reference, @typescript-eslint/no-explicit-any, max-len */
 /// <reference path="../@types/platform-defs/injected-w3n.d.ts" />
 /// <reference path="../@types/platform-defs/test-stand.d.ts" />
-// @deno-types="./libs/ipc/ipc-service.d.ts"
-import { MultiConnectionIPCWrap } from './libs/ipc/ipc-service.js';
-import { SingleProc } from './libs/processes/single.ts';
-import { prepareMessageDeliveryInfo } from './helpers/delivery.helpers.ts';
-import { ObserversSet } from './libs/observer-utils.ts';
+// @deno-types="../shared-libs/ipc/ipc-service.d.ts"
+import { MultiConnectionIPCWrap } from '../shared-libs/ipc/ipc-service.js';
+import { SingleProc } from '../shared-libs/processes/single.ts';
+import { checkAddressExistenceForASMail, prepareMessageDeliveryInfo } from './utils/for-msg-sending.ts';
+import { ObserversSet } from '../shared-libs/observer-utils.ts';
 import { WebRTCSignalHandler } from './webrtc-messaging.ts';
 import type {
+  AddressCheckResult,
   AppDeliveryService,
   AppDeliverySrv,
   ChatIncomingMessage,
@@ -224,6 +225,12 @@ export class ChatDeliveryService implements AppDeliverySrv, AppDeliveryService {
     }
   }
 
+  public async checkAddressExistenceForASMail(
+    addr: string
+  ): Promise<AddressCheckResult> {
+    return checkAddressExistenceForASMail(addr);
+  }
+
   public async getDeliveryList(localMetaPath: ChatMessageLocalMeta): Promise<SendingMessageStatus[]> {
     const deliveredMessages = await w3n.mail!.delivery.listMsgs();
     return (deliveredMessages || []).reduce((res, message) => {
@@ -275,7 +282,7 @@ export class ChatDeliveryService implements AppDeliverySrv, AppDeliveryService {
 function noop() {
 }
 
-export class ChatDeliveryServiceWrap extends MultiConnectionIPCWrap {
+class ChatDeliveryServiceWrap extends MultiConnectionIPCWrap {
   constructor(
     srvName: string,
     private readonly fileProc: SingleProc,
@@ -305,7 +312,8 @@ export async function setupAndStartChatDeliveryService(
   await deliverySrv.start();
 
   deliverySrvWrap.exposeReqReplyMethods(deliverySrv, [
-    'addMessageToDeliveryList', 'removeMessageFromDeliveryList', 'getMessage', 'getDeliveryList', 'removeMessageFromInbox',
+    'checkAddressExistenceForASMail', 'addMessageToDeliveryList',
+    'removeMessageFromDeliveryList', 'getMessage', 'getDeliveryList', 'removeMessageFromInbox',
   ]);
   deliverySrvWrap.exposeObservableMethods(deliverySrv, [
     'watchIncomingMessages', 'watchOutgoingMessages',

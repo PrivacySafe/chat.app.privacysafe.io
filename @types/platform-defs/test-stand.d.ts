@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 - 2022 3NSoft Inc.
+ Copyright (C) 2021 - 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -40,13 +40,14 @@ declare namespace web3n.testing {
 		staticTestInfo(): Promise<StaticTestInfo>;
 		idOfTestUser(userNum: number): Promise<string>;
 		observeMsgsFromOtherLocalTestProcess(
-			userNum: number|undefined, appDomain: string|undefined,
-			component: string|undefined, observer: Observer<any>
+			observer: Observer<any>, userNum: number|undefined,
+			appDomain: string|undefined, component: string|undefined
 		): () => void;
 		sendMsgToOtherLocalTestProcess(
 			userNum: number|undefined, appDomain: string|undefined,
 			component: string|undefined, msg: any
 		): Promise<void>;
+		focusThisWindow?: () => Promise<void>;
 	}
 
 	type TestRecordType = 'tests-start' |

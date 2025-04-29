@@ -26,10 +26,9 @@ import { Ui3nButton, Ui3nChip, Ui3nInput, Ui3nTooltip } from '@v1nt1248/3nclient
 import type { PersonView } from '~/index';
 import ContactList from '../contacts/contact-list.vue';
 import ContactIcon from '../contacts/contact-icon.vue';
-import { createChat } from '@main/ctrl-funcs';
-import { useChatsStore } from '@main/store/chats';
-import { useAppStore } from '@main/store/app';
-import { useContactsStore } from '@main/store/contacts';
+import { useChatsStore } from '@main/store/chats.store';
+import { useAppStore } from '@main/store/app.store';
+import { useContactsStore } from '@main/store/contacts.store';
 
 interface ChatCreateDialogEmits {
   (ev: 'select', val: string): void;
@@ -45,8 +44,8 @@ const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const { user } = storeToRefs(useAppStore());
 const contactsStore = useContactsStore();
 const { contactList: allContacts } = storeToRefs(contactsStore);
-const { fetchContactList, addContact } = contactsStore;
-const chatsStore = useChatsStore();
+const { fetchContacts, addContact } = contactsStore;
+const { createChat } = useChatsStore();
 
 const searchText = ref<string>('');
 const selectedContacts = ref<string[]>([]);
@@ -90,7 +89,9 @@ const actionRightBtnText = computed(() => {
     : capitalize($tr('btn.text.create'));
 });
 
-onBeforeMount(async () => await fetchContactList());
+onBeforeMount(async () => {
+  await fetchContacts();
+});
 
 async function selectContacts(contactId: string) {
   const contactIndex = selectedContacts.value.indexOf(contactId);
@@ -124,13 +125,12 @@ async function onActionRightBtnClick() {
     user.value,
     ...selectedContacts.value.map(contactId => get(contacts.value, [contactId, 'mail'])),
   ];
-  const chatId = await createChat(chatsStore, {
+  const chatId = await createChat({
     members,
     admins: [user.value],
     name: isMultipleMode.value ? chatName.value.trim() : members[1],
   });
   emits('select', chatId);
-  emits('confirm');
 }
 
 async function addNewContact(mail: string) {

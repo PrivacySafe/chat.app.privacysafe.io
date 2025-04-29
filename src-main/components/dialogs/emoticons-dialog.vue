@@ -27,8 +27,8 @@ defineProps<{
 }>();
 const emit = defineEmits(['close', 'select']);
 
-const emoticonsByGroups = computed(() => {
-  return Object.keys(emoticons).reduce((res, id) => {
+const emoticonsByGroups = Object.keys(emoticons).reduce(
+  (res, id) => {
     const { group, value } = emoticons[id];
     if (!res[group]) {
       res[group] = [];
@@ -36,8 +36,15 @@ const emoticonsByGroups = computed(() => {
     res[group].push({ id, value });
 
     return res;
-  }, {} as Record<string, { id: string, value: string }[]>);
-});
+  },
+  {} as Record<string, { id: string, value: string }[]>
+);
+const groups = Object.keys(emoticonsByGroups);
+const peopleGrInd = groups.findIndex(g => (g.toLowerCase() == 'people'));
+if (peopleGrInd > 0) {
+  const peopleGr = groups.splice(peopleGrInd, 1)[0];
+  groups.unshift(peopleGr);
+}
 
 function closeDialog() {
   emit('close');
@@ -57,13 +64,16 @@ function selectEmoticon({ id, value }: { id: string, value: string }) {
   >
     <div :class="$style.emoticonsDialogBody">
       <div
-        v-for="group in Object.keys(emoticonsByGroups)"
+        v-for="group in groups"
         :key="group"
         :class="$style.emoticonsDialogGroup"
       >
+
+        <!--
         <h4 :class="$style.emoticonsDialogGroupName">
           {{ group }}
         </h4>
+         -->
         <div :class="$style.emoticonsDialogGroupBody">
           <ui3n-emoji
             v-for="emoticon in emoticonsByGroups[group]"
@@ -134,10 +144,10 @@ function selectEmoticon({ id, value }: { id: string, value: string }) {
   padding-bottom: var(--spacing-s);
 }
 
-.emoticonsDialogGroupName {
-  font-size: var(--font-12);
-  margin: 0 0 var(--spacing-s);
-}
+// .emoticonsDialogGroupName {
+//   font-size: var(--font-12);
+//   margin: 0 0 var(--spacing-s);
+// }
 
 .emoticonsDialogGroupBody {
   display: grid;

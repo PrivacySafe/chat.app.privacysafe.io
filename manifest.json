@@ -1,9 +1,9 @@
 {
   "name": "Chat",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.8.11",
+  "version": "0.9.6",
   "icon": "logo.png",
-  "description": "Chat securely in text and video form.",
+  "description": "Send secure text messages, share files or start a video meeting.",
 
   "components": {
 
@@ -15,10 +15,6 @@
         "logout": "all",
         "log": "all",
         "mailerid": true,
-        "mail": {
-          "sendingTo": "all",
-          "receivingFrom": "all"
-        },
         "shell": {
           "fileDialog": "all",
           "userNotifications": true,
@@ -137,7 +133,8 @@
         "mailerid": true,
         "mail": {
           "sendingTo": "all",
-          "receivingFrom": "all"
+          "receivingFrom": "all",
+          "config": "all"
         },
         "shell": {
           "startAppCmds": {

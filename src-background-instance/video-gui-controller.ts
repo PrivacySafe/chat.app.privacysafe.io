@@ -15,12 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObserversSet } from './libs/observer-utils.ts';
-// @deno-types="./libs/ipc/ipc-service-caller.d.ts"
-import { makeServiceCaller } from './libs/ipc/ipc-service-caller.js';
-// @deno-types="./libs/ipc/ipc-service.d.ts"
-import { MultiConnectionIPCWrap } from './libs/ipc/ipc-service.js';
-import { areAddressesEqual, toCanonicalAddress } from './libs/address-utils.ts';
+import { ObserversSet } from '../shared-libs/observer-utils.ts';
+// @deno-types="../shared-libs/ipc/ipc-service-caller.d.ts"
+import { makeServiceCaller } from '../shared-libs/ipc/ipc-service-caller.js';
+// @deno-types="../shared-libs/ipc/ipc-service.d.ts"
+import { MultiConnectionIPCWrap } from '../shared-libs/ipc/ipc-service.js';
+import { areAddressesEqual, toCanonicalAddress } from '../shared-libs/address-utils.ts';
 import { ChatService } from './chats-internal-srv.ts';
 import {
   WebRTCSignalingPeerChannels,
@@ -28,7 +28,7 @@ import {
   setupWebRTCSignalingPipe,
   WebRTCSignalHandler,
 } from './webrtc-messaging.ts';
-import { SingleProc } from './libs/processes/single.ts';
+import { SingleProc } from '../shared-libs/processes/single.ts';
 import type {
   ChatInfoForCall,
   CallGUIEvent,

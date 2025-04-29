@@ -1,11 +1,11 @@
 import { resolve } from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, UserConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
+// Checker can be used, in absence of implicit check by "vue-tsc --noEmit"
+// import checker from 'vite-plugin-checker';
 
-// https://vitejs.dev/config/
-// @ts-ignore
-export default defineConfig(({ mode }) => {
+export const makeConfig = ({ mode }: UserConfig) => {
   const isDev = mode === 'development';
   // const isProd = mode === 'production';
 
@@ -18,6 +18,12 @@ export default defineConfig(({ mode }) => {
   const plugins = [
     vue(),
     vueDevTools(),
+    // Checker can be used, in absence of implicit check by "vue-tsc --noEmit"
+    // checker({
+    //   typescript: {
+    //     tsconfigPath: 'tsconfig.json'
+    //   }
+    // })
   ];
 
   let optimizeDeps = {};
@@ -48,7 +54,7 @@ export default defineConfig(({ mode }) => {
         input: {
           main: resolve(__dirname, './index.html'),
           videoChat: resolve(__dirname, './video-chat.html'),
-        },
+        } as Record<string, string>,
         output: [
           {
             name: 'main',
@@ -75,4 +81,8 @@ export default defineConfig(({ mode }) => {
       },
     },
   };
-});
+};
+
+// https://vitejs.dev/config/
+// @ts-ignore
+export default defineConfig(makeConfig);

@@ -20,7 +20,6 @@
 import { computed, defineAsyncComponent, inject, toRefs } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import get from 'lodash/get';
 import size from 'lodash/size';
 import {
   I18nPlugin,
@@ -30,19 +29,18 @@ import {
   NotificationsPlugin,
   NOTIFICATIONS_KEY,
 } from '@v1nt1248/3nclient-lib/plugins';
-import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
+import { capitalize, prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nButton, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { useAppStore } from '@main/store/app';
-import { exportChatMessages } from '@main/helpers/chats.helper';
-import { getChatName } from '@main/helpers/chat-ui.helper';
-import { videoOpenerProxy } from '@main/services/services-provider';
+import { useAppStore } from '@main/store/app.store';
+import { exportChatMessages } from '@main/utils/chats.helper';
+import { getChatName } from '@main/utils/chat-ui.helper';
+import { videoOpenerSrv } from '@main/services/services-provider';
 import { areAddressesEqual } from '@shared/address-utils';
 import type { ChatView, ChatMessageView, MessageType } from '~/index';
 import ChatAvatar from './chat-avatar.vue';
 import ChatHeaderActions from './chat-header-actions.vue';
-import { clearChat, deleteChat, leaveChat } from '@main/ctrl-funcs';
-import { renameChat } from '@main/ctrl-funcs/rename-chat';
-import { useChatsStore } from '@main/store/chats';
+import { useChatsStore } from '@main/store/chats.store';
+import { useChatStore } from '@main/store/chat.store';
 
 const vUi3nHtml = Ui3nHtml;
 
@@ -57,10 +55,13 @@ const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
 const router = useRouter();
 
-const chatsStore = useChatsStore();
+const { fetchChatList } = useChatsStore();
+const chatStore = useChatStore();
 const { user } = storeToRefs(useAppStore());
-const { currentChatId } = storeToRefs(chatsStore);
-const { fetchChat: getChat, fetchChatList: refreshChatList } = chatsStore;
+const { currentChatId } = storeToRefs(chatStore);
+const {
+  fetchChat, deleteAllMessagesInChat, renameChat, leaveChat, deleteChat
+} = chatStore;
 
 const text = computed<string>(() => {
   if (!props.chat.msgId) {
@@ -91,7 +92,7 @@ async function runChatHistoryCleaning() {
     dialogProps: {
       title: $tr('chat.history.clean.dialog.title'),
       onConfirm: async () => {
-        await clearChat(chatsStore, props.chat.chatId);
+        await deleteAllMessagesInChat(props.chat.chatId);
       },
     },
   });
@@ -126,7 +127,7 @@ function runChatRenaming() {
         { oldName, newName }: { oldName: string, newName: string }
       ) => {
         if (newName !== oldName) {
-          await renameChat(chatsStore, props.chat, newName);
+          await renameChat(props.chat, newName);
         }
       }) as any,
     },
@@ -135,26 +136,30 @@ function runChatRenaming() {
 
 async function closeChat() {
   await router.push('/chats');
-  await getChat(null);
+  await fetchChat(null);
 }
 
 function runChatDeleting() {
   const component = defineAsyncComponent(() => import('../dialogs/confirmation-dialog.vue'));
   dialog.$openDialog({
     component,
+    componentProps: {
+      dialogText: $tr('chat.delete.dialog.text', { chatName: props.chat.name }),
+    },
     dialogProps: {
       title: $tr('chat.delete.dialog.title'),
+      confirmButtonText: capitalize($tr('chat.delete.dialog.button')),
       confirmButtonColor: 'var(--color-text-button-secondary-default)',
       confirmButtonBackground: 'var(--color-bg-button-secondary-default)',
       cancelButtonColor: 'var(--color-text-button-primary-default)',
       cancelButtonBackground: 'var(--color-bg-button-primary-default)',
       onConfirm: async () => {
-        await deleteChat(chatsStore, props.chat.chatId);
+        await deleteChat(props.chat.chatId);
         if (props.chat.chatId === currentChatId.value) {
           await router.push('/chats');
-          await getChat(null);
+          await fetchChat(null);
         }
-        await refreshChatList();
+        await fetchChatList();
       },
     },
   });
@@ -164,6 +169,9 @@ function runChatLeave() {
   const component = defineAsyncComponent(() => import('../dialogs/confirmation-dialog.vue'));
   dialog.$openDialog({
     component,
+    componentProps: {
+      dialogText: $tr('chat.leave.dialog.text', { chatName: props.chat.name }),
+    },
     dialogProps: {
       title: $tr('chat.leave.dialog.title'),
       confirmButtonText: $tr('chat.leave.dialog.button'),
@@ -172,17 +180,19 @@ function runChatLeave() {
       cancelButtonColor: 'var(--color-text-button-primary-default)',
       cancelButtonBackground: 'var(--color-bg-button-primary-default)',
       onConfirm: async () => {
-        await leaveChat(chatsStore, props.chat, [user.value]);
+        await leaveChat(props.chat.chatId);
         if (props.chat.chatId === currentChatId.value) {
           await router.push('/chats');
-          await getChat(null);
+          await fetchChat(null);
         }
-        await refreshChatList();
+        await fetchChatList();
       },
     },
   });
 }
 
+// XXX note that respective button is disabled for group chat till webRTC
+//     connectivity to many at once is settled.
 async function startVideoCall(): Promise<void> {
   const { chatId, name: chatName, members } = props.chat;
   console.log('startVideoCall: ', chatId, chatName, members);
@@ -194,10 +204,10 @@ async function startVideoCall(): Promise<void> {
       addr,
       name: addr.substring(0, addr.indexOf('@')),
     }));
-  await videoOpenerProxy.startVideoCallForChatRoom(chatId);
+  await videoOpenerSrv.startVideoCallForChatRoom(chatId);
 }
 
-const actionsHandlers = {
+const actionsHandlers: any = {
   history: {
     export: runChatHistoryExporting,
     clean: runChatHistoryCleaning,
@@ -213,9 +223,11 @@ const actionsHandlers = {
 
 async function selectAction(compositeAction: string) {
   const [entity, action] = compositeAction.split(':');
-  const handler = get(actionsHandlers, [entity, action]);
+  const handler: () => Promise<void> = actionsHandlers[entity]?.[action];
   if (handler) {
     await handler();
+  } else {
+    throw new Error(`No handler found for action ${action} on entity ${entity}`);
   }
 }
 </script>
@@ -239,6 +251,7 @@ async function selectAction(compositeAction: string) {
     </div>
 
     <ui3n-button
+      v-if="!isGroupChat"
       type="custom"
       color="var(--color-bg-button-tritery-default)"
       icon="round-phone"

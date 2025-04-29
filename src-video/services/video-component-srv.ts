@@ -17,7 +17,7 @@
 
 // @deno-types="@shared/ipc/ipc-service.d.ts"
 import { MultiConnectionIPCWrap } from '@shared/ipc/ipc-service'
-import { StreamsStore, makePeerState } from '@video/store/streams';
+import { StreamsStore } from '@video/store/streams.store';
 import { OffBandSignalingChannel } from './webrtc-peer-channel';
 import type { VueEventBus } from '@v1nt1248/3nclient-lib/plugins';
 import type {
@@ -131,19 +131,14 @@ export class VideoChat {
     this.store = store;
     this.eventBus = eventBus;
     const { chatName, ownName, ownAddr, peers, rtcConfig } = this.chat!;
-    store.chatName = chatName;
-    store.ownName = ownName;
-    store.ownAddr = ownAddr;
-    store.peers = peers.map(({
-      addr: peerAddr, name: peerName
-    }) => makePeerState(
-      peerAddr, peerName,
-      PeerChannelWithStreams.makeWith(
+    this.store.initialize(
+      chatName, ownName, ownAddr, peers,
+      peerAddr => PeerChannelWithStreams.makeWith(
         peerAddr, this.store!, this.eventBus!, rtcConfig,
         this.makeConnector(vaChannelType, peerAddr),
         fstIsPolite(ownAddr, peerAddr)
       )
-    ));
+    );
   }
 
   notifyBkgrndInstanceOnCallStart(): void {

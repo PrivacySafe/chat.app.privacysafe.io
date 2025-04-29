@@ -22,8 +22,8 @@ import {
   Ui3nText,
   Ui3nHtml,
 } from '@v1nt1248/3nclient-lib';
-import { getContactName } from '@main/helpers/contacts.helper';
-import useChatPage from './useChatPage';
+import { getContactName } from '@main/utils/contacts.helper';
+import useChatView from './useChatView';
 import ChatHeader from '@main/components/chat/chat-header.vue';
 import ChatMessages from '@main/components/messages/chat-messages/chat-messages.vue';
 import ChatAttachment from '@main/components/chat/chat-attachment.vue';
@@ -52,7 +52,7 @@ const {
   clearAttachments,
   deleteAttachment,
   sendMessage,
-} = useChatPage();
+} = useChatView();
 
 </script>
 

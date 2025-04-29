@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { StreamType } from "@video/store/streams";
+import { StreamType } from "@video/store/streams.store";
 
 export interface PeerEvents {
 

@@ -32,7 +32,7 @@ export const chatMenuItems = [
   {
     icon: 'outline-info',
     action: 'chat:info',
-    text: 'Chat info',
+    text: 'chat.action.menu.txt.info',
     chatTypes: ['single', 'group'],
     disabled: false,
     isAccent: false,
@@ -40,7 +40,7 @@ export const chatMenuItems = [
   {
     icon: 'outline-edit',
     action: 'chat:rename',
-    text: 'Rename chat',
+    text: 'chat.action.menu.txt.rename',
     chatTypes: ['single', 'group'],
     disabled: false,
     isAccent: false,
@@ -48,7 +48,7 @@ export const chatMenuItems = [
   {
     icon: 'round-system-update-alt',
     action: 'history:export',
-    text: 'Export History',
+    text: 'chat.action.menu.txt.history.export',
     chatTypes: ['single', 'group'],
     disabled: false,
     isAccent: false,
@@ -56,7 +56,7 @@ export const chatMenuItems = [
   {
     icon: 'outline-cleaning-services',
     action: 'history:clean',
-    text: 'Clean History',
+    text: 'chat.action.menu.txt.history.clean',
     chatTypes: ['single', 'group'],
     disabled: false,
     isAccent: false,
@@ -64,7 +64,7 @@ export const chatMenuItems = [
   {
     icon: 'round-close',
     action: 'chat:close',
-    text: 'Close chat',
+    text: 'chat.action.menu.txt.close',
     chatTypes: ['single', 'group'],
     disabled: false,
     isAccent: false,
@@ -73,7 +73,7 @@ export const chatMenuItems = [
   {
     icon: 'outline-delete',
     action: 'chat:delete',
-    text: 'Delete Chat',
+    text: 'chat.action.menu.txt.delete',
     chatTypes: ['single'],
     disabled: false,
     isAccent: true,
@@ -82,7 +82,7 @@ export const chatMenuItems = [
   {
     icon: 'round-logout',
     action: 'chat:leave',
-    text: 'Leave Group',
+    text: 'chat.action.menu.txt.leave',
     chatTypes: ['group'],
     disabled: false,
     isAccent: true,
@@ -101,26 +101,26 @@ export const messageActions: ChatMessageAction[] = [
   {
     id: 'copy',
     icon: { name: 'round-content-copy' },
-    title: 'Copy to clipboard',
+    title: 'chat.message.actions.menu.txt.copy',
     conditions: ['incoming::', 'outgoing:sent,received,error,canceled:'],
   },
   {
     id: 'forward',
     icon: { name: 'outline-reply', horizontalFlip: true },
-    title: 'Forward',
+    title: 'chat.message.actions.menu.txt.forward',
     conditions: ['incoming::', 'outgoing:sent,received,error,canceled:'],
   },
   {
     id: 'download',
     icon: { name: 'outline-download-for-offline' },
-    title: 'Download',
+    title: 'chat.message.actions.menu.txt.download',
     conditions: ['incoming::true', 'outgoing:sent,received,error,canceled:true'],
   },
   { id: 'resend', disabled: true, icon: { name: 'round-refresh' }, title: 'Resend', conditions: ['outgoing:error:'] },
   {
     id: 'delete_message',
     icon: { name: 'outline-delete' },
-    title: 'Delete message',
+    title: 'chat.message.actions.menu.txt.delete_message',
     conditions: ['incoming::', 'outgoing:sent,received,error,canceled:'],
     blockStart: true,
     accent: 'var(--warning-content-default)',
@@ -129,7 +129,7 @@ export const messageActions: ChatMessageAction[] = [
     id: 'cancel_sending',
     disabled: true,
     icon: { name: 'outline-delete' },
-    title: 'Cancel sending',
+    title: 'chat.message.actions.menu.txt.cancel_sending',
     conditions: ['outgoing:sending:'],
     blockStart: true,
     accent: 'var(--warning-content-default)',

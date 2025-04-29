@@ -15,6 +15,26 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 
+<script lang="ts" setup>
+import { useAppStore } from '@video/store/app.store';
+import { onBeforeMount, onBeforeUnmount } from 'vue';
+
+const appStore = useAppStore();
+
+onBeforeMount(async () => {
+  try {
+    await appStore.initialize();
+  } catch (e) {
+    console.error('ON_BEFORE_MOUNT ERROR: ', e);
+    throw e;
+  }
+});
+
+onBeforeUnmount(() => {
+  appStore.stopWatching();
+});
+
+</script>
 <template>
   <router-view></router-view>
 </template>

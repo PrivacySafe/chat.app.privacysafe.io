@@ -18,15 +18,13 @@
 <script lang="ts" setup>
 import { computed, inject } from 'vue';
 import { storeToRefs } from 'pinia';
-import get from 'lodash/get';
-import size from 'lodash/size';
 import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nBadge, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { useChatsStore } from '@main/store/chats';
-import { getChatSystemMessageText } from '@main/helpers/chat-ui.helper';
+import { getChatSystemMessageText } from '@main/utils/chat-ui.helper';
 import type { ChatListItemView, ChatMessageView, MessageType } from '~/index';
 import ChatAvatar from './chat-avatar.vue';
+import { useChatStore } from '@main/store/chat.store';
 
 const vUi3nHtml = Ui3nHtml;
 
@@ -36,10 +34,12 @@ const props = defineProps<{
 const emit = defineEmits(['click']);
 
 const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-const { currentChat } = storeToRefs(useChatsStore());
+const { currentChat } = storeToRefs(useChatStore());
 
-const selectedChatId = computed<string>(() => get(currentChat.value, ['chatId'], ''));
-const isGroupChat = computed<boolean>(() => size(props.data.members) > 2);
+const selectedChatId = computed<string>(() => (currentChat.value ?
+  currentChat.value.chatId : ''
+));
+const isGroupChat = computed<boolean>(() => (props.data.members.length > 2));
 
 const message = computed<string>(() => {
   const { msgId, chatMessageType, messageType, body, attachments = [] } = props.data || {};

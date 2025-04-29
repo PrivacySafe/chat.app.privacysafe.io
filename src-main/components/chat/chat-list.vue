@@ -18,7 +18,7 @@
 <script lang="ts" setup>
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { useChatsStore } from '@main/store/chats';
+import { useChatsStore } from '@main/store/chats.store';
 import ChatListItem from './chat-list-item.vue';
 
 const router = useRouter();
