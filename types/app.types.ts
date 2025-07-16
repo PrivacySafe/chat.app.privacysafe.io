@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,6 +14,8 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+
+import { ChatIdObj } from "./asmail-msgs.types";
 
 export type IncomingMessage = web3n.asmail.IncomingMessage;
 export type AttachmentsContainer = web3n.asmail.AttachmentsContainer;
@@ -33,15 +35,6 @@ export type AvailableLanguage = 'en';
 export type AvailableColorTheme = 'default' | 'dark';
 
 export type ConnectivityStatus = 'offline' | 'online';
-
-export type SystemMessageHandlerParams = {
-  msgId?: string;
-  chatId?: string;
-  sender?: string;
-  chatMessageId?: string;
-  value?: any;
-  displayable?: boolean;
-};
 
 export interface MessageDeliveryStatusUI {
   icon: string;
@@ -84,5 +77,5 @@ export interface Ui3nTextEnterEvent {
 }
 
 export interface AppGlobalEvents {
-  'send:message': { chatId: string };
+  'send:message': { chatId: ChatIdObj; };
 }

@@ -39,14 +39,40 @@ declare namespace web3n.testing {
 	interface TestStand extends BasicTestStand {
 		staticTestInfo(): Promise<StaticTestInfo>;
 		idOfTestUser(userNum: number): Promise<string>;
+
+		/**
+		 * Starts listening for test signals from test process, that should
+		 * different from this one.
+		 * @param observer 
+		 * @param userNum identifies user that should be listen for test signals.
+		 * Value undefined means this user.
+		 * @param appDomain identifies app that should be listen for test signals.
+		 * Value undefined means this app.
+		 * @param component identifies app component that should be listen for
+		 * test signals. Value undefined means this app component.
+		 */
 		observeMsgsFromOtherLocalTestProcess(
 			observer: Observer<any>, userNum: number|undefined,
 			appDomain: string|undefined, component: string|undefined
 		): () => void;
+
+		/**
+		 * Sends test signal message to test process, that should different from
+		 * this one.
+		 * @param userNum identifies user that should be listen for test signals.
+		 * Value undefined means this user.
+		 * @param appDomain identifies app that should be listen for test signals.
+		 * Value undefined means this app.
+		 * @param component identifies app component that should be listen for
+		 * test signals. Value undefined means this app component.
+		 * @param msg is a test signal message content itself. It can be anything
+		 * JSON-ifiable.
+		 */
 		sendMsgToOtherLocalTestProcess(
 			userNum: number|undefined, appDomain: string|undefined,
 			component: string|undefined, msg: any
 		): Promise<void>;
+
 		focusThisWindow?: () => Promise<void>;
 	}
 
@@ -60,4 +86,54 @@ declare namespace web3n.testing {
 		}>;
 	}
 
+}
+
+declare namespace web3n.testing.config {
+
+	interface TestStandConfig {
+		apps?: { [appDomain: string]: DevApp; };
+		sites?: { [domain: string]: DevSite; };
+		startupApp?: { domain: string; } & DevApp;
+		users?: DevUser[];
+		userCreds?: string;
+	}
+	
+	interface DevUser {
+		idTemplate: string;
+		signupToken?: string;
+		testStartup?: true;
+	}
+
+	interface DevApp {
+		dir: string;
+		url?: string;
+		logRPC?: true;
+		skipAutoLaunch?: true;
+		launchComponent?: string;
+		formFactor?: ui.FormFactor;
+	}
+	
+	interface DevAppParams extends DevApp {
+		manifest: caps.AppManifest;
+	}
+
+	interface DevSite {
+		dir: string;
+		url?: string;
+		logRPC?: true;
+	}
+	
+	interface DevSiteParams extends DevSite {
+		manifest: caps.SiteManifest;
+	}
+
+	
+	interface DevUserParams {
+		userId: string;
+		pass: string;
+		userNum: number;
+		signupToken?: string;
+		testStartup?: true;
+	}
+	
 }

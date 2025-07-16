@@ -18,309 +18,208 @@
 /* eslint-disable @typescript-eslint/triple-slash-reference, @typescript-eslint/no-explicit-any, max-len */
 /// <reference path="../@types/platform-defs/injected-w3n.d.ts" />
 /// <reference path="../@types/platform-defs/test-stand.d.ts" />
-// @deno-types="../shared-libs/ipc/ipc-service.d.ts"
-import { MultiConnectionIPCWrap } from '../shared-libs/ipc/ipc-service.js';
 import { SingleProc } from '../shared-libs/processes/single.ts';
-import { checkAddressExistenceForASMail, prepareMessageDeliveryInfo } from './utils/for-msg-sending.ts';
-import { ObserversSet } from '../shared-libs/observer-utils.ts';
-import { WebRTCSignalHandler } from './webrtc-messaging.ts';
-import type {
-  AddressCheckResult,
-  AppDeliveryService,
-  AppDeliverySrv,
-  ChatIncomingMessage,
-  ChatMessageLocalMeta,
-  ChatOutgoingMessage,
-  DeliveryMessageProgress,
-  IncomingMessage,
-  OpenChatCmdArg,
-  SendingMessageStatus,
-} from '../types/index.ts';
+import type { ChatIncomingMessage } from '../types/asmail-msgs.types.ts';
+import { LocalMetadataInDelivery } from '../types/chat.types.ts';
+import type { ChatMessagesHandler, SendingProgressInfo } from './chat-service/index.ts';
+import { WebRTCSignalHandler } from './video-chat/index.ts';
+
+declare const w3n: web3n.caps.W3N;
+type WritableFile = web3n.files.WritableFile;
+type IncomingMessage = web3n.asmail.IncomingMessage;
+
+export class ChatDeliveryService {
+
+  private readonly chatMsgsQueue: ChatIncomingMessage[] = [];
+  private readonly chatMsgsProc = new SingleProc();
+
+  private readonly webRTCMsgsQueue: ChatIncomingMessage[] = [];
+  private readonly webRTCMsgsProc = new SingleProc();
+
+  private readonly progressNotificationsQueue: SendingProgressInfo[] = [];
+  private readonly notificationsProc = new SingleProc();
+
+  private userId: string | undefined;
+
+  private constructor(
+    private readonly chatMessages: ChatMessagesHandler,
+    private readonly webrtcSignalsHandler: WebRTCSignalHandler,
+    private readonly data: LocalServiceDataStore
+  ) {}
+
+  static async setupAndStartServing(
+    chatMessagesHandler: ChatMessagesHandler,
+    webrtcSignalsHandler: WebRTCSignalHandler,
+    latestIncomingMsgTS: number|undefined
+  ): Promise<() => void> {
+    const deliverySrv = new ChatDeliveryService(
+      chatMessagesHandler, webrtcSignalsHandler,
+      await LocalServiceDataStore.make(latestIncomingMsgTS)
+    );
+
+    const stopMsgWatching = await deliverySrv.start();
+
+    return () => {
+      stopMsgWatching();
+    };
+  }
+
+  private async start(): Promise<() => void> {
+    if (this.userId) {
+      throw new Error(`service is already started, and second start will be echoing messages`);
+    }
+    this.userId = await w3n.mail!.getUserId();
+
+    const stopInboxWatching = w3n.mail!.inbox.subscribe(
+      'message',
+      {
+        next: msg => this.handleIncomingMessage(msg),
+        error: err => w3n.log('error', `Inbox subscribe error: `, err),
+      },
+    );
+
+    const stopDeliveryWatch = w3n.mail!.delivery.observeAllDeliveries({
+      next: info => this.handleSendingProgress(info),
+      error: err => w3n.log('error', `Send error: `, err),
+    });
+
+    return () => {
+      stopInboxWatching();
+      stopDeliveryWatch();
+    };
+  }
+
+  private handleIncomingMessage(msg: IncomingMessage): void {
+    const { msgType } = msg;
+    if (msgType === 'chat') {
+      const { jsonBody } = msg as ChatIncomingMessage;
+      if (jsonBody?.chatMessageType === 'webrtc-call') {
+        this.webRTCMsgsQueue.push(msg as ChatIncomingMessage);
+        if (!this.webRTCMsgsProc.getP()) {
+          this.webRTCMsgsProc.start(this.processQueuedWebRTCMsg);
+        }
+      } else {
+        this.chatMsgsQueue.push(msg as ChatIncomingMessage);
+        if (!this.chatMsgsProc.getP()) {
+          this.chatMsgsProc.start(this.processQueuedChatMsg);
+        }
+      }
+    }
+  }
+
+  private processQueuedChatMsg = async (): Promise<void> => {
+    while (this.chatMsgsQueue.length > 0) {
+      const msg = this.chatMsgsQueue.shift()!;
+      try {
+        await this.chatMessages.handleIncomingMsg(msg);
+        await this.data.setLastReceivedMessageTimestamp(msg.deliveryTS);
+      } catch (err) {
+        await w3n.log(
+          'error', `Processing incoming chat message threw an error.`, err
+        );
+      }
+    }
+  }
+
+  private processQueuedWebRTCMsg = async (): Promise<void> => {
+    while (this.webRTCMsgsQueue.length > 0) {
+      const msg = this.webRTCMsgsQueue.shift()!;
+      try {
+        await this.webrtcSignalsHandler(msg);
+        await this.data.setLastReceivedMessageTimestamp(msg.deliveryTS);
+      } catch (err) {
+        await w3n.log(
+          'error', `Processing incoming WebRTC signalling message threw an error.`, err
+        );
+      }
+    }
+  }
+
+  private handleSendingProgress(info: SendingProgressInfo): void {
+    const { localMeta } = info.progress;
+    if (localMeta && (typeof localMeta === 'object')
+    && (localMeta as LocalMetadataInDelivery).chatId) {
+      this.progressNotificationsQueue.push(info);
+      if (!this.notificationsProc.getP()) {
+        this.notificationsProc.start(this.processQueuedNotifications);
+      }
+    }
+  }
+
+  private processQueuedNotifications = async (): Promise<void> => {
+    while (this.progressNotificationsQueue.length > 0) {
+      const info = this.progressNotificationsQueue.shift()!;
+      try {
+        await this.chatMessages.handleSendingProgress(info);
+      } catch (err) {
+        await w3n.log(
+          'error', `Processing sending progress info threw an error.`, err
+        );
+      }
+    }
+  };
+
+}
 
 interface DeliveryServiceData {
   lastReceivedMessageTimestamp: number;
 }
 
-declare const w3n: web3n.testing.CommonW3N;
-
 const deliveryServiceDataFileName = 'delivery-service-data.json';
 
-export class ChatDeliveryService implements AppDeliverySrv, AppDeliveryService {
+class LocalServiceDataStore {
 
-  public readonly fileProc = new SingleProc();
-  private readonly incomingChatMessageObservers = new ObserversSet<ChatIncomingMessage>();
-  private readonly outgoingChatMessageObservers = new ObserversSet<DeliveryMessageProgress>();
-  private data: DeliveryServiceData = {
-    lastReceivedMessageTimestamp: 0,
-  };
-  private readonly msgHandlingProc = new SingleProc();
+  readonly proc = new SingleProc();
+  private needsSaving = true;
 
-  private userId: string | undefined;
+  private constructor (
+    private readonly file: WritableFile,
+    private readonly data: DeliveryServiceData
+  ) {}
 
-  constructor(
-    private readonly webrtcSignalsHandler: WebRTCSignalHandler,
-  ) {
-  }
-
-  private async saveServiceDataFile(data: DeliveryServiceData): Promise<void> {
-    const fs = await (w3n.storage as web3n.storage.Service).getAppLocalFS('');
-    try {
-      await this.fileProc.startOrChain(
-        () => fs.writeJSONFile(deliveryServiceDataFileName, data),
-      );
-    } catch (e) {
-      w3n.log('error', 'Error saving DeliveryService data file. ', e);
-    } finally {
-      await fs.close();
-    }
-  }
-
-  private async getServiceDataFile(): Promise<DeliveryServiceData> {
-    const fs = await (w3n.storage as web3n.storage.Service).getAppLocalFS('');
-    try {
-      const res = await this.fileProc.startOrChain(
-        () => fs.readJSONFile<DeliveryServiceData>(deliveryServiceDataFileName),
-      );
-      return res;
-    } catch (e) {
-      const { notFound, path } = e as web3n.files.FileException;
-      if (path !== deliveryServiceDataFileName || !notFound) {
-        w3n.log('error', 'Error reading DeliveryService data file. ', e);
-      }
-      return {
-        lastReceivedMessageTimestamp: 0,
-      };
-    }
-  }
-
-  private async handleMissedInboxMessages(): Promise<void> {
-    const { lastReceivedMessageTimestamp } = await this.getServiceDataFile();
-    this.data.lastReceivedMessageTimestamp = Math.max(lastReceivedMessageTimestamp - 60 * 1000, 0);
-    const listMessages = await w3n.mail!.inbox.listMsgs(
-      this.data.lastReceivedMessageTimestamp
-    ).catch(err => w3n.log('error', `Fail to list messages`, err));
-
-    if (listMessages) {
-      for (const item of listMessages) {
-        const { msgId, msgType, deliveryTS } = item;
-        if (msgType === 'chat') {
-          try {
-            const msg = await w3n.mail!.inbox.getMsg(msgId) as ChatIncomingMessage;
-            if (msg) {
-              if (msg.jsonBody?.chatMessageType === 'webrtc-call') {
-                w3n.mail!.inbox.removeMsg(msg.msgId).catch(noop);
-              } else {
-                this.incomingChatMessageObservers.next(msg);
-                this.data.lastReceivedMessageTimestamp = Math.max(this.data.lastReceivedMessageTimestamp, deliveryTS || 0);
-              }
-            }
-          } catch (e) {
-            w3n.log('error', `Fail to get message ${msgId}`, e);
-          }
-        }
-      }
-      await this.saveServiceDataFile(this.data);
-    }
-  }
-
-  private async handleIncomingMessage(msg: IncomingMessage): Promise<void> {
-    const { msgType } = msg;
-    if (msgType === 'chat') {
-      const { jsonBody } = msg as ChatIncomingMessage;
-      if (jsonBody?.chatMessageType === 'webrtc-call') {
-        this.webrtcSignalsHandler(msg as ChatIncomingMessage);
-      } else {
-        if (this.incomingChatMessageObservers.isEmpty()) {
-
-          // XXX need trigger taskbar notifications instead of the following
-
-          if (jsonBody.chatMessageType === 'regular') {
-            await w3n.shell!.startAppWithParams!(null, 'open-chat-with', {
-              chatId: jsonBody.chatId,
-              peerAddress: msg.sender,
-            } as OpenChatCmdArg);
-          }
-
-        } else {
-          this.data.lastReceivedMessageTimestamp = msg.deliveryTS;
-          await this.saveServiceDataFile(this.data);
-          this.incomingChatMessageObservers.next(msg as ChatIncomingMessage);
-        }
-      }
-    }
-  }
-
-  public async start(): Promise<void> {
-    if (this.userId) {
-      // service is already started, and second start will be echoing messages
-      return;
-    }
-    this.userId = await w3n.mail!.getUserId();
-
-    w3n.mail!.inbox.subscribe(
-      'message',
-      {
-        next: msg => this.msgHandlingProc.startOrChain(
-          () => this.handleIncomingMessage(msg),
+  static async make(
+    latestIncomingMsgTS: number|undefined
+  ): Promise<LocalServiceDataStore> {
+    const fs = await w3n.storage!.getAppLocalFS();
+    const file = await fs.writableFile(deliveryServiceDataFileName);
+    let data: DeliveryServiceData;
+    if (file.isNew) {
+      data = {
+        lastReceivedMessageTimestamp: ((latestIncomingMsgTS === undefined) ?
+          0 : latestIncomingMsgTS
         ),
-        error: err => w3n.log('error', `Inbox subscribe error: `, err),
-      },
-    );
+      };
+      await file.writeJSON(data);
+    } else {
+      data = await file.readJSON<DeliveryServiceData>();
+      if ((latestIncomingMsgTS !== undefined)
+      && (data.lastReceivedMessageTimestamp < latestIncomingMsgTS)) {
+        data.lastReceivedMessageTimestamp = latestIncomingMsgTS;
+        await file.writeJSON(data);
+      }
+    }
+    return new LocalServiceDataStore(file, data);
+  }
 
-    w3n.mail!.delivery.observeAllDeliveries({
-      next: async (value: DeliveryMessageProgress) => {
-        const { progress } = value;
-        const { localMeta = {} } = progress || {};
-        const { path } = localMeta;
-        if (path?.includes('chat')) {
-          this.outgoingChatMessageObservers.next(value);
-        }
-      },
-      error: err => w3n.log('error', `Send error: `, err),
+  private async saveOrderly(): Promise<void> {
+    this.needsSaving = true;
+    await this.proc.startOrChain(async () => {
+      if (this.needsSaving) {
+        await this.file.writeJSON(this.data);
+        this.needsSaving = false;
+      }
     });
+  };
+
+  get lastReceivedMessageTimestamp(): number {
+    return this.data.lastReceivedMessageTimestamp;
   }
 
-  public async addMessageToDeliveryList(message: ChatOutgoingMessage, localMetaPath: ChatMessageLocalMeta, systemMessage?: boolean): Promise<void> {
-    const { msgId, recipients = [] } = message;
-    if (msgId && recipients.length) {
-      try {
-        await w3n.mail!.delivery.addMsg(
-          recipients,
-          message,
-          msgId,
-          { sendImmediately: true, localMeta: { path: localMetaPath } },
-        );
-        if (systemMessage) {
-          w3n.mail!.delivery.observeDelivery(
-            msgId,
-            {
-              error: () => this.removeMessageFromDeliveryList([msgId]),
-              complete: () => this.removeMessageFromDeliveryList([msgId]),
-            },
-          );
-        }
-      } catch (e) {
-        await w3n.log('error', `Error adding the ${systemMessage ? 'message ' : ''} ${msgId} to the delivery list. `, e);
-        throw e;
-      }
+  async setLastReceivedMessageTimestamp(ts: number): Promise<void> {
+    if (ts > this.data.lastReceivedMessageTimestamp) {
+      this.data.lastReceivedMessageTimestamp = ts;
+      await this.saveOrderly();
     }
   }
 
-  public async removeMessageFromDeliveryList(msgIds: string[] = []): Promise<void> {
-    if (msgIds.length > 0) {
-      for (const msgId of msgIds) {
-        await w3n.mail!.delivery.rmMsg(msgId)
-        .catch(async e => {
-          await w3n.log('error', `Error deleting the messages ${msgIds.join(', ')} from the delivery list. `, e);
-        });
-      }
-    }
-  }
-
-  public async getMessage(msgId: string): Promise<ChatIncomingMessage | undefined> {
-    try {
-      return (await w3n.mail!.inbox.getMsg(msgId)) as ChatIncomingMessage;
-    } catch (e) {
-      await w3n.log('error', `Error getting the message ${msgId}.`, e);
-    }
-  }
-
-  public async checkAddressExistenceForASMail(
-    addr: string
-  ): Promise<AddressCheckResult> {
-    return checkAddressExistenceForASMail(addr);
-  }
-
-  public async getDeliveryList(localMetaPath: ChatMessageLocalMeta): Promise<SendingMessageStatus[]> {
-    const deliveredMessages = await w3n.mail!.delivery.listMsgs();
-    return (deliveredMessages || []).reduce((res, message) => {
-      const { id, info } = message;
-      const { localMeta } = info || {};
-      const { path = '' } = localMeta || {};
-      if (path.includes(localMetaPath)) {
-        res.push({
-          msgId: id,
-          status: info,
-          info: prepareMessageDeliveryInfo(id, info),
-        });
-      }
-
-      return res;
-    }, [] as SendingMessageStatus[]);
-  }
-
-  public async removeMessageFromInbox(msgIds: string[] = []): Promise<void> {
-    if (msgIds.length) {
-      for (const msgId of msgIds) {
-        await w3n.mail!.inbox.removeMsg(msgId)
-        .catch(async e => {
-          await w3n.log('error', `Error deleting the messages ${msgIds.join(', ')} from INBOX. `, e);
-        });
-      }
-    }
-  }
-
-  public watchIncomingMessages(obs: web3n.Observer<ChatIncomingMessage>): () => void {
-    this.incomingChatMessageObservers.add(obs);
-    this.msgHandlingProc.startOrChain(
-      () => this.handleMissedInboxMessages(),
-    );
-    return () => this.incomingChatMessageObservers.delete(obs);
-  }
-
-  public watchOutgoingMessages(obs: web3n.Observer<DeliveryMessageProgress>): () => void {
-    this.outgoingChatMessageObservers.add(obs);
-    return () => this.outgoingChatMessageObservers.delete(obs);
-  }
-
-  public completeAllWatchers(): void {
-    this.incomingChatMessageObservers.complete();
-    this.outgoingChatMessageObservers.complete();
-  }
 }
-
-function noop() {
-}
-
-class ChatDeliveryServiceWrap extends MultiConnectionIPCWrap {
-  constructor(
-    srvName: string,
-    private readonly fileProc: SingleProc,
-  ) {
-    super(srvName);
-  }
-
-  protected onListeningCompletion(): Promise<void> {
-    return this.fileProc.startOrChain(async () => w3n.closeSelf?.());
-  }
-
-  protected async onListeningError(err: any): Promise<void> {
-    await super.onListeningError(err);
-    await this.fileProc.startOrChain(async () => w3n.closeSelf?.());
-  }
-
-}
-
-export async function setupAndStartChatDeliveryService(
-  webrtcSignalsHandler: WebRTCSignalHandler,
-): Promise<ChatDeliveryService> {
-  const deliverySrv = new ChatDeliveryService(webrtcSignalsHandler);
-  const deliverySrvWrap = new ChatDeliveryServiceWrap(
-    'ChatDeliveryService', deliverySrv.fileProc,
-  );
-
-  await deliverySrv.start();
-
-  deliverySrvWrap.exposeReqReplyMethods(deliverySrv, [
-    'checkAddressExistenceForASMail', 'addMessageToDeliveryList',
-    'removeMessageFromDeliveryList', 'getMessage', 'getDeliveryList', 'removeMessageFromInbox',
-  ]);
-  deliverySrvWrap.exposeObservableMethods(deliverySrv, [
-    'watchIncomingMessages', 'watchOutgoingMessages',
-  ]);
-
-  deliverySrvWrap.startIPC();
-
-  return deliverySrv;
-}
-

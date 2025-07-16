@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,25 +18,30 @@
 <script lang="ts" setup>
 import { computed, inject } from 'vue';
 import { storeToRefs } from 'pinia';
-import size from 'lodash/size';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { chatMenuItems } from '@main/constants';
 import { Ui3nButton, Ui3nMenu, Ui3nIcon } from '@v1nt1248/3nclient-lib';
 import { useChatStore } from '@main/store/chat.store';
 
 const emit = defineEmits(['select:action']);
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-const { currentChat } = storeToRefs(useChatStore());
-
-const chatType = computed(() => {
-  const currentChatValue = currentChat.value;
-  const { members = [] } = currentChatValue || {};
-  return size(members) > 2 ? 'group' : 'single';
-});
+const { $tr } = inject(I18N_KEY)!;
+const { currentChatId, isAdminOfGroupChat } = storeToRefs(useChatStore());
 
 const availableMenuItems = computed(() => chatMenuItems
-  .filter(i => i.chatTypes.includes(chatType.value))
+  .filter(i => {
+    if (currentChatId.value!.isGroupChat) {
+      if (i.chatTypes.includes('group')) {
+        return true;
+      } else if (isAdminOfGroupChat.value) {
+        return i.chatTypes.includes('group&admin');
+      } else {
+        return false;
+      }
+    } else {
+      return i.chatTypes.includes('single');
+    }
+  })
   .map(item => ({
     ...item,
     text: $tr(item.text)

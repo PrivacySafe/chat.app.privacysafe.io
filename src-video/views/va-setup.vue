@@ -23,11 +23,11 @@ import { Ui3nButton, Ui3nMenu } from '@v1nt1248/3nclient-lib';
 import { useStreamsStore } from '@video/store/streams.store';
 import { useAppStore } from '@video/store/app.store';
 import VideoPlaceholder from '@video/components/video-placeholder.vue';
-import { I18N_KEY, I18nPlugin, NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, NOTIFICATIONS_KEY } from '@v1nt1248/3nclient-lib/plugins';
 
 const router = useRouter();
-const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const notification = inject(NOTIFICATIONS_KEY)!;
+const { $tr } = inject(I18N_KEY)!;
 
 const appStore = useAppStore();
 const { user } = storeToRefs(appStore);

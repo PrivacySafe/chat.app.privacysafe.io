@@ -1,12 +1,12 @@
 {
   "name": "chat.app.privacysafe.io",
-  "version": "0.7.9",
+  "version": "0.10.0",
   "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:deno": "bash ci/bundle-deno-code.sh",
+    "build:deno": "bash packing/bundle-deno-code.sh",
     "build:gui": "vue-tsc --noEmit && vite build",
     "build": "pnpm run build:gui && pnpm run build:deno",
     "tests:build": "bash tests-app/compile-and-build.sh",

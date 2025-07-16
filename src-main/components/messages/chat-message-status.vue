@@ -19,10 +19,10 @@
 import { computed } from 'vue';
 import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
 import { messageDeliveryStatuses } from '@main/constants';
-import type { MessageDeliveryStatus } from '~/index';
+import type { OutgoingMessageStatus } from '~/index';
 
 const props = defineProps<{
-  value: MessageDeliveryStatus | undefined;
+  value: OutgoingMessageStatus | undefined;
   iconSize?: number | string;
 }>();
 

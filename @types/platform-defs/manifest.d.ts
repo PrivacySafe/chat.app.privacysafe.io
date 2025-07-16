@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 - 2022, 2024 3NSoft Inc.
+ Copyright (C) 2021 - 2022, 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -135,7 +135,7 @@ declare namespace web3n.caps {
 		launchersFolder: string;
 	}
 
-	type UserInterfaceFormFactor = 'desktop' | 'tablet' | 'phone';
+	type UserInterfaceFormFactor = ui.FormFactor;
 
 	/**
 	 * File System Resource Descriptor points to file system item from app's
@@ -237,7 +237,6 @@ declare namespace web3n.caps {
 	}
 
 	interface RequestedCAPs extends common.RequestedCAPs {
-		logout?: LogoutCAPSetting;
 		appRPC?: string[];
 		otherAppsRPC?: { app: string; service: string; }[];
 		shell?: ShellCAPsSetting;
@@ -246,9 +245,7 @@ declare namespace web3n.caps {
 		webrtc?: WebRTCCAPSetting;
 	}
 
-	type AppsCAPSetting = 'all' | (keyof apps.Apps)[];
-
-	type LogoutCAPSetting = 'all';
+	type AppsCAPSetting = 'all' | ('opener' | 'downloader' | 'installer')[];
 
 	interface ShellCAPsSetting {
 		fileDialog?: FileDialogsCAPSettings;

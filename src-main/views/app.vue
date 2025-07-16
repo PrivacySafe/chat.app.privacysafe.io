@@ -20,7 +20,7 @@ import { onBeforeMount, onBeforeUnmount } from 'vue';
 import { Ui3nMenu, Ui3nRipple as vUi3nRipple } from '@v1nt1248/3nclient-lib';
 import prLogo from '../assets/images/privacysafe-logo.svg';
 import ContactIcon from '../components/contacts/contact-icon.vue';
-import { useAppView } from './useAppView';
+import { useAppView } from '../composables/useAppView';
 
 const {
   appExit,

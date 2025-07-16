@@ -1,5 +1,35 @@
+/*
+ Copyright (C) 2020 - 2025 3NSoft Inc.
+
+ This program is free software: you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation, either version 3 of the License, or (at your option) any later
+ version.
+
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ See the GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License along with
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 /* eslint-disable @typescript-eslint/triple-slash-reference, @typescript-eslint/no-explicit-any */
-import type { MessageDeliveryInfo, SendingError } from '../../types/index.ts';
+import { OutgoingMessageStatus } from '../../types/chat.types.ts';
+import type { AddressCheckResult } from '../../types/services.types.ts';
+
+export interface MessageDeliveryInfo {
+  msgId: string;
+  status: OutgoingMessageStatus;
+  value: string | number;
+}
+
+export interface SendingMessageStatus {
+  msgId?: string;
+  status: web3n.asmail.DeliveryProgress | undefined;
+  info: MessageDeliveryInfo | undefined;
+}
 
 function getErrorText(address: string, error: any): string {
   const {
@@ -33,6 +63,11 @@ function getErrorText(address: string, error: any): string {
   return 'Unknown error.';
 }
 
+export interface SendingError {
+  mail: string;
+  text: string;
+}
+
 export function checkSendingErrors(status: web3n.asmail.DeliveryProgress): Record<string, SendingError> {
   const { recipients } = status;
   return Object.keys(recipients).reduce((res, mail: string) => {
@@ -63,6 +98,8 @@ export function prepareMessageDeliveryInfo(
     };
   }
 
+  // XXX this should produce more precise status values
+
   const { recipients, msgSize } = status;
   const hasError = Object.keys(recipients).every(address => !!recipients[address].err);
   if (hasError) {
@@ -70,7 +107,7 @@ export function prepareMessageDeliveryInfo(
     const isCanceled = Object.values(errors).every(error => error.text.includes('Canceled'));
     return {
       msgId,
-      status: isCanceled ? 'canceled' : 'error',
+      status: isCanceled ? 'sent:canceled' : 'sent:all-failed',
       value: isCanceled ? 'canceled' : Object.values(errors).map(err => err.text).join(' '),
     };
   }
@@ -91,8 +128,6 @@ export function prepareMessageDeliveryInfo(
 type ASMailSendException = web3n.asmail.ASMailSendException;
 type ServLocException = web3n.asmail.ServLocException;
 type ConnectException = web3n.ConnectException;
-
-export type AddressCheckResult = 'found' | 'found-but-access-restricted' | 'not-present-at-domain' | 'no-service-for-domain';
 
 export async function checkAddressExistenceForASMail(
   addr: string

@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,10 +20,10 @@ import { ref, computed, onBeforeMount, inject } from 'vue';
 import { storeToRefs } from 'pinia';
 import get from 'lodash/get';
 import keyBy from 'lodash/keyBy';
-import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nButton, Ui3nChip, Ui3nInput, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
-import type { PersonView } from '~/index';
+import type { ChatIdObj, PersonView } from '~/index';
 import ContactList from '../contacts/contact-list.vue';
 import ContactIcon from '../contacts/contact-icon.vue';
 import { useChatsStore } from '@main/store/chats.store';
@@ -31,7 +31,7 @@ import { useAppStore } from '@main/store/app.store';
 import { useContactsStore } from '@main/store/contacts.store';
 
 interface ChatCreateDialogEmits {
-  (ev: 'select', val: string): void;
+  (ev: 'select', val: ChatIdObj): void;
   (ev: 'close'): void;
   (ev: 'confirm'): void;
   (ev: 'cancel'): void;
@@ -39,17 +39,17 @@ interface ChatCreateDialogEmits {
 
 const emits = defineEmits<ChatCreateDialogEmits>();
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const { $tr } = inject(I18N_KEY)!;
 
 const { user } = storeToRefs(useAppStore());
 const contactsStore = useContactsStore();
 const { contactList: allContacts } = storeToRefs(contactsStore);
 const { fetchContacts, addContact } = contactsStore;
-const { createChat } = useChatsStore();
+const { createNewOneToOneChat, createNewGroupChat } = useChatsStore();
 
 const searchText = ref<string>('');
 const selectedContacts = ref<string[]>([]);
-const multipleModeStep = ref(1);
+const groupChatModeStep = ref(1);
 const chatName = ref('');
 
 const nonSelectableContacts = computed<string[]>(() => allContacts.value
@@ -67,27 +67,17 @@ const selectedContactList = computed<Array<PersonView & { displayName: string }>
   () => allContacts.value.filter(c => selectedContacts.value.includes(c.id)),
 );
 
-const isMultipleMode = computed(() => selectedContacts.value.length > 1);
+const isGroupChatMode = computed(() => selectedContacts.value.length > 1);
 
-const actionLeftBtnText = computed(() => {
-  if (!isMultipleMode.value) {
-    return capitalize($tr('btn.text.close'));
-  }
+const actionLeftBtnText = computed(() => capitalize($tr(isGroupChatMode.value
+  ? ((groupChatModeStep.value === 1) ? 'btn.text.close' : 'btn.text.back')
+  : 'btn.text.close'
+)));
 
-  return multipleModeStep.value === 1
-    ? capitalize($tr('btn.text.close'))
-    : capitalize($tr('btn.text.back'));
-});
-
-const actionRightBtnText = computed(() => {
-  if (!isMultipleMode.value) {
-    return capitalize($tr('btn.text.create'));
-  }
-
-  return multipleModeStep.value === 1
-    ? capitalize($tr('btn.text.next'))
-    : capitalize($tr('btn.text.create'));
-});
+const actionRightBtnText = computed(() => capitalize($tr(isGroupChatMode.value
+  ? ((groupChatModeStep.value === 1) ? 'btn.text.next' : 'btn.text.create')
+  : 'btn.text.create'
+)));
 
 onBeforeMount(async () => {
   await fetchContacts();
@@ -107,30 +97,33 @@ function getContact(contactId: string): PersonView & { displayName: string } {
 }
 
 function onActionLeftBtnClick() {
-  if (isMultipleMode.value && actionLeftBtnText.value === capitalize($tr('btn.text.back'))) {
-    multipleModeStep.value = 1;
-    return;
+  if (isGroupChatMode.value && (groupChatModeStep.value === 2)) {
+    groupChatModeStep.value = 1;
+  } else {
+    emits('close');
   }
-
-  emits('close');
 }
 
 async function onActionRightBtnClick() {
-  if (isMultipleMode.value && actionRightBtnText.value === capitalize($tr('btn.text.next'))) {
-    multipleModeStep.value = 2;
-    return;
+  if (isGroupChatMode.value && (groupChatModeStep.value === 1)) {
+    groupChatModeStep.value = 2;
+  } else {
+    let chatId: ChatIdObj;
+    if (isGroupChatMode.value) {
+      const groupMembers = [
+        user.value,
+        ...selectedContacts.value.map(cId => contacts.value[cId].mail),
+      ];
+      const name = chatName.value.trim();
+      chatId = await createNewGroupChat(name, groupMembers);
+    } else {
+      const {
+        displayName: name, mail: peerAddr
+      } = contacts.value[selectedContacts.value[0]];
+      chatId = await createNewOneToOneChat(name, peerAddr);
+    }
+    emits('select', chatId);
   }
-
-  const members = [
-    user.value,
-    ...selectedContacts.value.map(contactId => get(contacts.value, [contactId, 'mail'])),
-  ];
-  const chatId = await createChat({
-    members,
-    admins: [user.value],
-    name: isMultipleMode.value ? chatName.value.trim() : members[1],
-  });
-  emits('select', chatId);
 }
 
 async function addNewContact(mail: string) {
@@ -141,7 +134,7 @@ async function addNewContact(mail: string) {
 <template>
   <div :class="$style.chatCreateDialog">
     <div :class="$style.chatCreateDialogBody">
-      <template v-if="!isMultipleMode || (isMultipleMode && multipleModeStep === 1)">
+      <template v-if="!isGroupChatMode || (isGroupChatMode && groupChatModeStep === 1)">
         <ui3n-input
           v-model="searchText"
           icon="round-search"
@@ -223,7 +216,7 @@ async function addNewContact(mail: string) {
 
       <ui3n-button
         v-if="selectedContacts.length > 0"
-        :disabled="isMultipleMode && multipleModeStep === 2 && !chatName"
+        :disabled="isGroupChatMode && groupChatModeStep === 2 && !chatName"
         :class="$style.actionRightBtn"
         @click="onActionRightBtnClick"
       >

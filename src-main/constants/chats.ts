@@ -1,12 +1,30 @@
-import type { ChatMessageAction, MessageDeliveryStatus, MessageDeliveryStatusUI } from '~/index';
+/*
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
-export const chatIdLength = 10;
-export const msgIdLength = 10;
+ This program is free software: you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation, either version 3 of the License, or (at your option) any later
+ version.
+
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ See the GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License along with
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+import type { ChatMessageAction, MessageDeliveryStatusUI, OutgoingMessageStatus } from '~/index';
+
 export const chatMsgActionElementHeight = 24;
-export const readonlyContactIds = ['0', '1'];
 
-export const messageDeliveryStatuses: Record<MessageDeliveryStatus, MessageDeliveryStatusUI> = {
+export const messageDeliveryStatuses: Record<OutgoingMessageStatus, MessageDeliveryStatusUI> = {
   sending: {
+    icon: 'round-refresh',
+    color: 'var(--color-icon-chat-bubble-user-quote)',
+  },
+  'sending:some-done': {
     icon: 'round-refresh',
     color: 'var(--color-icon-chat-bubble-user-quote)',
   },
@@ -18,64 +36,77 @@ export const messageDeliveryStatuses: Record<MessageDeliveryStatus, MessageDeliv
     icon: 'round-done-all',
     color: 'var(--success-content-default)',
   },
-  error: {
+  'received:some': {
+    icon: 'round-done-all',
+    color: 'var(--success-content-default)',
+  },
+  'sent:all-failed': {
     icon: 'round-report-gmailerrorred',
     color: 'var(--error-content-default)',
   },
-  canceled: {
+  'sent:some-failed': {
+    icon: 'round-report-gmailerrorred',
+    color: 'var(--error-content-default)',
+  },
+  'sent:canceled': {
     icon: 'round-report-gmailerrorred',
     color: 'var(--warning-content-default)',
   },
+  read: {
+    icon: 'round-done-all',
+    color: 'var(--success-content-default)',
+  },
+  'read:some': {
+    icon: 'round-done-all',
+    color: 'var(--success-content-default)',
+  },
 };
 
-export const chatMenuItems = [
+export const chatMenuItems: {
+  icon: string;
+  action: string; // XXX this can be typed, can't it?
+  text: string;
+  chatTypes: ('single' | 'group' | 'group&admin')[];
+  disabled?: boolean;
+  isAccent?: boolean;
+  margin?: boolean;
+}[] = [
   {
     icon: 'outline-info',
     action: 'chat:info',
     text: 'chat.action.menu.txt.info',
     chatTypes: ['single', 'group'],
-    disabled: false,
-    isAccent: false,
   },
   {
     icon: 'outline-edit',
     action: 'chat:rename',
     text: 'chat.action.menu.txt.rename',
-    chatTypes: ['single', 'group'],
-    disabled: false,
-    isAccent: false,
+    chatTypes: ['single', 'group&admin'],
   },
   {
     icon: 'round-system-update-alt',
     action: 'history:export',
     text: 'chat.action.menu.txt.history.export',
     chatTypes: ['single', 'group'],
-    disabled: false,
-    isAccent: false,
   },
   {
     icon: 'outline-cleaning-services',
     action: 'history:clean',
     text: 'chat.action.menu.txt.history.clean',
     chatTypes: ['single', 'group'],
-    disabled: false,
-    isAccent: false,
   },
   {
     icon: 'round-close',
     action: 'chat:close',
     text: 'chat.action.menu.txt.close',
     chatTypes: ['single', 'group'],
-    disabled: false,
-    isAccent: false,
     margin: true,
   },
   {
     icon: 'outline-delete',
     action: 'chat:delete',
     text: 'chat.action.menu.txt.delete',
-    chatTypes: ['single'],
-    disabled: false,
+    chatTypes: ['single', 'group&admin'],
     isAccent: true,
     margin: true,
   },
@@ -84,7 +115,6 @@ export const chatMenuItems = [
     action: 'chat:leave',
     text: 'chat.action.menu.txt.leave',
     chatTypes: ['group'],
-    disabled: false,
     isAccent: true,
     margin: true,
   },
@@ -92,7 +122,7 @@ export const chatMenuItems = [
 
 /*
 * condition - {part1}:{part2}:{part3}
-* part1 (message type): ChatMessageType OR '' (if it does not matter)
+* part1 (message type): 'incoming'|'outgoing' OR '' (if it does not matter)
 * part2 (message delivery status): lists the MessageDeliveryStatus separated by commas OR '' (if it does not matter)
 * part3 (attachments):  true OR false OR '' (if it does not matter)
 * */

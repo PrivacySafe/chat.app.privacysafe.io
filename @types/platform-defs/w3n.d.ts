@@ -23,6 +23,7 @@
 /// <reference path="./connectivity.d.ts" />
 /// <reference path="./rpc.d.ts" />
 /// <reference path="./ui.d.ts" />
+/// <reference path="./manifest.d.ts" />
 /// <reference path="./media.d.ts" />
 /// <reference path="./test-stand.d.ts" />
 
@@ -46,19 +47,18 @@ declare namespace web3n.caps {
 		 */
 		myVersion: () => Promise<string>;
 
+		ui: ui.UI;
+
 		// idea for lifecycle methods
 		// lifecycle: {
 		//   addListener: (event, hook) => void;
 		// };
 
-		logout?: Logout;
 		shell?: shell.ShellCAPs;
 		rpc?: rpc.RPC;
 		connectivity?: connectivity.Connectivity;
 		mediaDevices?: media.MediaDevices;
 
 	}
-
-	type Logout = (closePlatform: boolean) => Promise<void>;
 
 }

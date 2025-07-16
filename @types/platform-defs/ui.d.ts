@@ -116,4 +116,11 @@ declare namespace web3n.ui {
 		rememberWindowLocation?: boolean;
 	}
 
+	interface UI {
+		uiFormFactor(): Promise<FormFactor>;
+	}
+
+	type FormFactor = 'desktop' | 'tablet' | 'phone' |
+		'phone+screen' | 'tablet+screen';
+
 }

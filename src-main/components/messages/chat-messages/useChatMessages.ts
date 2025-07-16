@@ -17,56 +17,50 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 
 import { defineAsyncComponent, inject, nextTick, onMounted, onBeforeUnmount, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useRouter } from 'vue-router';
 import {
   DIALOGS_KEY,
-  DialogsPlugin,
   I18N_KEY,
-  I18nPlugin,
   NOTIFICATIONS_KEY,
-  NotificationsPlugin,
   VUEBUS_KEY,
   VueBusPlugin,
 } from '@v1nt1248/3nclient-lib/plugins';
-import { useAppStore } from '@main/store/app.store';
-import type { AppGlobalEvents, ChatMessageAction, ChatMessageActionType, ChatMessageView, MessageType } from '~/index';
+import type { AppGlobalEvents, ChatIdObj, ChatMessageAction, ChatMessageActionType, ChatMessageId, ChatMessageView, RegularMsgView } from '~/index';
 import {
   copyMessageToClipboard,
   downloadFile,
-  getMessageFromCurrentChat,
 } from '@main/utils/chat-message-actions.helpers';
 import { getMessageActions } from '@main/utils/chats.helper';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import type { ChatMessagesEmits } from './types';
 import { useChatsStore } from '@main/store/chats.store';
 import { useChatStore } from '@main/store/chat.store';
+import { useRouting } from '@main/composables/useRouting';
 
 export default function useChatMessages(emit: ChatMessagesEmits) {
-  const router = useRouter();
+  const { goToChatRoute } = useRouting();
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
-  const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY);
+  const { $tr } = inject(I18N_KEY)!;
+  const dialog = inject(DIALOGS_KEY)!;
+  const notifications = inject(NOTIFICATIONS_KEY);
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
 
-  const { user } = storeToRefs(useAppStore());
-  const { createChat } = useChatsStore();
+  const { createNewOneToOneChat } = useChatsStore();
   const chatStore = useChatStore();
   const { currentChatId } = storeToRefs(chatStore);
-  const { deleteMessageInChat } = chatStore;
+  const { deleteMessageInChat, currentChatMessages } = chatStore;
 
   const listElement = ref<HTMLDivElement | null>(null);
   const msgActionsMenuProps = ref<{
     open: boolean;
     actions: Omit<ChatMessageAction, 'conditions'>[];
-    msg: ChatMessageView<MessageType> | null;
+    msg: ChatMessageView | null;
   }>({
     open: false,
     actions: [],
     msg: null,
   });
 
-  async function scrollList({ chatId }: { chatId: string }) {
+  async function scrollList({ chatId }: AppGlobalEvents['send:message']) {
     if (listElement.value && currentChatId.value === chatId) {
       await nextTick(() => {
         listElement.value!.scrollTop = 1e9;
@@ -74,20 +68,20 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
     }
   }
 
-  function handleClick(ev: MouseEvent): ChatMessageView<MessageType> | undefined {
+  function handleClick(ev: MouseEvent): ChatMessageView | undefined {
     ev.preventDefault();
     const { target } = ev;
     const { id, classList } = target as Element;
 
     return classList.contains('chat-message__content') && id
-      ? getMessageFromCurrentChat({ chatMessageId: id })
+      ? getMessageFromCurrentChat(id)
       : undefined;
   }
 
   function goToMessage(ev: MouseEvent) {
     const msg = handleClick(ev);
-    if (msg && msg.initialMessageId) {
-      const initialMessageElement = document.getElementById(`msg-${msg.initialMessageId}`);
+    if ((msg?.chatMessageType === 'regular') && msg.relatedMessage) {
+      const initialMessageElement = document.getElementById(`msg-${msg.relatedMessage}`);
       initialMessageElement && initialMessageElement.scrollIntoView(false);
     }
   }
@@ -114,8 +108,16 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
     };
   }
 
+  function getMessageFromCurrentChat(
+    chatMessageId: string,
+  ): RegularMsgView|undefined {
+    return currentChatMessages.find(
+      m => (m.chatMessageId === chatMessageId)
+    ) as RegularMsgView|undefined;
+  }
+
   async function copyMsgText(chatMessageId: string) {
-    const msg = getMessageFromCurrentChat({ chatMessageId });
+    const msg = getMessageFromCurrentChat(chatMessageId);
     await copyMessageToClipboard(msg);
     notifications?.$createNotice({
       type: 'success',
@@ -145,7 +147,10 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
   }
 
   async function downloadAttachment(chatMessageId: string) {
-    const msg = getMessageFromCurrentChat({ chatMessageId });
+    const msg = getMessageFromCurrentChat(chatMessageId);
+    if (msg?.chatMessageType !== 'regular') {
+      return;
+    }
     const res = await downloadFile(msg);
     if (res === false) {
       notifications?.$createNotice({
@@ -156,11 +161,11 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
   }
 
   function replyMsg(chatMessageId: string) {
-    const msg = getMessageFromCurrentChat({ chatMessageId });
+    const msg = getMessageFromCurrentChat(chatMessageId);
     msg && emit('reply', msg);
   }
 
-  function forwardMsg(chatMessageId: string) {
+  function forwardMsg(chatMessageId: ChatMessageId) {
     const messageForwardDialog = defineAsyncComponent(() => import('../../dialogs/message-forward-dialog.vue'));
     dialog.$openDialog({
       component: messageForwardDialog,
@@ -170,16 +175,16 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
         confirmButton: false,
         cancelButton: false,
         onConfirm: (async (
-          { type, data }: { type: 'chat' | 'contact', data: string }
+          { chatId, contact }: {
+            chatId?: ChatIdObj; contact?: { mail: string; name: string; }
+          }
         ) => {
-          let chatId = type === 'chat' ? data : undefined;
-          if (type === 'contact') {
-            chatId = await createChat(
-              { members: [user.value, data], admins: [user.value] }
+          if (!chatId) {
+            chatId = await createNewOneToOneChat(
+              contact!.name, contact!.mail
             );
           }
-
-          router.push(`/chats/${chatId}?initialMsgId=${chatMessageId}`);
+          goToChatRoute(chatId, { forwardedMsg: chatMessageId });
         }) as any,
       },
     });
@@ -193,8 +198,13 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
     forward: forwardMsg,
   };
 
-  function handleAction({ action, chatMessageId }: { action: ChatMessageActionType, chatMessageId: string }) {
-    messageActions[action] && messageActions[action]!(chatMessageId);
+  function handleAction({ action, chatMessageId }: {
+    action: ChatMessageActionType, chatMessageId: ChatMessageId
+  }) {
+    const messageAction = messageActions[action]
+    if (messageAction) {
+      messageAction(chatMessageId);
+    }
   }
 
   onMounted(() => {

@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,11 +18,11 @@
 <script lang="ts" setup>
 import { computed, inject } from 'vue';
 import { storeToRefs } from 'pinia';
-import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nBadge, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { getChatSystemMessageText } from '@main/utils/chat-ui.helper';
-import type { ChatListItemView, ChatMessageView, MessageType } from '~/index';
+import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from '@main/utils/chat-ui.helper';
+import type { ChatListItemView } from '~/index';
 import ChatAvatar from './chat-avatar.vue';
 import { useChatStore } from '@main/store/chat.store';
 
@@ -33,36 +33,40 @@ const props = defineProps<{
 }>();
 const emit = defineEmits(['click']);
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-const { currentChat } = storeToRefs(useChatStore());
+const { $tr } = inject(I18N_KEY)!;
+const { currentChatId } = storeToRefs(useChatStore());
 
-const selectedChatId = computed<string>(() => (currentChat.value ?
-  currentChat.value.chatId : ''
+const selectedChatId = computed<string>(() => (currentChatId.value ?
+  currentChatId.value.chatId : ''
 ));
-const isGroupChat = computed<boolean>(() => (props.data.members.length > 2));
+const isGroupChat = computed<boolean>(() => props.data.isGroupChat);
 
 const message = computed<string>(() => {
-  const { msgId, chatMessageType, messageType, body, attachments = [] } = props.data || {};
+  const lastMsg = props.data.lastMsg;
 
-  if (!msgId)
+  if (!lastMsg) {
     return ' ';
-
-  if (chatMessageType === 'system') {
-    return `<i>${getChatSystemMessageText({
-      message: { body } as ChatMessageView<MessageType>,
-      chat: props.data,
-    })}</i>`;
+  } else if (lastMsg.chatMessageType === 'system') {
+    return `<i>${getTextForChatSystemMessage(lastMsg)}</i>`;
+  } else if (lastMsg.chatMessageType === 'regular') {
+    const { attachments, isIncomingMsg, body } = lastMsg;
+    const attachmentsText = attachments?.map(a => a.name).join(', ') || ' ';
+    if (isIncomingMsg) {
+      return (body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`);
+    } else {
+      return `<b>${$tr('text.msg-sender.you')}: </b>${body || `<i>${$tr('text.send.file')}: ${attachmentsText}</i>`}`;
+    }
+  } else if (lastMsg.chatMessageType === 'invitation') {
+    return `<i>${getTextForChatInvitationMessage(lastMsg)}</i>`;
+  } else {
+    console.error(`compiler asks for this case, but if it shows in runtime, code is incomplete`);
+    return ' ';
   }
-
-  const attachmentsText = attachments!.map(a => a.name).join(', ');
-  return messageType === 'outgoing'
-    ? `<b>You: </b>${body || `<i>${$tr('text.send.file')}: ${attachmentsText}</i>`}`
-    : body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`;
 });
 
 const date = computed<string>(() => {
-  const chatLastDate = props.data.msgId
-    ? props.data.timestamp
+  const chatLastDate = props.data.lastMsg
+    ? props.data.lastMsg.timestamp
     : props.data.createdAt;
 
   return prepareDateAsSting(chatLastDate!);

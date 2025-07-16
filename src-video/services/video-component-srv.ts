@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024 3NSoft Inc.
+ Copyright (C) 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -22,7 +22,7 @@ import { OffBandSignalingChannel } from './webrtc-peer-channel';
 import type { VueEventBus } from '@v1nt1248/3nclient-lib/plugins';
 import type {
   ChatInfoForCall,
-  CallGUIEvent,
+  CallFromVideoGUI,
   VideoChatComponent,
   WebRTCMsg,
   WebRTCOffBandMessage,
@@ -31,15 +31,15 @@ import { PeerEvents } from '@video/services/events';
 import { PeerChannelWithStreams } from './streaming-channel';
 import { SingleProc, defer, makeSyncedFunc } from '@v1nt1248/3nclient-lib/utils';
 import { toCanonicalAddress } from '@shared/address-utils';
+import { fstIsPolite } from '@bg/utils/for-perfect-negotiation';
 
 
 export let videoChatSrv: VideoChat;
 
-const vaChannelType = 'video/audio';
 
 export class VideoChat {
 
-  private ctrlObs: web3n.Observer<CallGUIEvent>|undefined = undefined;
+  private ctrlObs: web3n.Observer<CallFromVideoGUI>|undefined = undefined;
   private chat: ChatInfoForCall|undefined = undefined;
   private readonly connectors = new PeerSignalsListeners();
   private store: StreamsStore|undefined = undefined;
@@ -66,7 +66,7 @@ export class VideoChat {
         async focusWindow(): Promise<void> {
           // this is a noop, cause call to GUI service focuses the window
         },
-        startCallGUIForChat: async chat => {
+        startVideoCallComponentForChat: async chat => {
           if (this.chat) {
             throw `Chat room is already set for this window`;
           }
@@ -74,16 +74,18 @@ export class VideoChat {
           chatDataInit.resolve();
           chatDataInit = undefined as never;
         },
-        watch: this.setControllerObs.bind(this),
+        watchRequests: this.setControllerObs.bind(this),
         handleWebRTCSignal: this.handleIncomingWebRTCSignal.bind(this)
       }
       const srvWrap = new MultiConnectionIPCWrap('VideoChatComponent');
       srvWrap.exposeReqReplyMethods(srv, [
-        'focusWindow', 'closeWindow', 'startCallGUIForChat',
+        'startVideoCallComponentForChat',
+        'focusWindow',
+        'closeWindow',
         'handleWebRTCSignal'
       ]);
       srvWrap.exposeObservableMethods(srv, [
-        'watch'
+        'watchRequests'
       ]);
       srvWrap.startIPC();
     } catch (err) {
@@ -93,9 +95,9 @@ export class VideoChat {
   }
 
   private async handleIncomingWebRTCSignal(
-    peerAddr: string, { channel, data }: WebRTCMsg
+    peerAddr: string, { stage, id, data }: WebRTCMsg
   ): Promise<void> {
-    const listener = this.connectors.get(peerAddr, channel);
+    const listener = this.connectors.get(peerAddr);
     if (!listener) {
       return;
     }
@@ -108,7 +110,7 @@ export class VideoChat {
     }
   }
 
-  private setControllerObs(obs: web3n.Observer<CallGUIEvent>): () => void {
+  private setControllerObs(obs: web3n.Observer<CallFromVideoGUI>): () => void {
     if (this.ctrlObs) {
       throw `Observer from GUI controller is already set`;
     }
@@ -135,7 +137,7 @@ export class VideoChat {
       chatName, ownName, ownAddr, peers,
       peerAddr => PeerChannelWithStreams.makeWith(
         peerAddr, this.store!, this.eventBus!, rtcConfig,
-        this.makeConnector(vaChannelType, peerAddr),
+        this.makeConnector(peerAddr),
         fstIsPolite(ownAddr, peerAddr)
       )
     );
@@ -143,30 +145,28 @@ export class VideoChat {
 
   notifyBkgrndInstanceOnCallStart(): void {
     this.ctrlObs!.next!({
-      type: 'call-started'
+      type: 'call-started-event'
     });
   }
 
-  private makeConnector(
-    channel: string, peerAddr: string
-  ): OffBandSignalingChannel {
+  private makeConnector(peerAddr: string): OffBandSignalingChannel {
     return {
       observeIncoming: obs => {
         this.connectors.addOnce(
-          peerAddr, channel, makeSyncedFunc(new SingleProc, null, obs)
+          peerAddr, makeSyncedFunc(new SingleProc, null, obs)
         );
         this.ctrlObs!.next!({
-          type: 'start-channel', channel, peerAddr
+          type: 'start-channel', peerAddr
         });
       },
       close: () => {
-        this.connectors.delete(peerAddr, channel);
+        this.connectors.delete(peerAddr);
         this.ctrlObs!.next!({
-          type: 'close-channel', channel, peerAddr
+          type: 'close-channel', peerAddr
         });
       },
       send: data => this.ctrlObs!.next!({
-        type: 'webrtc-signal', channel, peerAddr, data
+        type: 'send-webrtc-signal', peerAddr, data
       })
     }
   }
@@ -176,52 +176,25 @@ export class VideoChat {
 
 type SignalsListener = (data: WebRTCOffBandMessage) => Promise<void>;
 
-function fstIsPolite(fstAddr: string, otherAddr: string): boolean {
-  const fst = toCanonicalAddress(fstAddr)
-  const other = toCanonicalAddress(otherAddr)
-  if (fst < other) {
-    return true;
-  } else if (fst > other) {
-    return false;
-  } else {
-    throw new Error(`Starting WebRTC call with self is not supported`);
-  }
-}
-
 class PeerSignalsListeners {
 
-  private readonly listeners = new Map<string, Map<string, SignalsListener>>()
+  private readonly listeners = new Map<string, SignalsListener>()
 
-  get(
-    peerAddr: string, channel: string
-  ): SignalsListener|undefined {
-    const peerConnectors = this.listeners.get(toCanonicalAddress(peerAddr));
-    return peerConnectors?.get(channel);
+  get(peerAddr: string): SignalsListener|undefined {
+    return this.listeners.get(toCanonicalAddress(peerAddr));
   }
 
-  addOnce(peerAddr: string, channel: string, listener: SignalsListener): void {
-    if (this.get(peerAddr, channel)) {
+  addOnce(peerAddr: string, listener: SignalsListener): void {
+    if (this.get(peerAddr)) {
       throw new Error(`Listener is already set`);
     }
     const peerCanonAddr = toCanonicalAddress(peerAddr);
-    let peerConnectors = this.listeners.get(peerCanonAddr);
-    if (!peerConnectors) {
-      peerConnectors = new Map();
-      this.listeners.set(peerCanonAddr, peerConnectors);
-    }
-    peerConnectors.set(channel, listener);
+    this.listeners.set(peerCanonAddr, listener);
   }
 
-  delete(peerAddr: string, channel: string): void {
+  delete(peerAddr: string): void {
     const peerCanonAddr = toCanonicalAddress(peerAddr);
-    const peerConnectors = this.listeners.get(peerCanonAddr);
-    if (!peerConnectors) {
-      return;
-    }
-    peerConnectors.delete(channel);
-    if (peerConnectors.size === 0) {
-      this.listeners.delete(peerCanonAddr);
-    }
+    this.listeners.delete(peerCanonAddr);
   }
 
 }

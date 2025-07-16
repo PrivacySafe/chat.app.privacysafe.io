@@ -22,14 +22,18 @@ import {
   Ui3nText,
   Ui3nHtml,
 } from '@v1nt1248/3nclient-lib';
-import { getContactName } from '@main/utils/contacts.helper';
-import useChatView from './useChatView';
+import useChatView from '../../composables/useChatView';
 import ChatHeader from '@main/components/chat/chat-header.vue';
 import ChatMessages from '@main/components/messages/chat-messages/chat-messages.vue';
 import ChatAttachment from '@main/components/chat/chat-attachment.vue';
 import EmoticonsDialog from '@main/components/dialogs/emoticons-dialog.vue';
+import { useContactsStore } from '@main/store/contacts.store';
+import { onBeforeMount, onBeforeUnmount } from 'vue';
+import { onBeforeRouteUpdate } from 'vue-router';
 
 const vUi3nHtml = Ui3nHtml;
+
+const { getContactName } = useContactsStore();
 
 const {
   currentChat,
@@ -44,6 +48,7 @@ const {
   textOfInitialMessage,
   attachmentsInfo,
   sendBtnDisabled,
+
   addFilesViaDnD,
   addFiles,
   prepareReplyMessage,
@@ -52,7 +57,15 @@ const {
   clearAttachments,
   deleteAttachment,
   sendMessage,
+
+  doBeforeMount,
+  doBeforeRouteUpdate,
+  doBeforeUnMount
 } = useChatView();
+
+onBeforeMount(doBeforeMount);
+onBeforeRouteUpdate(doBeforeRouteUpdate);
+onBeforeUnmount(doBeforeUnMount);
 
 </script>
 

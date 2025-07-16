@@ -18,12 +18,12 @@
 <script lang="ts" setup>
 import { ref, inject, watch } from 'vue';
 import size from 'lodash/size';
-import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nInput } from '@v1nt1248/3nclient-lib';
 import { validationParams } from '../../constants';
 
 const { chatsNameMaxLength } = validationParams;
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const { $tr } = inject(I18N_KEY)!;
 
 const props = defineProps<{
   chatName: string;

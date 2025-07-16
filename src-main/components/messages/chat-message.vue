@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,62 +17,87 @@
 
 <script lang="ts" setup>
 import { computed, inject, onMounted, ref } from 'vue';
-import { storeToRefs } from 'pinia';
-import get from 'lodash/get';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
-import { Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { useChatsStore } from '@main/store/chats.store';
-import { getChatSystemMessageText } from '@main/utils/chat-ui.helper';
-import { getContactName } from '@main/utils/contacts.helper';
-import { getMessageFromCurrentChat } from '@main/utils/chat-message-actions.helpers';
-import type { MessageType, ChatMessageView } from '~/index';
+import { Ui3nHtml as vUi3nHtml } from '@v1nt1248/3nclient-lib';
+import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from '@main/utils/chat-ui.helper';
+import type { ChatMessageView, OutgoingMessageStatus, RegularMsgView } from '~/index';
 import ChatMessageStatus from './chat-message-status.vue';
 import ChatMessageAttachments from './chat-message-attachments.vue';
 import { useChatStore } from '@main/store/chat.store';
-
-const vUi3nHtml = Ui3nHtml;
+import { useContactsStore } from '@main/store/contacts.store';
 
 const props = defineProps<{
-  msg: ChatMessageView<MessageType>;
+  msg: ChatMessageView;
+  relatedMessage: RegularMsgView['relatedMessage'];
   prevMsgSender: string | undefined;
 }>();
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-const chatsStore = useChatsStore();
-const { currentChat } = storeToRefs(useChatStore());
-const { fetchChatList, updateMessageStatus } = chatsStore;
+const { $tr } = inject(I18N_KEY)!;
+const chatStore = useChatStore();
+const { markMessageAsRead } = chatStore;
+const { getContactName } = useContactsStore();
 
 const chatMsgElement = ref<Element | null>(null);
 
-const msgType = computed<MessageType>(() => get(props.msg, ['messageType'], 'outgoing'));
+const isIncomingMsg = computed(() => props.msg.isIncomingMsg);
 
-const isMsgSystem = computed<boolean>(() => get(props.msg, ['chatMessageType'], 'regular') === 'system');
+const isMsgSystem = computed(() => (props.msg.chatMessageType === 'system') || (props.msg.chatMessageType === 'invitation'));
 
-const currentMsgSender = computed<string>(() => get(props.msg, ['sender'], ''));
+const outgoingMsgStatus = computed(() => (
+  (!isMsgSystem.value && !isIncomingMsg.value) ?
+  props.msg.status as OutgoingMessageStatus : undefined
+));
 
-const doesShowSender = computed<boolean>(() => currentMsgSender.value !== props.prevMsgSender && msgType.value === 'incoming' && !isMsgSystem.value);
+const currentMsgSender = computed<string>(() => props.msg.sender);
 
-const msgText = computed<string>(() => isMsgSystem.value
-  ? getChatSystemMessageText({ message: props.msg, chat: currentChat.value })
-  : props.msg.body);
+const showSender = computed<boolean>(() => isIncomingMsg.value &&
+  !isMsgSystem.value && (currentMsgSender.value !== props.prevMsgSender)
+);
 
-const initialMessage = computed(() => getMessageFromCurrentChat({ chatMessageId: props.msg.initialMessageId }));
+const msgText = computed<string>(() => {
+  switch (props.msg.chatMessageType) {
+    case 'regular':
+      return props.msg.body;
+    case 'invitation':
+      return getTextForChatInvitationMessage(props.msg);
+    case 'system':
+      return getTextForChatSystemMessage(props.msg);
+  }
+});
+
+const initialMessage = computed(() => {
+  if (!props.relatedMessage) {
+    return;    
+  } else if (props.relatedMessage.replyTo) {
+    return props.relatedMessage.replyTo;
+  } else if (props.relatedMessage.forwardingOf) {
+    return props.relatedMessage.forwardingOf;
+  }
+});
 
 const initialMessageText = computed(() => {
-  const { body, attachments } = initialMessage.value || {};
+  
+  const body = initialMessage.value?.body;
+  const attachments = initialMessage.value?.attachments;
   const attachmentsText = (attachments || []).map(a => a.name).join(', ');
   return body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`;
 });
 
-function intersectHandler(entries: IntersectionObserverEntry[], observer: IntersectionObserver) {
+// XXX what does this do? Check IntersectionObserver in mdn.
+function intersectHandler(
+  entries: IntersectionObserverEntry[], observer: IntersectionObserver
+) {
   entries.forEach(async entry => {
     if (entry.isIntersecting) {
-      const { id } = entry.target;
-      const { chatMessageId, messageType, chatMessageType, status } = props.msg;
-      if (chatMessageId === id.replace('msg-', '') && messageType === 'incoming' && chatMessageType !== 'system' && status === 'received') {
-        await updateMessageStatus({ chatMessageId, value: null });
-        await fetchChatList();
+      const {
+        chatMessageId, isIncomingMsg, chatMessageType, status, chatId
+      } = props.msg;
+      if ((chatMessageId === entry.target.id.replace('msg-', ''))
+      && isIncomingMsg
+      && (chatMessageType !== 'system')
+      && (status === 'unread')) {
+        await markMessageAsRead(chatId, chatMessageId);
       }
       observer.unobserve(entry.target);
     }
@@ -89,6 +114,7 @@ onMounted(() => {
     observer.observe(chatMsgElement.value as Element);
   }
 });
+
 </script>
 
 <template>
@@ -100,7 +126,7 @@ onMounted(() => {
       currentMsgSender !== prevMsgSender && !isMsgSystem && $style.withOffset,
       isMsgSystem
         ? $style.chatMessageSystem
-        : msgType === 'incoming' ? $style.chatMessageIncoming : $style.chatMessageOutgoing
+        : isIncomingMsg ? $style.chatMessageIncoming : $style.chatMessageOutgoing
     ]"
   >
     <div :class="$style.chatMessageBody">
@@ -111,7 +137,7 @@ onMounted(() => {
       >
         <div style="pointer-events: none;">
           <h4
-            v-if="doesShowSender"
+            v-if="showSender"
             :class="$style.chatMessageSender"
           >
             {{ getContactName(msg.sender) }}
@@ -136,9 +162,9 @@ onMounted(() => {
           />
 
           <chat-message-attachments
-            v-if="msg.attachments && !isMsgSystem"
-            :attachments="msg.attachments"
-            :disabled="msg.messageType === 'outgoing'"
+            v-if="(msg as RegularMsgView).attachments && !isMsgSystem"
+            :attachments="(msg as RegularMsgView).attachments"
+            :disabled="!isIncomingMsg"
           />
 
           <div :class="$style.chatMessageTime">
@@ -146,9 +172,9 @@ onMounted(() => {
           </div>
 
           <chat-message-status
-            v-if="msg.messageType === 'outgoing' && !isMsgSystem"
+            v-if="!isIncomingMsg"
             :class="$style.chatMessageStatus"
-            :value="msg.status"
+            :value="outgoingMsgStatus"
             icon-size="12"
           />
         </div>

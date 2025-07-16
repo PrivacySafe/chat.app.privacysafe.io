@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024 3NSoft Inc.
+ Copyright (C) 2020-2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,6 +15,16 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+export interface ContactsService {
+  isThereContactWithTheMail(mail: string): boolean;
+  getContactByMail(mail: string): Person | undefined;
+  getContactList(): Promise<PersonView[]>;
+  getContact(id: string): Promise<Person|undefined>;
+  insertContact(contact: Person): Promise<void | { errorType: string; errorMessage: string }>;
+  upsertContact(contact: Person): Promise<void | { errorType: string; errorMessage: string }>;
+  watchContactList(obs: web3n.Observer<PersonView[]>): () => void;
+}
+
 export interface PersonView {
   id: string;
   name?: string;
@@ -29,6 +39,13 @@ export interface PersonActivity {
   timestamp: number;
 }
 
+export interface ContactsException extends web3n.RuntimeException {
+  type: 'contacts';
+  contactAlreadyExists?: true;
+  invalidValue?: true;
+  failASMailCheck?: true;
+}
+
 export interface Person extends PersonView {
   avatar?: string;
   notice?: string;
@@ -36,4 +53,3 @@ export interface Person extends PersonView {
   activities?: string[];
 }
 
-export type ContactContent = Omit<Person, 'id'|'avatar'|'avatarMini'|'activities'>;

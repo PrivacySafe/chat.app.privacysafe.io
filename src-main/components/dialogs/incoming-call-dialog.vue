@@ -17,15 +17,16 @@
 
 <script lang="ts" setup>
 import { computed, inject, onBeforeUnmount, onMounted } from 'vue';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nButton } from '@v1nt1248/3nclient-lib';
-import { videoOpenerSrv } from '@main/services/services-provider';
-import { getContactName } from '@main/utils/contacts.helper';
+import { videoOpenerSrv } from '@main/store/external-services';
 import ChatAvatar from '../chat/chat-avatar.vue';
 import { Sound } from '@shared/sounds';
+import { ChatIdObj } from "~/asmail-msgs.types.ts";
+import { useContactsStore } from '@main/store/contacts.store';
 
 interface IncomingCallDialogProps {
-  chatId: string;
+  chatId: ChatIdObj;
   peerAddress: string;
 }
 
@@ -33,16 +34,23 @@ interface IncomingCallDialogEmits {
   (ev: 'close'): void;
 }
 
+const { getContactName } = useContactsStore();
+
 const props = defineProps<IncomingCallDialogProps>();
 
 const emits = defineEmits<IncomingCallDialogEmits>();
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const { $tr } = inject(I18N_KEY)!;
 
 const user = computed(() => getContactName(props.peerAddress));
 
 async function joinCall() {
-  await videoOpenerSrv.joinCallInRoom({ chatId: props.chatId, peerAddress: props.peerAddress });
+  await videoOpenerSrv.joinOrDismissCallInRoom(props.chatId, true);
+  emits('close');
+}
+
+async function dismissCall() {
+  await videoOpenerSrv.joinOrDismissCallInRoom(props.chatId, false);
   emits('close');
 }
 
@@ -65,7 +73,7 @@ onBeforeUnmount(() => {
     <div :class="$style.user">
       <chat-avatar
         :size="180"
-        :name="user"
+        :name=user
       />
 
       {{ user }}
@@ -80,14 +88,14 @@ onBeforeUnmount(() => {
         type="icon"
         color="var(--error-content-default)"
         icon="round-call-end"
-        @click="emits('close')"
+        @click=dismissCall
       />
 
       <ui3n-button
         type="icon"
         color="var(--success-content-default)"
         icon="round-phone"
-        @click="joinCall"
+        @click=joinCall
       />
     </div>
   </div>

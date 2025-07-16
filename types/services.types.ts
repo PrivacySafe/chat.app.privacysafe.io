@@ -15,79 +15,149 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import type { Person, PersonView } from './contact.types';
+// import type { Person, PersonView } from './contact.types.ts';
 import type {
-  ChatView,
+  ChatIdObj,
+  ChatMessageId,
   ChatIncomingMessage,
-  ChatMessageView,
-  ChatMessageLocalMeta,
-  ChatOutgoingMessage,
-  SendingMessageStatus,
-  MessageType,
+  RelatedMessage,
+  UpdateMembersSysMsgData,
   WebRTCMsg,
   WebRTCOffBandMessage,
-} from './chat.types';
-import type { IncomingCallCmdArg } from './chat-commands.types';
-
-/**
- * This service comes from contacts app
- */
-export interface AppContacts {
-  getContact(id: string): Promise<Person>;
-  getContactList(): Promise<PersonView[]>;
-  upsertContact(value: Person): Promise<void>;
-}
+} from './asmail-msgs.types.ts';
+import type {
+  ChatMessageView,
+  ChatListItemView,
+  SingleChatView,
+  GroupChatView,
+} from './chat.types.ts';
 
 /**
  * This app's service.
  * It is a singleton in "background instance" component.
  * This service manages data state of chats app.
  */
-export interface AppChatsSrv {
-  getChatList(): Promise<Array<ChatView & ChatMessageView<MessageType>>>;
-  getChatsUnreadMessagesCount(): Promise<Record<string, number>>;
-  createChat(
-    { chatId, members, admins, name }: { chatId?: string, members: string[], admins: string[], name: string },
-  ): Promise<string>;
-  updateChat(value: ChatView): Promise<void>;
-  getChat(chatId: string): Promise<ChatView | null>;
-  deleteChat(chatId: string): Promise<void>;
-  deleteMessagesInChat(chatId: string): Promise<void>;
-  getMessage(
-    { msgId, chatMsgId }: { msgId?: string, chatMsgId?: string },
-  ): Promise<ChatMessageView<MessageType>|null>;
-  deleteMessage({ msgId, chatMsgId }: { msgId?: string, chatMsgId?: string }): Promise<void>;
-  getMessagesByChat(chatId: string): Promise<ChatMessageView<MessageType>[]>;
-  upsertMessage(value: ChatMessageView<MessageType>): Promise<void>;
+export interface ChatServiceIPC {
+  
+  /**
+   * Creates new one-to-one chat. In case of an error it throws quite soon.
+   * When local data allows chat creation, this returns id of created chat.
+   * New chat object is pushed in event, observable via watch() method.
+   * @param value contains chat parameters and this user's own name, which peer
+   * can use as a name of this one-to-one chat.
+   */
+  createOneToOneChat(
+    value: Pick<SingleChatView, 'peerAddr' | 'name'> & { ownName: string; }
+  ): Promise<ChatIdObj>;
+
+  /**
+   * Accepts chat invitation.
+   * @param chatId 
+   * @param chatMessageId 
+   * @param ownName is a name one wants to use in the chat
+   */
+  acceptChatInvitation(
+    chatId: ChatIdObj, chatMessageId: string, ownName: string
+  ): Promise<void>;
+
+  /**
+   * Creates new group chat. In case of an error it throws quite soon.
+   * When local data allows chat creation, this returns id of created chat.
+   * New chat object is pushed in event, observable via watch() method.
+   * @param value contains parameters of a group chat.
+   */
+  createGroupChat(
+    value: Pick<GroupChatView, 'chatId' | 'members' | 'admins' | 'name'>
+  ): Promise<ChatIdObj>;
+
+  getChatList(): Promise<ChatListItemView[]>;
+  renameChat(chatId: ChatIdObj, newName: string): Promise<void>;
+  leaveChat(chatId: ChatIdObj): Promise<void>;
+  deleteChat(chatId: ChatIdObj): Promise<void>;
+  updateGroupMembers(
+    chatId: ChatIdObj, changes: UpdateMembersSysMsgData['value']
+  ): Promise<void>;
+
+  getChat(chatId: ChatIdObj): Promise<ChatListItemView|undefined>;
+
+  deleteMessagesInChat(
+    chatId: ChatIdObj, deleteForEveryone: boolean
+  ): Promise<void>;
+  deleteMessage(id: ChatMessageId, deleteForEveryone: boolean): Promise<void>;
+  getMessage(id: ChatMessageId): Promise<ChatMessageView|undefined>;
+  getMessagesByChat(chatId: ChatIdObj): Promise<ChatMessageView[]>;
+  sendRegularMessage(chatId: ChatIdObj, text: string,
+    files: web3n.files.ReadonlyFile[] | undefined,
+    relatedMessage: RelatedMessage | undefined
+  ): Promise<void>;
+
+  markMessageAsReadNotifyingSender(chatMessageId: ChatMessageId): Promise<void>;
+
+  checkAddressExistenceForASMail(addr: string): Promise<AddressCheckResult>;
+
+  // XXX will this be needed? Or, will this turn to get attachments thing?
+  getIncomingMessage(msgId: string): Promise<ChatIncomingMessage | undefined>;
+
+  watch(obs: web3n.Observer<UpdateEvent>): () => void;
 }
 
-/**
- * This app's service.
- * It is a singleton in "background instance" component.
- * This service does ASMail sending.
- */
-export interface AppDeliverySrv {
-  checkAddressExistenceForASMail(addr: string): Promise<AddressCheckResult>;
-  addMessageToDeliveryList(
-    message: ChatOutgoingMessage, localMetaPath: ChatMessageLocalMeta, systemMessage?: boolean,
-  ): Promise<void>;
-  removeMessageFromDeliveryList(msgIds: string[]): Promise<void>;
-  getMessage(msgId: string): Promise<ChatIncomingMessage | undefined>;
-  getDeliveryList(localMetaPath: ChatMessageLocalMeta): Promise<SendingMessageStatus[]>;
-  removeMessageFromInbox(msgIds: string[]): Promise<void>;
+export interface ChatEventBase {
+  updatedEntityType: 'chat';
 }
+
+export interface ChatUpdatedEvent extends ChatEventBase {
+  event: 'updated';
+  chat: ChatListItemView;
+}
+
+export interface ChatRemovedEvent extends ChatEventBase {
+  event: 'removed';
+  chatId: ChatIdObj;
+}
+
+export interface AllChatMessagesRemovedEvent extends ChatEventBase {
+  event: 'messages-removed';
+  chatId: ChatIdObj;
+}
+
+export interface ChatAddedEvent extends ChatEventBase {
+  event: 'added';
+  chat: ChatListItemView;
+}
+
+export type ChatEvent =
+  ChatAddedEvent
+  | ChatUpdatedEvent
+  | ChatRemovedEvent
+  | AllChatMessagesRemovedEvent;
+
+export interface ChatMessageEventBase {
+  updatedEntityType: 'message';
+}
+
+export interface ChatMessageAddedEvent extends ChatMessageEventBase {
+  event: 'added';
+  msg: ChatMessageView;
+}
+
+export interface ChatMessageUpdatedEvent extends ChatMessageEventBase {
+  event: 'updated';
+  msg: ChatMessageView;
+}
+
+export interface ChatMessageRemovedEvent extends ChatMessageEventBase {
+  event: 'removed';
+  msgId: ChatMessageId;
+}
+
+export type ChatMessageEvent =
+  ChatMessageAddedEvent
+  | ChatMessageUpdatedEvent
+  | ChatMessageRemovedEvent;
+
+export type UpdateEvent = ChatEvent | ChatMessageEvent;
 
 export type AddressCheckResult = 'found' | 'found-but-access-restricted' | 'not-present-at-domain' | 'no-service-for-domain';
-
-/**
- * This app's service.
- * It is a singleton in "background instance" component.
- * This service does ASMail sending.
- */
-export interface AppDeliveryService {
-  watchIncomingMessages(obs: web3n.Observer<ChatIncomingMessage>): () => void;
-  watchOutgoingMessages(obs: web3n.Observer<{id: string, progress: web3n.asmail.DeliveryProgress}>): () => void;
-}
 
 export interface FileLinkStoreService {
   saveLink(file: web3n.files.ReadonlyFile): Promise<string>;
@@ -103,58 +173,74 @@ export interface FileLinkStoreService {
  * passes signals to them, etc.
  */
 export interface VideoGUIOpener {
-  startVideoCallForChatRoom(chatId: string): Promise<void>;
-  joinCallInRoom(callDetails: IncomingCallCmdArg): Promise<void>;
+  startVideoCallForChatRoom(chatId: ChatIdObj): Promise<void>;
+  joinOrDismissCallInRoom(chatId: ChatIdObj, join: boolean): Promise<void>;
   watchVideoChats(obs: web3n.Observer<VideoChatEvent>): () => void;
 }
 
 export interface VideoChatEvent {
   type: 'gui-closed' | 'gui-opened' | 'call-started' | 'call-ended';
-  chatId: string;
+  chatId: ChatIdObj;
 }
 
 /**
  * This app's service.
- * It is present in every instance of "video chat" component.
- * This service provides control over respective video chat window.
+ * VideoChatComponent service exposes control of video component to background.
+ * Methods are used by background to control video component, while watching
+ * method is used to consume from video side both call requests and events.
  */
 export interface VideoChatComponent {
+  /**
+   * This service call 
+   * @param chat 
+   */
+  startVideoCallComponentForChat(chat: ChatInfoForCall): Promise<void>;
+
   focusWindow(): Promise<void>;
   closeWindow(): Promise<void>;
-  watch(obs: web3n.Observer<CallGUIEvent>): () => void;
-  startCallGUIForChat(chat: ChatInfoForCall): Promise<void>;
+
+  /**
+   * Absorbs WebRTC signalling messages that come to this particular video
+   * component instance.
+   * @param peerAddr identifies from which peer this message is from
+   * @param msg message itself
+   */
   handleWebRTCSignal(peerAddr: string, msg: WebRTCMsg): Promise<void>;
+
+  /**
+   * This absorbs different requests from video to gui component, reusing
+   * single service connection.
+   * @param obs for requests and events from video component to background
+   */
+  watchRequests(obs: web3n.Observer<CallFromVideoGUI>): () => void;
 }
 
-export type CallGUIEvent =
-  StartChannelEvent | CloseChannelEvent | OutgoingWebRTCSignalEvent |
+export type CallFromVideoGUI =
+  StartChannelRequest | CloseChannelRequest | SendWebRTCSignalRequest |
   CallStartedEvent;
 
-export interface OutgoingWebRTCSignalEvent {
-  type: 'webrtc-signal';
+export interface SendWebRTCSignalRequest {
+  type: 'send-webrtc-signal';
   peerAddr: string;
-  channel: string;
   data: WebRTCOffBandMessage;
 }
 
-export interface StartChannelEvent {
+export interface StartChannelRequest {
   type: 'start-channel';
-  channel: string;
   peerAddr: string;
 }
 
-export interface CloseChannelEvent {
+export interface CloseChannelRequest {
   type: 'close-channel';
-  channel: string;
   peerAddr: string;
 }
 
 export interface CallStartedEvent {
-  type: 'call-started';
+  type: 'call-started-event';
 }
 
 export interface ChatInfoForCall {
-  chatId: string;
+  chatId: ChatIdObj;
   ownAddr: string;
   ownName: string;
   peers: {
@@ -163,11 +249,4 @@ export interface ChatInfoForCall {
   }[];
   chatName: string;
   rtcConfig: RTCConfiguration;
-}
-
-export interface ContactsException extends web3n.RuntimeException {
-  type: 'contacts';
-  contactAlreadyExists?: true;
-  invalidValue?: true;
-  failASMailCheck?: true;
 }

@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,31 +20,29 @@ import { computed, inject, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
-import size from 'lodash/size';
-import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nButton, Ui3nIcon, Ui3nInput } from '@v1nt1248/3nclient-lib';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import { getChatName } from '@main/utils/chat-ui.helper';
-import type { ChatView, ChatMessageView, MessageType, PersonView } from '~/index';
+import type { PersonView, ChatListItemView, GroupChatView, SingleChatView } from '~/index';
 import ChatAvatar from '../chat/chat-avatar.vue';
 import ContactList from '../contacts/contact-list.vue';
 import { useAppStore } from '@main/store/app.store';
 import { useContactsStore } from '@main/store/contacts.store';
 import { useChatStore } from '@main/store/chat.store';
+import { includesAddress } from '@shared/address-utils';
 
 const props = defineProps<{
-  chat: ChatView & { unread: number } & ChatMessageView<MessageType>;
+  chat: ChatListItemView;
 }>();
 
 const emit = defineEmits(['close']);
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const { $tr } = inject(I18N_KEY)!;
 
 const { contactList: allContact } = storeToRefs(useContactsStore());
 const { user } = storeToRefs(useAppStore());
-const { updateMembers } = useChatStore();
-
-const nonSelectableUserMails = ['support@3nweb.com'];
+const { updateGroupMembers } = useChatStore();
 
 const editMembersMode = ref(false);
 const memberSearch = ref('');
@@ -52,18 +50,24 @@ const userSearch = ref('');
 const initialSelectedUsers = ref<string[]>([]);
 const selectedUsers = ref<string[]>([]);
 
-const nonSelectableUsers = computed<string[]>(
-  () => allContact.value
-    .filter(c => nonSelectableUserMails.includes(c.mail))
-    .map(c => c.id),
-);
-const isGroupChat = computed<boolean>(() => size(props.chat.members) > 2);
+const groupChat = computed<GroupChatView|undefined>(() => (
+  props.chat.isGroupChat ? props.chat : undefined
+));
 
-const isUserAdmin = computed(() => props.chat.admins.includes(user.value));
+const singleChat = computed<SingleChatView|undefined>(() => (
+  !props.chat.isGroupChat ? props.chat : undefined
+));
 
-const members = computed<Array<PersonView & { displayName: string }>>(
-  () => allContact.value.filter(c => props.chat.members.includes(c.mail)),
-);
+const isUserAdmin = computed(() => (
+  !!groupChat.value && includesAddress(groupChat.value.admins, user.value)
+));
+
+const members = computed<Array<PersonView & { displayName: string }>>(() => {
+  const addrsInChat = (groupChat.value ?
+    groupChat.value.members : [ user.value, singleChat.value!.peerAddr ]
+  );
+  return allContact.value.filter(c => includesAddress(addrsInChat, c.mail));
+});
 
 const filteredMembers = computed(
   () => members.value
@@ -100,7 +104,7 @@ function selectUsers(userId: string) {
   }
 }
 
-function _updateMembers() {
+function updateMembers() {
   const updatedMembers = allContact.value.reduce((res, c) => {
     const { id, mail } = c;
     if (selectedUsers.value.includes(id)) {
@@ -108,7 +112,7 @@ function _updateMembers() {
     }
     return res;
   }, [] as string[]);
-  updateMembers(props.chat.chatId, updatedMembers);
+  updateGroupMembers(props.chat.chatId, updatedMembers);
   closeDialog();
 }
 </script>
@@ -141,7 +145,6 @@ function _updateMembers() {
             :search-text="userSearch"
             :without-anchor="true"
             :selected-contacts="selectedUsers"
-            :non-selectable-contacts="nonSelectableUsers"
             @select="selectUsers"
           />
         </div>
@@ -152,7 +155,7 @@ function _updateMembers() {
           <chat-avatar
             :name="getChatName(props.chat)"
             size="64"
-            :shape="isGroupChat ? 'decagon' : 'circle'"
+            :shape="groupChat ? 'decagon' : 'circle'"
           />
 
           <div :class="$style.chatInfoDialogHeaderText">
@@ -160,8 +163,10 @@ function _updateMembers() {
               {{ getChatName(props.chat) }}
             </span>
 
-            <span :class="$style.chatInfoDialogHeaderUser">
-              {{ props.chat.members.length }} {{ $tr('chat.info.dialog.users') }}
+            <span :class="$style.chatInfoDialogHeaderUser"
+              v-if="groupChat"
+            >
+              {{ groupChat.members.length }} {{ $tr('chat.info.dialog.users') }}
             </span>
           </div>
         </div>
@@ -177,7 +182,7 @@ function _updateMembers() {
             {{ $tr('chat.info.dialog.users') }}
 
             <ui3n-button
-              v-if="isUserAdmin"
+              v-if="groupChat && isUserAdmin"
               type="secondary"
               size="small"
               :class="$style.chatInfoDialogContentTitleBtn"
@@ -217,7 +222,7 @@ function _updateMembers() {
 
         <ui3n-button
           :disabled="addBtnDisable"
-          @click="_updateMembers"
+          @click="updateMembers"
         >
           {{ $tr('chat.info.dialog.btn.update.text') }}
         </ui3n-button>

@@ -15,340 +15,327 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { defineStore, storeToRefs } from 'pinia';
+import { defineStore } from 'pinia';
 import { computed, inject, ref } from 'vue';
 import { useChatsStore } from './chats.store';
 import { toRO } from '@main/utils/readonly';
-import { ChatMessageView, ChatView, MessageType } from '~/chat.types';
-import { appChatsSrv, appDeliverySrv } from '@main/services/services-provider';
-import { areAddressesEqual, includesAddress } from '@shared/address-utils';
-import { useAppStore } from './app.store';
-import { sendSystemMessage } from './chats/send-system-message';
-import { chatMessagesByType } from '@main/utils/chats.helper';
-import { deleteChatMessage } from './chat/delete-message';
-import { getRandomId } from '@v1nt1248/3nclient-lib/utils';
-import { chatIdLength, msgIdLength } from '@main/constants';
-import { sendChatMessage } from './chat/send-chat-message';
+import { ChatIdObj, ChatMessageId } from '~/asmail-msgs.types';
+import { ChatListItemView, ChatMessageAttachmentsInfo, ChatMessageView, GroupChatView } from '~/chat.types';
+import { chatService, fileLinkStoreSrv } from '@main/store/external-services';
+import { includesAddress, toCanonicalAddress } from '@shared/address-utils';
 import { VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { AppGlobalEvents } from '~/app.types';
+import { areChatIdsEqual } from '@shared/chat-ids';
+import { RelatedMessage } from '~/asmail-msgs.types';
+import { AddressCheckResult, ChatMessageEvent } from '~/services.types';
+import { DbRecordException } from '@bg/utils/exceptions';
+import { setTemplateIteratorKeyIn } from '@main/utils/template-iterator-keys';
+
+type ReadonlyFile = web3n.files.ReadonlyFile;
 
 export const useChatStore = defineStore('chat', () => {
 
-  const { user } = storeToRefs(useAppStore());
   const chatsStore = useChatsStore();
-  const { fetchChatList } = chatsStore;
-  const { chatList } = storeToRefs(chatsStore);
+  const { refreshChatList, getChatView } = chatsStore;
   const $emitter = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!.$emitter;
 
-  const currentChatId = ref<string|null>(null);
-  const currentChatMessages = ref<ChatMessageView<MessageType>[]>([]);
+  const currentChatId = ref<ChatIdObj>();
+  const currentChatMessages = ref<ChatMessageView[]>([]);
 
   const currentChat = computed(() => {
     if (currentChatId.value) {
-      const chat = chatList.value[currentChatId.value];
-      return (chat ? chat : null);
+      return getChatView(currentChatId.value);
     }
-    return null;
   });
 
-  function getWritableCurrentChatMessageView(
-    chatId: string, chatMessageId: string, msgId: string
-  ): ChatMessageView<MessageType>|undefined {
-    if (chatId === currentChatId.value) {
-      return currentChatMessages.value.find(
-        m => ((m.chatMessageId === chatMessageId) || (m.msgId === msgId))
-      );
-    }
-  }
+  const isAdminOfGroupChat = computed(() => {
+    const chat = currentChat.value;
+    return ((chat && chat.isGroupChat) ? chat.admins.includes(ownAddr) : false);
+  });
 
-  function pushMsgIntoCurrentChatMessages(
-    msgView: ChatMessageView<MessageType>
-  ): void {
-    if (currentChatId.value && (msgView.chatId === currentChatId.value)) {
-      currentChatMessages.value.push(msgView);
-    }
-  }
-
-  async function fetchChat(chatId: string | null) {
-    if (!chatId) {
-      currentChatId.value = null;
-      currentChatMessages.value = [];
+  async function absorbMessageUpdateEvent(
+    event: ChatMessageEvent
+  ): Promise<void> {
+    if (event.event === 'added') {
+      await handleAddedMsg(event.msg);
+    } else if (event.event === 'updated') {
+      await handleUpdatedMsg(event.msg);
+    } else if (event.event === 'removed') {
+      await handleRemovedMsg(event.msgId);
     } else {
+      console.log(`Unknown update event from ChatService:`, event);
+    }
+  }
 
+  async function handleAddedMsg(
+    msg: ChatMessageView
+  ): Promise<void> {
+    const msgInd = findIndexOfMessageListOfCurrentChat(msg);
+    if (msgInd === undefined) {
       // XXX
-      // - check if id is in the list, updating it and retrying only
-      await fetchChatList();
-
-      currentChatId.value = chatId;
+      console.warn(`Message added in chat that isn't current. Should we increase unread counter/flag in message's chat?`);
+    } else if (msgInd < 0) {
+      setTemplateIteratorKeyIn(msg, msg.chatMessageId);
+      currentChatMessages.value.push(msg);
+      // XXX
+      console.warn(`do we want to scroll, or when to scroll when new messages is added`);
+    } else {
       await fetchMessages();
     }
   }
 
-  async function fetchMessages(): Promise<void> {
-    currentChatMessages.value = (currentChatId.value ?
-      await appChatsSrv.getMessagesByChat(currentChatId.value) :
-      []
-    );
+  function findIndexOfMessageListOfCurrentChat({
+    chatId, chatMessageId
+  }: ChatMessageId): number|undefined {
+    if (areChatIdsEqual(currentChatId.value, chatId)) {
+      return currentChatMessages.value.findIndex(
+        m => (m.chatMessageId === chatMessageId)
+      );
+    }
   }
 
-  function getMessage(
+  async function handleUpdatedMsg(
+    msg: ChatMessageView
+  ): Promise<void> {
+      const msgInd = findIndexOfMessageListOfCurrentChat(msg);
+      if ((msgInd !== undefined) && (msgInd >= 0)) {
+        setTemplateIteratorKeyIn(msg, currentChatMessages.value[msgInd]);
+        currentChatMessages.value[msgInd] = msg;
+      } else {
+        await fetchMessages();
+      }
+  }
+
+  async function handleRemovedMsg(
+    msgId: ChatMessageId
+  ): Promise<void> {
+    const msgInd = findIndexOfMessageListOfCurrentChat(msgId);
+    if ((msgInd !== undefined) && (msgInd >= 0)) {
+      currentChatMessages.value.splice(msgInd, 1);
+      // XXX
+      console.warn(`we may want to replace message item with placeholder "Message deleted" instead of unexpected removal of it from user's view`);
+    } else {
+      await fetchMessages();
+    }
+  }
+
+  async function setChatAndFetchMessages(chatId: ChatIdObj) {
+    if (currentChatId.value?.chatId === chatId.chatId) {
+      return;
+    }
+    if (!getChatView(chatId)) {
+      await refreshChatList();
+      if (!getChatView(chatId)) {
+        throw new Error(`Chat is not found with id ${JSON.stringify(chatId)}`);
+      }
+    }
+    currentChatId.value = chatId;
+    await fetchMessages();
+  }
+
+  function resetCurrentChat(): void {
+    currentChatId.value = undefined;
+    currentChatMessages.value = [];
+  }
+
+  async function fetchMessages(): Promise<void> {
+    const lst = (currentChatId.value ?
+      await chatService.getMessagesByChat(currentChatId.value) :
+      []
+    );
+    for (const item of lst) {
+      const initItem = currentChatMessages.value.find(
+        m => (item.chatMessageId === m.chatMessageId)
+      );
+      setTemplateIteratorKeyIn(item, initItem ?? item.chatMessageId);
+    }
+    currentChatMessages.value = lst
+  }
+
+  function getMessageInCurrentChat(
     chatMsgId: string
-  ): ChatMessageView<MessageType>|undefined {
+  ): ChatMessageView|undefined {
     if (!chatMsgId) {
       return;
     }
-    const message = currentChatMessages.value.find(
+    return currentChatMessages.value.find(
       m => m.chatMessageId === chatMsgId
     );
-    return message;
   }
 
-  function ensureCurrentChatIsSet(chatId?: string): void {
+  function ensureCurrentChatIsSet(expectedChatId?: ChatIdObj): void {
     let sure = false;
     if (currentChatId.value) {
-      sure = (chatId ? (currentChatId.value === chatId) : true);
+      sure = (expectedChatId ?
+        areChatIdsEqual(currentChatId.value, expectedChatId) :
+        true
+      );
     }
     if (!sure) {
-      throw new Error(`Chat referenced by it ${chatId} is not set current in store`);
+      throw new Error(`Chat referenced by it ${expectedChatId} is not set current in store`);
     }
-  }
-
-  function getChatPeers(): string[] {
-    ensureCurrentChatIsSet();
-    return currentChat.value!.members
-    .filter(addr => !areAddressesEqual(addr, user.value));
   }
 
   async function deleteMessageInChat(
     chatMsgId: string, deleteForEveryone?: boolean
   ): Promise<void> {
-    const message = getMessage(chatMsgId);
-    if (!message) {
-      return;
+    const message = getMessageInCurrentChat(chatMsgId);
+    if (message) {
+      const { chatId, chatMessageId } = message;
+      await chatService.deleteMessage(
+        { chatId, chatMessageId }, !!deleteForEveryone
+      ).catch(async (exc: DbRecordException) => {
+        if (exc.chatNotFound) {
+          await refreshChatList();
+        } else {
+          await fetchMessages();
+        }
+      }); 
     }
-    await deleteChatMessage(
-      message, (deleteForEveryone ? getChatPeers() : undefined)
-    );  
-    await fetchMessages();
   }
 
-  async function deleteAllMessagesInChat(chatId: string): Promise<void> {
+  async function deleteAllMessagesInChat(
+    chatId: ChatIdObj, deleteForEveryone?: boolean
+  ): Promise<void> {
     ensureCurrentChatIsSet(chatId);
-    const {
-      incomingMessages, outgoingMessages
-    } = chatMessagesByType(currentChatMessages.value);
-    await appChatsSrv.deleteMessagesInChat(chatId);
-    await appDeliverySrv.removeMessageFromInbox(incomingMessages);
-    await appDeliverySrv.removeMessageFromDeliveryList(outgoingMessages);
-    if (chatId === currentChatId.value) {
-      await fetchMessages();
-    } else {
-      await fetchChatList();
-    }
+    await chatService.deleteMessagesInChat(chatId, !!deleteForEveryone);
   }
 
-  async function sendMessageInChat(msg: {
-    chatId: string, text: string,
-    files?: web3n.files.ReadonlyFile[] | undefined,
-    initialMessageId?: string
-  }) {
-    ensureCurrentChatIsSet(msg.chatId);
-    const {
-      name: chatName, admins: chatAdmins, members: chatMembers
-    } = currentChat.value!;
-    await sendChatMessage(
-      user.value, {
-        ...msg,
-        chatId: msg.chatId,
-        chatName,
-        recipients: getChatPeers(),
-        chatAdmins,
-        chatMembers
-      },
-      async msgView => {
-        await appChatsSrv.upsertMessage(msgView);
-        currentChatMessages.value.push(msgView);
-        $emitter.emit('send:message', { chatId: msgView.chatId });
-        await chatsStore.fetchChatList();      
-      }
-    );
+  async function sendMessageInChat(
+    chatId: ChatIdObj, text: string,
+    files: web3n.files.ReadonlyFile[] | undefined,
+    relatedMessage: RelatedMessage | undefined
+  ) {
+    ensureCurrentChatIsSet(chatId);
+    await chatService.sendRegularMessage(chatId, text, files, relatedMessage);
+    $emitter.emit('send:message', { chatId });
   }
 
   async function renameChat(
-    chat: ChatView & { unread: number } & ChatMessageView<MessageType>,
-    newChatName: string
+    chat: ChatListItemView, newChatName: string
   ): Promise<void> {
-    ensureCurrentChatIsSet(chat.chatId);
+    const chatId = { isGroupChat: chat.isGroupChat, chatId: chat.chatId };
+    ensureCurrentChatIsSet(chatId);
+    await chatService.renameChat(chatId, newChatName);
+  }
 
-    const updatedChat: ChatView = {
-      chatId: chat.chatId,
-      name: newChatName,
-      members: chat.members,
-      admins: chat.admins,
-      createdAt: chat.createdAt,
-    };
-    await appChatsSrv.updateChat(updatedChat);
-    chatsStore.chatList[chat.chatId].name = newChatName;
-  
-    const chatMessageId = getRandomId(chatIdLength);
-    const msgId = await sendSystemMessage({
-      chatId: chat.chatId,
-      chatMessageId,
-      recipients: getChatPeers()!,
-      event: 'update:chatName',
-      value: { name: newChatName },
-      displayable: true,
-    });
-    const msgView: ChatMessageView<'outgoing'> = {
-      msgId,
-      attachments: [],
-      messageType: 'outgoing',
-      sender: user.value,
-      body: 'rename.chat.system.message',
-      chatId: chat.chatId,
-      chatMessageType: 'system',
-      chatMessageId,
-      initialMessageId: null,
-      timestamp: Date.now(),
-      status: 'received',
-    };
-  
-    await appChatsSrv.upsertMessage(msgView);
-    if (chat.chatId === currentChatId.value) {
-      currentChatMessages.value.push(msgView);
+  async function leaveChat(chatId: ChatIdObj): Promise<void> {
+    ensureCurrentChatIsSet(chatId);
+    resetCurrentChat();
+    await chatService.leaveChat(chatId);
+  }
+
+  async function deleteChat(chatId: ChatIdObj): Promise<void> {
+    ensureCurrentChatIsSet(chatId);
+    resetCurrentChat();
+    await chatService.deleteChat(chatId);
+  }
+
+  let ownAddr: string;
+  let ownCAddr: string;
+
+  async function updateGroupMembers(
+    chatId: string, newMembers: string[]
+  ): Promise<void> {
+    const chatIdObj = { isGroupChat: true, chatId };
+    ensureCurrentChatIsSet(chatIdObj);
+
+    if (!includesAddress(newMembers, ownAddr)) {
+      throw new Error(`This function can't remove self from members. Own address should be among new members.`);
     }
-  }
 
-  async function leaveChat(chatId: string, isRemoved = false): Promise<void> {
-    ensureCurrentChatIsSet(chatId);
-
-    const messages = currentChatMessages.value;
-    const { incomingMessages, outgoingMessages } = chatMessagesByType(messages);
-    const recipients = getChatPeers();
-    const ownAddr = user.value;
-
-    await appChatsSrv.deleteChat(chatId);
-    await appDeliverySrv.removeMessageFromInbox(incomingMessages);
-    await appDeliverySrv.removeMessageFromDeliveryList(outgoingMessages);
-
-    await fetchChat(null);
-
-    sendSystemMessage({
-      chatId,
-      chatMessageId: getRandomId(msgIdLength),
-      recipients,
-      event: 'delete:members',
-      value: {
-        users: [ ownAddr ],
-        isRemoved
-      },
-      displayable: true,
-    });
-  }
-
-  async function deleteChat(chatId: string): Promise<void> {
-    ensureCurrentChatIsSet(chatId);
-  
-    const messages = currentChatMessages.value;
-    const { incomingMessages, outgoingMessages } = chatMessagesByType(messages);
-  
-    await appChatsSrv.deleteChat(chatId);
-    await appDeliverySrv.removeMessageFromInbox(incomingMessages);
-    await appDeliverySrv.removeMessageFromDeliveryList(outgoingMessages);
-
-    await fetchChat(null);
-  }
-
-  async function updateMembers(chatId: string, users: string[]): Promise<void> {
-    ensureCurrentChatIsSet(chatId);
-
-    const me = user.value;
-    const members = getChatPeers();
-    const {
-      name: chatName, admins: chatAdmins, createdAt: chatCreatedAt
-    } = currentChat.value!;
-
+    const { members } = (currentChat.value as GroupChatView);
     const membersToDelete = members.filter(
-      addr => !includesAddress(users, addr)
+      addr => !includesAddress(newMembers, addr)
     );
     const membersUntouched = members.filter(
       addr => !membersToDelete.includes(addr)
     );
-    const membersToAdd = users.filter(addr => !includesAddress(members, addr));
-    const updatedMembers = [...membersUntouched, ...membersToAdd];
+    const membersToAdd = newMembers.filter(addr => !includesAddress(members, addr));
 
-    const updatedChat: ChatView = {
-      chatId: chatId,
-      name: chatName,
-      members: updatedMembers,
-      admins: chatAdmins,
-      createdAt: chatCreatedAt,
-    };
+    await ensureAllAddressesExist(membersToAdd.filter(
+      member => (toCanonicalAddress(member) !== ownCAddr)
+    ));
 
-    await appChatsSrv.updateChat(updatedChat);
-    chatList.value[chatId].members = updatedMembers;
-
-    let msgViewOne: ChatMessageView<'outgoing'> | undefined;
-    let msgViewTwo: ChatMessageView<'outgoing'> | undefined;
-    const recipients = [...members, ...membersToAdd];
-
-    if (membersToAdd.length > 0) {
-      const chatMessageId = getRandomId(msgIdLength);
-      const msgId = await sendSystemMessage({
-        chatId,
-        chatMessageId,
-        recipients,
-        event: 'add:members',
-        value: { membersToAdd, updatedMembers },
-        displayable: true,
-      });
-      msgViewOne = {
-        msgId,
-        attachments: [],
-        messageType: 'outgoing',
-        sender: me,
-        body: `[${membersToAdd.join(', ')}]add.members.system.message`,
-        chatId,
-        chatMessageType: 'system',
-        chatMessageId,
-        initialMessageId: null,
-        timestamp: Date.now(),
-        status: 'received',
-      };
+    if ((membersToDelete.length === 0) && (membersToAdd.length === 0)) {
+      return;
     }
+    const membersAfterUpdate = [...membersUntouched, ...membersToAdd];
 
-    if (membersToDelete.length > 0) {
-      const chatMessageId = getRandomId(msgIdLength);
-      const msgId = await sendSystemMessage({
-        chatId,
-        chatMessageId,
-        recipients,
-        event: 'remove:members',
-        value: { membersToDelete, updatedMembers },
-        displayable: true,
-      });
-      msgViewTwo = {
-        msgId,
-        attachments: [],
-        messageType: 'outgoing',
-        sender: me,
-        body: `[${membersToDelete.join(', ')}]remove.members.system.message`,
-        chatId,
-        chatMessageType: 'system',
-        chatMessageId,
-        initialMessageId: null,
-        timestamp: Date.now(),
-        status: 'received',
-      };
+    await chatService.updateGroupMembers(
+      chatIdObj,
+      { membersToDelete, membersToAdd, membersAfterUpdate }
+    );
+  }
+
+  async function ensureAllAddressesExist(members: string[]): Promise<void> {
+    const checks = await Promise.all(members.map(async addr => {
+      const {
+        check, exc
+      } = await chatService.checkAddressExistenceForASMail(addr).then(
+        check => ({ check, exc: undefined }),
+        exc => ({ check: undefined, exc })
+      );
+      return { addr, check, exc }
+    }));
+    const failedAddresses = checks.filter(({ check }) => (check !== 'found'));
+    if (failedAddresses.length > 0) {
+      throw makeChatException({ failedAddresses });
     }
+  }
 
-    msgViewOne && await appChatsSrv.upsertMessage(msgViewOne);
-    msgViewTwo && await appChatsSrv.upsertMessage(msgViewTwo);
+  async function updateGroupAdmins(
+    chatId: string, newAdmins: string[]
+  ): Promise<void> {
 
-    if (chatId === currentChatId.value) {
-      msgViewOne && currentChatMessages.value.push(msgViewOne);
-      msgViewTwo && currentChatMessages.value.push(msgViewTwo);
+    // XXX
+
+    throw new Error(`chatStore updateGroupAdmins() function is not implemented, yet`);
+
+  }
+
+  async function markMessageAsRead(
+    chatId: ChatIdObj, chatMessageId: string
+  ): Promise<void> {
+    await chatService.markMessageAsReadNotifyingSender({
+      chatId, chatMessageId
+    });
+  }
+
+  async function getChatMessage(
+    id: ChatMessageId
+  ): Promise<ChatMessageView|undefined> {
+    return await chatService.getMessage(id);
+  }
+
+  async function getMessageAttachments(
+    info: ChatMessageAttachmentsInfo[], incomingMsgId?: string
+  ): Promise<ReadonlyFile[]> {
+    const files: ReadonlyFile[] = [];
+    if (incomingMsgId) {
+      const msg = await chatService.getIncomingMessage(incomingMsgId);
+      if (msg && msg.attachments) {
+        for (const { name } of info) {
+          const file = await msg.attachments.readonlyFile(name);
+          files.push(file);
+        }
+      }
+    } else {
+      for (const { id } of info) {
+        if (id) {
+          const file = await fileLinkStoreSrv.getFile(id);
+          if (file) {
+            files.push(file as ReadonlyFile);
+          }
+        }
+      }
     }
+    return files;
+  }
+
+  function initialize(userOwnAddr: string) {
+    ownAddr = userOwnAddr;
+    ownCAddr = toCanonicalAddress(ownAddr);
   }
 
   return {
@@ -356,21 +343,46 @@ export const useChatStore = defineStore('chat', () => {
     currentChatMessages: toRO(currentChatMessages),
 
     currentChat,
+    isAdminOfGroupChat,
 
-    getWritableCurrentChatMessageView,
+    absorbMessageUpdateEvent,
 
-    pushMsgIntoCurrentChatMessages,
+    setChatAndFetchMessages,
+    resetCurrentChat,
 
-    fetchChat,
-    deleteMessageInChat,
     deleteAllMessagesInChat,
+
     sendMessageInChat,
+    markMessageAsRead,
+    getChatMessage,
+    getMessageAttachments,
+    deleteMessageInChat,
 
     renameChat,
     leaveChat,
     deleteChat,
-    updateMembers
+    updateGroupMembers,
+    updateGroupAdmins,
+
+    initialize
   };
 });
 
 export type ChatStore = ReturnType<typeof useChatStore>;
+
+export interface ChatException extends web3n.RuntimeException {
+  type: 'chat';
+  failedAddresses?: {
+    addr: string;
+    check?: AddressCheckResult;
+    exc?: any;
+  }[];
+}
+
+function makeChatException(fields: Partial<ChatException>): ChatException {
+  return {
+    ...fields,
+    runtimeException: true,
+    type: 'chat'
+  };
+}

@@ -17,64 +17,59 @@
 
 <script lang="ts" setup>
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { computed, defineAsyncComponent, inject, toRefs } from 'vue';
+import { computed, defineAsyncComponent, inject } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import size from 'lodash/size';
 import {
-  I18nPlugin,
   I18N_KEY,
-  DialogsPlugin,
   DIALOGS_KEY,
-  NotificationsPlugin,
   NOTIFICATIONS_KEY,
 } from '@v1nt1248/3nclient-lib/plugins';
 import { capitalize, prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nButton, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { useAppStore } from '@main/store/app.store';
 import { exportChatMessages } from '@main/utils/chats.helper';
 import { getChatName } from '@main/utils/chat-ui.helper';
-import { videoOpenerSrv } from '@main/services/services-provider';
-import { areAddressesEqual } from '@shared/address-utils';
-import type { ChatView, ChatMessageView, MessageType } from '~/index';
+import { videoOpenerSrv } from '@main/store/external-services';
+import type { ChatMessageView, ChatListItemView } from '~/index';
 import ChatAvatar from './chat-avatar.vue';
 import ChatHeaderActions from './chat-header-actions.vue';
 import { useChatsStore } from '@main/store/chats.store';
 import { useChatStore } from '@main/store/chat.store';
+import { areChatIdsEqual } from '@shared/chat-ids';
 
 const vUi3nHtml = Ui3nHtml;
 
 const props = defineProps<{
-  chat: ChatView & { unread: number } & ChatMessageView<MessageType>;
-  messages: ChatMessageView<MessageType>[];
+  chat: ChatListItemView;
+  messages: ChatMessageView[];
 }>();
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
-const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
+const { $tr } = inject(I18N_KEY)!;
+const dialog = inject(DIALOGS_KEY)!;
+const notification = inject(NOTIFICATIONS_KEY)!;
 
 const router = useRouter();
 
-const { fetchChatList } = useChatsStore();
+const { refreshChatList } = useChatsStore();
 const chatStore = useChatStore();
-const { user } = storeToRefs(useAppStore());
 const { currentChatId } = storeToRefs(chatStore);
 const {
-  fetchChat, deleteAllMessagesInChat, renameChat, leaveChat, deleteChat
+  resetCurrentChat, deleteAllMessagesInChat,
+  renameChat, leaveChat, deleteChat
 } = chatStore;
 
 const text = computed<string>(() => {
-  if (!props.chat.msgId) {
+  if (!props.chat.lastMsg) {
     return '';
   }
-  return prepareDateAsSting(props.chat.timestamp);
+  return prepareDateAsSting(props.chat.lastMsg.timestamp);
 });
-const isGroupChat = computed<boolean>(() => size(props.chat.members) > 2);
+const isGroupChat = computed<boolean>(() => props.chat.isGroupChat);
 
 async function runChatHistoryExporting() {
   const result = await exportChatMessages({
     chatName: props.chat.name,
-    members: props.chat.members,
+    isGroupChat: props.chat.isGroupChat,
     messages: props.messages,
   });
   if (result !== undefined) {
@@ -92,7 +87,7 @@ async function runChatHistoryCleaning() {
     dialogProps: {
       title: $tr('chat.history.clean.dialog.title'),
       onConfirm: async () => {
-        await deleteAllMessagesInChat(props.chat.chatId);
+        await deleteAllMessagesInChat(props.chat);
       },
     },
   });
@@ -135,8 +130,8 @@ function runChatRenaming() {
 }
 
 async function closeChat() {
+  resetCurrentChat();
   await router.push('/chats');
-  await fetchChat(null);
 }
 
 function runChatDeleting() {
@@ -154,12 +149,12 @@ function runChatDeleting() {
       cancelButtonColor: 'var(--color-text-button-primary-default)',
       cancelButtonBackground: 'var(--color-bg-button-primary-default)',
       onConfirm: async () => {
-        await deleteChat(props.chat.chatId);
-        if (props.chat.chatId === currentChatId.value) {
+        await deleteChat(props.chat);
+        if (areChatIdsEqual(currentChatId.value, props.chat)) {
+          resetCurrentChat();
           await router.push('/chats');
-          await fetchChat(null);
         }
-        await fetchChatList();
+        await refreshChatList();
       },
     },
   });
@@ -180,31 +175,20 @@ function runChatLeave() {
       cancelButtonColor: 'var(--color-text-button-primary-default)',
       cancelButtonBackground: 'var(--color-bg-button-primary-default)',
       onConfirm: async () => {
-        await leaveChat(props.chat.chatId);
-        if (props.chat.chatId === currentChatId.value) {
+        await leaveChat(props.chat);
+        if (areChatIdsEqual(currentChatId.value, props.chat)) {
+          resetCurrentChat();
           await router.push('/chats');
-          await fetchChat(null);
         }
-        await fetchChatList();
+        await refreshChatList();
       },
     },
   });
 }
 
-// XXX note that respective button is disabled for group chat till webRTC
-//     connectivity to many at once is settled.
 async function startVideoCall(): Promise<void> {
-  const { chatId, name: chatName, members } = props.chat;
-  console.log('startVideoCall: ', chatId, chatName, members);
-  const ownName = user.value.substring(0, user.value.indexOf('@'));
-
-  const peers = members
-    .filter(addr => !areAddressesEqual(addr, user.value))
-    .map(addr => ({
-      addr,
-      name: addr.substring(0, addr.indexOf('@')),
-    }));
-  await videoOpenerSrv.startVideoCallForChatRoom(chatId);
+  const { isGroupChat, chatId } = props.chat;
+  await videoOpenerSrv.startVideoCallForChatRoom({ isGroupChat, chatId });
 }
 
 const actionsHandlers: any = {
@@ -245,13 +229,12 @@ async function selectAction(compositeAction: string) {
       </div>
 
       <div
-        v-ui3n-html.sanitize="chat.timestamp ? $tr('chat.header.info', { date: text }) : ''"
+        v-ui3n-html.sanitize="chat.lastMsg?.timestamp ? $tr('chat.header.info', { date: text }) : ''"
         :class="$style.chatHeaderInfo"
       />
     </div>
 
     <ui3n-button
-      v-if="!isGroupChat"
       type="custom"
       color="var(--color-bg-button-tritery-default)"
       icon="round-phone"

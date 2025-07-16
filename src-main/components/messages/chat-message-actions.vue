@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,14 +19,14 @@
 import { computed, onBeforeMount, ref, watch } from 'vue';
 import { Ui3nClickOutside, Ui3nIcon } from '@v1nt1248/3nclient-lib';
 import { chatMsgActionElementHeight } from '@main/constants';
-import type { ChatMessageAction, ChatMessageActionType, ChatMessageView, MessageType } from '~/index';
+import type { ChatMessageAction, ChatMessageActionType, ChatMessageView } from '~/index';
 
 const vUi3nClickOutside = Ui3nClickOutside;
 
 const props = defineProps<{
   open: boolean;
   actions: Omit<ChatMessageAction, 'conditions'>[];
-  msg: ChatMessageView<MessageType>;
+  msg: ChatMessageView;
   menuProps?: {
     width?: number | string;
     maxHeight?: number | string;
@@ -81,8 +81,8 @@ async function handleAction(action: ChatMessageActionType) {
     :class="[
       $style.chatMessageActions,
       displayUp && $style.up,
-      (!msg.messageType || msg.messageType === 'outgoing') && $style.left,
-      msg.messageType === 'incoming' && $style.right,
+      !msg.incomingMsgId && $style.left,
+      !!msg.incomingMsgId && $style.right,
     ]"
   >
     <div

@@ -15,9 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { createApp } from 'vue';
+import { App } from 'vue';
 import { createPinia } from 'pinia';
-import { router } from './router';
+import { Router } from 'vue-router';
 import {
   dialogs,
   i18n,
@@ -28,18 +28,15 @@ import {
   storeNotifications,
   vueBus,
 } from '@v1nt1248/3nclient-lib/plugins';
-import App from './views/app.vue';
 
 import en from './data/i18/en.json';
 
-export function setupMainApp() {
+export function setupMainApp(app: App<Element>, router: Router) {
 
   const pinia = createPinia();
   pinia.use(storeVueBus);
   pinia.use(storeI18n);
   pinia.use(storeNotifications);
-
-  const app = createApp(App);
 
   app.config.globalProperties.$router = router;
   app.config.compilerOptions.isCustomElement = tag => {
@@ -54,5 +51,4 @@ export function setupMainApp() {
   .use(notifications)
   .use(router);
 
-  return { app, router };
 }

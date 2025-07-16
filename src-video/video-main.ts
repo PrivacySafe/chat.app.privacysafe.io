@@ -16,7 +16,7 @@
 */
 
 import { createApp } from 'vue';
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHashHistory } from 'vue-router';
 import { createPinia } from 'pinia';
 import {
   dialogs,
@@ -45,7 +45,7 @@ const srvStart = VideoChat.startService();
 const app = createApp(VideoApp);
 const pinia = createPinia();
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes: [
     { path: '/', redirect: '/va-setup' },
     { path: '/video-chat.html', redirect: '/va-setup' },

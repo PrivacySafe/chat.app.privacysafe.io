@@ -1,9 +1,24 @@
+/*
+ Copyright (C) 2020 - 2025 3NSoft Inc.
+
+ This program is free software: you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation, either version 3 of the License, or (at your option) any later
+ version.
+
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ See the GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License along with
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import dayjs from 'dayjs';
 import { isEmpty, size } from 'lodash';
-import { addFileTo } from '../services/base/attachments-container';
 import { html2text } from '@v1nt1248/3nclient-lib/utils';
-import { getContactName } from './contacts.helper';
 import { messageActions } from '../constants';
 import type {
   AttachmentsContainer,
@@ -11,17 +26,10 @@ import type {
   ChatMessageAttachmentsInfo,
   ChatMessageView,
   FileWithId,
-  MessageType,
-  MessageDeliveryStatus,
+  MessageStatus,
 } from '~/index';
-
-export function createAttachmentsContainer(files: web3n.files.ReadonlyFile[]): AttachmentsContainer {
-  const container = {} as AttachmentsContainer;
-  for (const file of files) {
-    addFileTo(container, file);
-  }
-  return container;
-}
+import { useContactsStore } from '@main/store/contacts.store';
+import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from './chat-ui.helper';
 
 export async function getAttachmentFilesInfo(
   { files, incomingAttachments, outgoingAttachments }:
@@ -30,9 +38,9 @@ export async function getAttachmentFilesInfo(
       incomingAttachments?: web3n.files.ReadonlyFS,
       outgoingAttachments?: AttachmentsContainer
     },
-): Promise<ChatMessageAttachmentsInfo[] | null> {
+): Promise<ChatMessageAttachmentsInfo[] | undefined> {
   if (isEmpty(files) && isEmpty(incomingAttachments) && isEmpty(outgoingAttachments)) {
-    return null;
+    return;
   }
 
   const filesInfo = [] as ChatMessageAttachmentsInfo[];
@@ -63,19 +71,24 @@ export async function getAttachmentFilesInfo(
 }
 
 export async function exportChatMessages(
-  { chatName, members = [], messages = [] }:
-    { chatName: string, members: string[], messages: ChatMessageView<MessageType>[] },
+  { chatName, isGroupChat, messages = [] }:
+    { chatName: string, isGroupChat: boolean, messages: ChatMessageView[] },
 ): Promise<boolean | undefined> {
+  const { getContactName } = useContactsStore();
   const chatContent = messages
     .sort((a, b) => a.timestamp - b.timestamp)
     .map(m => {
       const dateValue = dayjs(m.timestamp);
       const dateTime = dateValue.format('YYYY-MM-DD HH:mm:ss');
       const author = getContactName(m.sender);
-      const text = html2text(m.body);
-      const attachInfo = isEmpty(m.attachments)
-        ? ''
-        : m.attachments!.map(i => i.name).join(', ');
+      const { chatMessageType: type } = m;
+      const text = ((type === 'system') ? getTextForChatSystemMessage(m) :
+        (type === 'invitation') ? getTextForChatInvitationMessage(m) :
+        html2text(m.body)
+      );
+      const attachInfo = (
+        (m.chatMessageType !== 'regular') || isEmpty(m.attachments)
+      ) ? '' : m.attachments!.map(i => i.name).join(', ');
       let value = `${dateTime} ${author}(${m.sender})`;
       if (text) {
         value += `\n${text}`;
@@ -88,7 +101,7 @@ export async function exportChatMessages(
     })
     .join('\n');
 
-  const fileName = size(members) === 2 ? getContactName(chatName) : chatName;
+  const fileName = isGroupChat ? chatName : getContactName(chatName);
   if (w3n.shell?.fileDialogs?.saveFileDialog) {
     const outFile = await w3n.shell?.fileDialogs?.saveFileDialog(
       'Export chat history',
@@ -107,31 +120,14 @@ export async function exportChatMessages(
   }
 }
 
-export function chatMessagesByType(
-  messages: ChatMessageView<MessageType>[]
-): { incomingMessages: string[], outgoingMessages: string[] } {
-  return messages.reduce(
-    (res, m) => {
-    const { msgId, messageType } = m;
-    if (messageType === 'incoming') {
-      res.incomingMessages.push(msgId);
-    } else {
-      res.outgoingMessages.push(msgId);
-    }
-    return res;
-    },
-    {
-      incomingMessages: [] as string[],
-      outgoingMessages: [] as string[]
-    }
-  );
-}
-
-function checkAction(
-  { messageType, status, hasAttachments, condition }:
-    { messageType: MessageType, status: MessageDeliveryStatus | undefined, hasAttachments: boolean, condition: string },
-): boolean {
+function checkAction({ 
+  messageType, status, hasAttachments, condition
+}: {
+  messageType: 'incoming' | 'outgoing',
+  status: MessageStatus | undefined, hasAttachments: boolean, condition: string
+}): boolean {
   const [msgType, msgStatusAsString, areAttachmentsPresent] = condition.split(':');
+  // messageType
   const typeMatches = messageType === msgType;
   let statusMatches;
   let attachmentsMatche;
@@ -154,9 +150,10 @@ function checkAction(
 }
 
 export function getMessageActions(
-  msg: ChatMessageView<MessageType>, $tr: (txt: string) => string
+  msg: ChatMessageView, $tr: (txt: string) => string
 ): Omit<ChatMessageAction, 'conditions'>[] {
-  const { messageType, status, attachments } = msg;
+  const { incomingMsgId, status } = msg;
+  const messageType = (incomingMsgId ? 'incoming' : 'outgoing');
   return messageActions
   .filter(action => {
     const { conditions, disabled = false } = action;
@@ -170,8 +167,9 @@ export function getMessageActions(
 
     let isAllowedAction = false;
     for (const condition of conditions) {
+      const hasAttachments = (msg.chatMessageType === 'regular') && !!size(msg.attachments);
       isAllowedAction = isAllowedAction
-        || checkAction({ messageType, status, hasAttachments: !!size(attachments), condition });
+        || checkAction({ messageType, status, hasAttachments, condition });
       if (isAllowedAction) {
         break;
       }

@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,13 +18,12 @@
 <script lang="ts" setup>
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { watch } from 'vue';
-import { useRouter } from 'vue-router';
 import useChatMessages from './useChatMessages';
 import type { ChatMessagesProps, ChatMessagesEmits } from './types';
 import ChatMessage from '../chat-message.vue';
 import ChatMessageActions from '../chat-message-actions.vue';
+import { RegularMsgView } from '~/chat.types';
 
-const router = useRouter();
 const props = defineProps<ChatMessagesProps>();
 const emit = defineEmits<ChatMessagesEmits>();
 
@@ -60,9 +59,10 @@ watch(
   >
     <chat-message
       v-for="(item, index) in props.messages"
-      :key="item.chatMessageId"
+      :key="item.templateIteratorKey"
       :msg="item"
       :prev-msg-sender="index === 0 ? '' : props.messages[index - 1].sender"
+      :related-message="(item as RegularMsgView).relatedMessage"
     />
 
     <teleport

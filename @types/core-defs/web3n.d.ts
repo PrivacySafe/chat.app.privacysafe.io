@@ -47,7 +47,7 @@ declare namespace web3n {
 		type: 'http-request';
 		status: number;
 	}
-
+	
 	interface EncryptionException {
 		failedCipherVerification?: true;
 		failedSignatureVerification?: true;

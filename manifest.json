@@ -1,7 +1,7 @@
 {
   "name": "Chat",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.9.6",
+  "version": "0.10.0",
   "icon": "logo.png",
   "description": "Send secure text messages, share files or start a video meeting.",
 
@@ -15,6 +15,9 @@
         "logout": "all",
         "log": "all",
         "mailerid": true,
+        "mail": {
+          "preflightsTo": "all"
+        },
         "shell": {
           "fileDialog": "all",
           "userNotifications": true,
@@ -31,7 +34,6 @@
         },
         "appRPC": [
           "AppChatsInternal",
-          "ChatDeliveryService",
           "VideoGUIOpener"
         ],
         "otherAppsRPC": [
@@ -75,9 +77,6 @@
       "runtime": "web-gui",
       "capsRequested": {
         "mailerid": true,
-        "appRPC": [
-          "WebRTCSignalingCAP"
-        ],
         "shell": {
           "fsResource": {
             "otherApps": {
@@ -106,27 +105,15 @@
             "/index.html"
           ]
         },
-        "ChatDeliveryService": {
-          "thisAppComponents": [
-            "/index.html"
-          ]
-        },
         "VideoGUIOpener": {
           "thisAppComponents": [
             "/index.html"
-          ]
-        },
-        "WebRTCSignalingCAP": {
-          "thisAppComponents": [
-            "/video-chat.html"
           ]
         }
       },
       "runtime": "deno",
       "capsRequested": {
         "appRPC": [
-          "AppChatsInternal",
-          "ChatDeliveryService",
           "VideoChatComponent"
         ],
         "log": "all",
@@ -152,6 +139,23 @@
       }
     }
   },
+
+  "launchers": [
+    {
+      "name": "Chat",
+      "icon": "logo.png",
+      "description": "Send secure text messages, share files or start a video meeting.",
+      "component": "/index.html",
+      "formFactor": [ "desktop", "tablet" ]
+    },
+    {
+      "name": "Chat",
+      "icon": "logo.png",
+      "description": "Send secure text messages, share files or start a video meeting.",
+      "component": "/index.html",
+      "formFactor": "phone"
+    }
+  ],
 
   "launchOnSystemStartup": [
     {

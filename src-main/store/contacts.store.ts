@@ -17,9 +17,11 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 
 import { defineStore } from 'pinia';
 import { Person, PersonView } from '~/contact.types';
-import { appContactsSrv } from '@main/services/services-provider';
+import { appContactsSrv } from '@main/store/external-services';
 import { ref } from 'vue';
 import { toRO } from '@main/utils/readonly';
+import { areAddressesEqual } from '@shared/address-utils';
+import { ensureASMailAddressExists, makeContactsException } from './contacts/contact-checks';
 
 export const useContactsStore = defineStore('contacts', () => {
 
@@ -40,6 +42,11 @@ export const useContactsStore = defineStore('contacts', () => {
   }
 
   async function addContact(mail: string): Promise<void> {
+    const known = await appContactsSrv.isThereContactWithTheMail(mail);
+    if (known) {
+      throw makeContactsException({ contactAlreadyExists: true });
+    }
+    await ensureASMailAddressExists(mail);
     const person: Person = {
       id: 'new',
       name: '',
@@ -51,12 +58,21 @@ export const useContactsStore = defineStore('contacts', () => {
     await fetchContacts();
   }
 
+  function getContactName(mail: string): string {
+    const contact = contactList.value.find(
+      c => areAddressesEqual(c.mail, mail)
+    );
+    return contact ? contact.displayName : mail;
+  }
+
   return {
     contactList: toRO(contactList),
 
     initialize: fetchContacts,
     fetchContacts,
-    addContact
+    addContact,
+
+    getContactName
   };
 });
 

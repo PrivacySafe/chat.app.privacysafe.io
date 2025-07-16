@@ -15,7 +15,7 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { DIALOGS_KEY, DialogsPlugin, I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { DIALOGS_KEY, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { useStreamsStore } from '@video/store/streams.store';
 import { EmitFn, defineAsyncComponent, inject, onBeforeMount, onBeforeUnmount, ref } from 'vue';
 import { ScreenShareOption, SharedStream, WindowShareOption } from '@video/components/types';
@@ -27,8 +27,8 @@ export function screenSharingChoiceDialogMaker() {
   const component = defineAsyncComponent(
     () => import('./screen-share-choice-dialog.vue')
   );
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
+  const { $tr } = inject(I18N_KEY)!;
+  const dialog = inject(DIALOGS_KEY)!;
   const streams = useStreamsStore();
   const { ownScreens, isSharingOwnDeskSound } = storeToRefs(streams);
   const { removeOwnScreen, addOwnScreen, setOwnDeskSoundSharing } = streams;

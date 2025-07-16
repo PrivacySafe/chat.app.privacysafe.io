@@ -16,91 +16,84 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 import { defineStore } from 'pinia';
-import { ChatListItemView, ChatMessageView, ChatView, MessageType } from '~/chat.types';
+import { ChatIdObj, ChatMessageId } from '~/asmail-msgs.types';
+import { ChatListItemView } from '~/chat.types';
 import { IncomingCallCmdArg } from '~/chat-commands.types';
 import { getChatName } from '@main/utils/chat-ui.helper';
-import { appChatsSrv, appDeliverySrv } from '@main/services/services-provider';
+import { chatService } from '@main/store/external-services';
 import { includesAddress, toCanonicalAddress } from '@shared/address-utils';
 import { computed, ref } from 'vue';
-import { toRO } from '@main/utils/readonly';
-import { handleUpdateMessageStatus, startMessagesProcessing } from './chats/messages-processing';
-import { SystemMessageHandlerParams } from '~/app.types';
 import { ChatStore, useChatStore } from './chat.store';
-import { AddressCheckResult } from '~/services.types';
+import { AddressCheckResult, ChatEvent, UpdateEvent } from '~/services.types';
+import { areChatIdsEqual } from '@shared/chat-ids';
+import { randomStr } from '@shared/randomStr';
+import { SingleProc } from '@shared/processes/single';
+import { useRouting } from '@main/composables/useRouting';
+import { setTemplateIteratorKeyIn } from '@main/utils/template-iterator-keys';
 
 export const useChatsStore = defineStore('chats', () => {
 
-  const chatList = ref<Record<string, ChatListItemView>>({});
+  const { getChatIdFromRoute, goToChatsRoute } = useRouting();
+
+  const chatList = ref<ChatListItemView[]>([]);
   const newChatDialogFlag = ref(false);
   const incomingCalls = ref<IncomingCallCmdArg[]>([]);
 
-  const namedChatList = computed(() => Object.values(chatList.value)
+  const chatListSortedByTime = computed(() => chatList.value
     .map(c => ({
       ...c,
       displayName: getChatName(c),
     }))
     .sort((a, b) => {
-      const tA = a.timestamp || a.createdAt;
-      const tB = b.timestamp || b.createdAt;
+      const tA = a.lastMsg?.timestamp || a.createdAt;
+      const tB = b.lastMsg?.timestamp || b.createdAt;
       return tB - tA;
     })
   );
+
+  function getChatView(chatId: ChatIdObj): ChatListItemView|undefined {
+    return chatList.value.find(cv => areChatIdsEqual(cv, chatId));
+  }
 
   function clearIncomingCallsData() {
     incomingCalls.value = [];
   }
 
-  function getMessage(msgId: string) {
-    return appDeliverySrv.getMessage(msgId);
-  }
-
-  function getChatsWith(member: string) {
-    return Object.values(chatList.value)
-    .filter(({ members }) => includesAddress(members, member))
-    .map(({ chatId }) => chatId);
-  }
-
-  async function getChatMessage(
-    { msgId, chatMessageId }: { msgId?: string, chatMessageId?: string },
-  ): Promise<ChatMessageView<MessageType> | null> {
-    if (chatMessageId) {
-      return appChatsSrv.getMessage({ chatMsgId: chatMessageId });
-    }
-  
-    if (msgId) {
-      return appChatsSrv.getMessage({ msgId });
-    }
-  
-    return null;
-  }
-
   let ownCAddr: string;
+  let ownAddr: string;
 
-  async function createChat(
-    { chatId, members, admins, name = '' }: {
-      chatId?: string, members: string[], admins: string[], name?: string
+  async function createNewOneToOneChat(
+    name: string, peerAddr: string, ownName?: string
+  ): Promise<ChatIdObj> {
+    await ensureAllAddressesExist([ peerAddr ]);
+    if (!ownName) {
+      ownName = ownAddr.substring(0, ownAddr.indexOf('@'));
     }
-  ): Promise<string> {
-    await ensureAllAddressesExist(members.filter(
+    return await chatService.createOneToOneChat({ name, peerAddr, ownName });
+  }
+
+  async function createNewGroupChat(
+    name: string, groupMembers: string[]
+  ): Promise<ChatIdObj> {
+    if (!includesAddress(groupMembers, ownAddr)) {
+      groupMembers = groupMembers.concat(ownAddr);
+    }
+    await ensureAllAddressesExist(groupMembers.filter(
       member => (toCanonicalAddress(member) !== ownCAddr)
     ));
-    let newChatId = '';
-    try {
-      newChatId = await appChatsSrv.createChat({
-        chatId, members, admins, name
-      });
-      await fetchChatList();
-    } catch (e) {
-      console.error('CREATE CHAT ERROR: ', e);
-    }
-    return newChatId;
+    return await chatService.createGroupChat({
+      name,
+      chatId: randomStr(20),
+      members: groupMembers,
+      admins: [ ownAddr ]
+    });
   }
 
   async function ensureAllAddressesExist(members: string[]): Promise<void> {
     const checks = await Promise.all(members.map(async addr => {
       const {
         check, exc
-      } = await appDeliverySrv.checkAddressExistenceForASMail(addr).then(
+      } = await chatService.checkAddressExistenceForASMail(addr).then(
         check => ({ check, exc: undefined }),
         exc => ({ check: undefined, exc })
       );
@@ -112,17 +105,97 @@ export const useChatsStore = defineStore('chats', () => {
     }
   }
 
-  async function fetchChatList() {
-    const chatLst = await appChatsSrv.getChatList();
-    const unreadMessagesCount = await appChatsSrv.getChatsUnreadMessagesCount();
-  
-    chatList.value = chatLst.reduce((r, item) => {
-      r[item.chatId] = {
-        ...item,
-        unread: unreadMessagesCount[item.chatId] || 0,
-      };
-      return r;
-    }, {} as Record<string, ChatView & { unread: number } & ChatMessageView<MessageType>>);
+  async function acceptChatInvitation(
+    { chatId, chatMessageId }: ChatMessageId, ownName?: string
+  ): Promise<void> {
+    try {
+      if (!ownName) {
+        ownName = ownAddr.substring(0, ownAddr.indexOf('@'));
+      }
+      return await chatService.acceptChatInvitation(
+        chatId, chatMessageId, ownName
+      );
+    } catch (err) {
+      console.error(`Accepting chat invite failed with`, err);
+      throw err;
+    }
+  }
+
+  async function refreshChatList() {
+    const lst = await chatService.getChatList();
+    for (const item of lst) {
+      const initItem = chatList.value.find(c => (item.chatId === c.chatId));
+      setTemplateIteratorKeyIn(item, initItem ?? item.chatId);
+    }
+    chatList.value = lst;
+    resetRouteIfItPointsToRemovedChat();
+  }
+
+  function resetRouteIfItPointsToRemovedChat(): void {
+    const chatInRoute = getChatIdFromRoute();
+    if (chatInRoute) {
+      const foundChat = chatList.value.find(
+        c => (c.chatId === chatInRoute.chatId)
+      );
+      if (!foundChat) {
+        goToChatsRoute();
+      }
+    }
+  }
+
+  function findIndexOfChatInCurrentList(chatId: ChatIdObj): number {
+    return chatList.value.findIndex(
+      c => areChatIdsEqual(c, chatId)
+    );
+  }
+
+  const updatesQueue: UpdateEvent[] = [];
+  const updatesProc = new SingleProc();
+
+  async function processQueuedUpdateEvents(): Promise<void> {
+    while (updatesQueue.length > 0) {
+      const event = updatesQueue.pop()!;
+      try {
+        if (event.updatedEntityType === 'chat') {
+          await absorbChatUpdateEvent(event);
+        } else if (event.updatedEntityType === 'message') {
+          await absorbMessageUpdateEvent(event);
+        } else {
+          console.log(`Unknown update event from ChatService:`, event);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+
+  async function absorbChatUpdateEvent(event: ChatEvent): Promise<void> {
+    if (event.event === 'updated') {
+      const { chat } = event;
+      const chatInd = findIndexOfChatInCurrentList(chat);
+      if (chatInd < 0) {
+        await refreshChatList();
+      } else {
+        setTemplateIteratorKeyIn(chat, chatList.value[chatInd]);
+        chatList.value[chatInd] = chat;
+      }
+    } else if (event.event === 'added') {
+      const { chat } = event;
+      const chatInd = findIndexOfChatInCurrentList(chat);
+      if (chatInd < 0) {
+        setTemplateIteratorKeyIn(chat, chat.chatId);
+        chatList.value.unshift(chat);
+      } else {
+        await refreshChatList();
+      }
+    } else if (event.event === 'removed') {
+      const { chatId } = event;
+      const chatInd = findIndexOfChatInCurrentList(chatId);
+      if (chatInd >= 0) {
+        chatList.value.splice(chatInd, 1);
+      }
+      resetRouteIfItPointsToRemovedChat();
+    }
   }
 
   function setChatDialogFlag(value: boolean) {
@@ -133,46 +206,46 @@ export const useChatsStore = defineStore('chats', () => {
     incomingCalls.value.push(cmd);
   }
 
+  let absorbMessageUpdateEvent: ChatStore['absorbMessageUpdateEvent'];
   let stopMessagesProcessing: (() => void)|undefined = undefined;
 
-  async function initialize(ownAddr: string) {
+  async function initialize(userOwnAddr: string) {
+    ownAddr = userOwnAddr;
     ownCAddr = toCanonicalAddress(ownAddr);
-    await fetchChatList();
-    stopMessagesProcessing = await startMessagesProcessing();
+    const chatStore = useChatStore();
+    chatStore.initialize(userOwnAddr);
+    absorbMessageUpdateEvent = chatStore.absorbMessageUpdateEvent;
+    stopMessagesProcessing = chatService.watch({
+      next: updateEvent => {
+        updatesQueue.push(updateEvent);
+        if (!updatesProc.getP()) {
+          updatesProc.start(processQueuedUpdateEvents);
+        }
+      },
+      complete: () => console.log(`Observation of updates events from ChatService completed.`),
+      error: err => console.error(`Error occured in observation of updates events from ChatService:`, err)
+    });
+    await refreshChatList();
   }
 
   function stopWatching() {
     stopMessagesProcessing?.();
   }
 
-  let getWritableCurrentChatMessageView: ChatStore['getWritableCurrentChatMessageView']|undefined = undefined;;
-
-  async function updateMessageStatus(
-    { msgId, chatMessageId, value }: SystemMessageHandlerParams
-  ): Promise<void> {
-    if (!getWritableCurrentChatMessageView) {
-      ({ getWritableCurrentChatMessageView } = useChatStore());
-    }
-    await handleUpdateMessageStatus(
-      getWritableCurrentChatMessageView,
-      { msgId, chatMessageId, value }
-    );
-  }
-
   return {
-    chatList: toRO(chatList),
+    chatListSortedByTime,
 
-    namedChatList,
+    getChatView,
 
     clearIncomingCallsData,
-    getMessage,
-    getChatsWith,
-    getChatMessage,
-    createChat,
-    fetchChatList,
-    setChatDialogFlag,
     setIncomingCallsData,
-    updateMessageStatus,
+
+    createNewOneToOneChat,
+    createNewGroupChat,
+    acceptChatInvitation,
+
+    refreshChatList,
+    setChatDialogFlag,
 
     initialize,
     stopWatching
@@ -182,7 +255,7 @@ export const useChatsStore = defineStore('chats', () => {
 export type ChatsStore = ReturnType<typeof useChatsStore>;
 
 export interface ChatCreationException extends web3n.RuntimeException {
-  type: 'chat-creation'
+  type: 'chat-creation';
   failedAddresses: {
     addr: string;
     check?: AddressCheckResult;

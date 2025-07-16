@@ -20,12 +20,17 @@ import '@v1nt1248/3nclient-lib/style.css';
 import './assets/styles/main.css';
 
 import { setupMainApp } from './app-setup';
-import { initializeServices } from './services/services-provider';
-import { ChatCommandsHandler } from './services/commands-handler';
+import { initializeServices } from './store/external-services';
+import { ChatCommandsHandler } from './commands-handler';
+
+import App from './views/app.vue';
+import { router } from './router';
+import { createApp } from 'vue';
 
 initializeServices()
 .then(async () => {
-  const { app, router } = setupMainApp();
+  const app = createApp(App);
+  setupMainApp(app, router);
   app.mount('#main');
   await ChatCommandsHandler.start(router);
 });

@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2020 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,36 +17,48 @@
 
 <script lang="ts" setup>
 import { computed, inject, ref } from 'vue';
-import { I18nPlugin, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nInput } from '@v1nt1248/3nclient-lib';
-import { readonlyContactIds } from '@main/constants';
 import ChatAvatar from '../chat/chat-avatar.vue';
 import ContactIcon from '../contacts/contact-icon.vue';
 import { useChatsStore } from '@main/store/chats.store';
 import { useContactsStore } from '@main/store/contacts.store';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '@main/store/chat.store';
+import { areChatIdsEqual } from '@shared/chat-ids';
+import { ChatIdObj } from '~/asmail-msgs.types';
+import { toCanonicalAddress } from '@shared/address-utils';
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const { $tr } = inject(I18N_KEY)!;
 const emit = defineEmits(['select', 'confirm']);
 
 const { contactList } = useContactsStore();
-const { namedChatList } = storeToRefs(useChatsStore());
+const { chatListSortedByTime } = storeToRefs(useChatsStore());
 const { currentChatId } = storeToRefs(useChatStore());
 
 const searchText = ref('');
 
-const filteredContactList = computed(() => contactList
-  .filter(c => (c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
-    && !readonlyContactIds.includes(c.id))));
-
-const filteredChatList = computed(() => namedChatList.value.filter(c => (
-  c.displayName.toLowerCase().includes(searchText.value.toLowerCase()) &&
-  (c.chatId !== currentChatId.value)
+const oneToOneChats = computed(() => chatListSortedByTime.value.filter(c => (
+  c.displayName.toLowerCase().includes(searchText.value.toLowerCase()) && areChatIdsEqual(currentChatId.value, c)
 )));
 
-function selectItem({ type, data }: { type: 'chat' | 'contact', data: string }) {
-  emit('select', { type, data });
+const contactsWithoutOTOChats = computed(() => contactList.filter(c => {
+  const cAddr = toCanonicalAddress(c.mail);
+  return !oneToOneChats.value.find(({ chatId }) => (chatId === cAddr));
+}));
+
+const filteredContactList = computed(() => contactsWithoutOTOChats.value.filter(
+  c => c.displayName.toLowerCase().includes(searchText.value.toLowerCase())
+));
+
+const filteredChatList = computed(() => chatListSortedByTime.value.filter(c => (
+  c.displayName.toLowerCase().includes(searchText.value.toLowerCase()) && areChatIdsEqual(currentChatId.value, c)
+)));
+
+function selectItem({
+  chatId, contact
+}: { chatId?: ChatIdObj; contact?: { mail: string; name: string; } }) {
+  emit('select', { chatId, contact });
   emit('confirm');
 }
 </script>
@@ -70,11 +82,13 @@ function selectItem({ type, data }: { type: 'chat' | 'contact', data: string }) 
           v-for="chat in filteredChatList"
           :key="chat.chatId"
           :class="$style.messageForwardDialogItem"
-          @click="selectItem({ type: 'chat', data: chat.chatId })"
+          @click="selectItem({
+            chatId: { isGroupChat: chat.isGroupChat, chatId: chat.chatId }
+          })"
         >
           <chat-avatar
             :name="chat.displayName"
-            :shape="chat.members.length > 2 ? 'decagon' : 'circle'"
+            :shape="chat.isGroupChat ? 'decagon' : 'circle'"
             :size="28"
           />
           <div :class="$style.messageForwardDialogItemName">
@@ -98,7 +112,9 @@ function selectItem({ type, data }: { type: 'chat' | 'contact', data: string }) 
           v-for="contact in filteredContactList"
           :key="contact.id"
           :class="$style.messageForwardDialogItem"
-          @click="selectItem({ type: 'contact', data: contact.mail })"
+          @click="selectItem({
+            contact: { mail: contact.mail, name: contact.displayName }
+          })"
         >
           <contact-icon
             :name="contact.displayName"

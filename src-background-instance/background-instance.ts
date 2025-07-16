@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024 3NSoft Inc.
+ Copyright (C) 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,10 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { setupAndStartChatDeliveryService } from './chat-delivery-srv.ts';
-import { setupAndStartAppChatsInternalService } from './chats-internal-srv.ts';
+import { ChatDeliveryService } from './chat-delivery-srv.ts';
+import { ChatService } from './chat-service/index.ts';
 import { setupGlobalReportingOfUnhandledErrors } from '../shared-libs/error-handling.ts';
-import { setupAndStartVideoGUIOpener } from './video-gui-controller.ts';
+import { setupAndStartVideoGUIOpener } from './video-chat/index.ts';
 import { ensureDefaultAnonSenderMaxMsgSize } from './workarounds.ts';
 
 setupGlobalReportingOfUnhandledErrors(true);
@@ -27,12 +27,19 @@ try {
 
   const ownAddr = await w3n.mailerid!.getUserId();
 
-  const chatsSrv = await setupAndStartAppChatsInternalService();
+  const {
+    chats, stopChatsService
+  } = await ChatService.setupAndStartServing(ownAddr);
 
-  const webrtcSignalsHandler = setupAndStartVideoGUIOpener(ownAddr, chatsSrv);
+  const webrtcMsgsHandler = setupAndStartVideoGUIOpener(
+    ownAddr,
+    chats.findChatEntry.bind(chats)
+  );
 
-  const deliverySrv = await setupAndStartChatDeliveryService(
-    webrtcSignalsHandler,
+  const stopDeliveryService = await ChatDeliveryService.setupAndStartServing(
+    chats.makeChatMessagesHandler(),
+    webrtcMsgsHandler,
+    chats.getLatestIncomingMsgTimestamp()
   );
 
 } catch (err) {
