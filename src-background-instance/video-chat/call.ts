@@ -15,11 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { toCanonicalAddress } from "../../shared-libs/address-utils.ts";
-import { WebRTCMsg, ChatInfoForCall, CallFromVideoGUI, VideoChatEvent, WebRTCOffBandMessage } from "../../types/index.ts";
-import { WebRTCSignalingPeerChannel } from "./signalling-channels.ts";
-import { VideoComponentInstance } from "./video-component-instance.ts";
-
+import { toCanonicalAddress } from '../../shared-libs/address-utils.ts';
+import { WebRTCMsg, ChatInfoForCall, CallFromVideoGUI, VideoChatEvent } from '../../types/index.ts';
+import { WebRTCSignalingPeerChannel } from './signalling-channels.ts';
+import { VideoComponentInstance } from './video-component-instance.ts';
+import { ChatService } from '@bg/chat-service';
 
 export interface Peer {
   peerName: string;
@@ -36,15 +36,18 @@ export class CallInChat {
   constructor(
     private readonly info: ChatInfoForCall,
     private readonly sinkGUIEvent: (event: VideoChatEvent) => void,
-    private readonly detachFromParent: () => void
+    private readonly detachFromParent: () => void,
+    private readonly postProcessingForVideoChat: ChatService['postProcessingForVideoChat'],
   ) {
     for (const { name: peerName, addr: peerAddr } of info.peers) {
       const channel = new WebRTCSignalingPeerChannel(
-        this.info.ownAddr, this.info.chatId, peerAddr
+        this.info.ownAddr,
+        this.info.chatId,
+        peerAddr,
       );
       this.peers.set(
         toCanonicalAddress(peerAddr),
-        { peerName, peerAddr, channel }
+        { peerName, peerAddr, channel },
       );
     }
   }
@@ -60,20 +63,25 @@ export class CallInChat {
   async startCall(): Promise<void> {
     if (this.callStage === 'done') {
       return;
-    } else if (this.callStage === 'not-started') {
+    }
+
+    if (this.callStage === 'not-started') {
       this.callStage = 'calling';
     }
+
     if (this.guiInstance) {
       await this.guiInstance.focusWindow();
     } else {
-      const {
-        instance, startProc
-      } = await VideoComponentInstance.makeAndStart(this.info, {
-        next: this.onRequestCallFromVideoGUI.bind(this),
-        complete: this.onGUIComplete.bind(this),
-        error: this.onGUIError.bind(this)
-      });
+      const { instance, startProc } = await VideoComponentInstance.makeAndStart(
+        this.info,
+        {
+          next: this.onRequestCallFromVideoGUI.bind(this),
+          complete: this.onGUIComplete.bind(this),
+          error: this.onGUIError.bind(this),
+        },
+      );
       this.guiInstance = instance;
+
       await startProc;
     }
   }
@@ -81,60 +89,81 @@ export class CallInChat {
   async end(): Promise<void> {
     if (this.callStage === 'done') {
       return;
-    } else if (this.callStage === 'calling') {
+    }
+
+    if (this.callStage === 'calling') {
       for (const { channel } of this.peers.values()) {
         channel.sendMsgToPeer('disconnect', {});
         channel.detachGUI();
       }
     }
+
     this.callStage = 'done';
     this.detachFromParent();
+  }
+
+  async endCallInGUI(): Promise<void> {
+    this.guiInstance?.endCall();
   }
 
   private channelTo(peerAddr: string): WebRTCSignalingPeerChannel {
     return this.peers.get(toCanonicalAddress(peerAddr))!.channel;
   }
 
-  private async onRequestCallFromVideoGUI(
-    request: CallFromVideoGUI
-  ): Promise<void> {
+  private async onRequestCallFromVideoGUI(request: CallFromVideoGUI): Promise<void> {
     if (this.callStage !== 'calling') {
       return;
     }
+
     const { type } = request;
     try {
-      if (type === 'send-webrtc-signal') {
-        const { peerAddr, data } = request;
-        this.channelTo(peerAddr).sendMsgToPeer('signalling', data);
-      } else if (type === 'start-channel') {
-        const { peerAddr } = request;
-        this.channelTo(peerAddr).attachGUI(
-          this.guiInstance!.getListenerForChannelTo(peerAddr)
-        );
-      } else if (type === 'close-channel') {
-        const { peerAddr } = request;
-        this.channelTo(peerAddr).detachGUI();
-      } else if (type === 'call-started-event') {
-        this.sinkGUIEvent({
-          type: 'call-started',
-          chatId: this.info.chatId,
-        });
-      } else {
-        throw `unknown event from video component`;
+      switch (type) {
+        case 'send-webrtc-signal': {
+          const { peerAddr, data } = request;
+          this.channelTo(peerAddr).sendMsgToPeer('signalling', data);
+          break;
+        }
+
+        case 'start-channel': {
+          const { peerAddr } = request;
+          const listener = this.guiInstance!.getListenerForChannelTo(peerAddr);
+          this.channelTo(peerAddr).attachGUI(listener);
+          break;
+        }
+
+        case 'close-channel': {
+          const { peerAddr } = request;
+          this.channelTo(peerAddr).detachGUI();
+          break;
+        }
+
+        case 'call-started-event': {
+          this.sinkGUIEvent({
+            type: 'call-started',
+            chatId: this.info.chatId,
+          });
+          break;
+        }
+
+        default:
+          throw `unknown event from video component`;
       }
     } catch (err) {
       await w3n.log(
-        'error', `Error in handling ${type} request from video component`, err
+        'error', `Error in handling ${type} request from video component`, err,
       );
     }
   }
 
   private onGUIComplete(): void {
+    console.log(`### on GUI COMPLETE [${this.info.ownAddr}] ###`);
     this.sinkGUIEvent({
       type: 'call-ended',
       chatId: this.info.chatId,
     });
     this.end();
+    const { doAfterEndCall } = this.postProcessingForVideoChat();
+    doAfterEndCall(this.info.chatId);
   }
 
   private onGUIError(err: web3n.rpc.RPCException): void {
@@ -143,5 +172,4 @@ export class CallInChat {
     }
     this.onGUIComplete();
   }
-
 }

@@ -15,21 +15,15 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* eslint-disable @typescript-eslint/triple-slash-reference, @typescript-eslint/no-explicit-any */
-import { OutgoingMessageStatus } from '../../types/chat.types.ts';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type {
+  ASMailSendException,
+  ServLocException,
+  ConnectException,
+  SendingError,
+  MessageDeliveryInfo,
+} from '../../types';
 import type { AddressCheckResult } from '../../types/services.types.ts';
-
-export interface MessageDeliveryInfo {
-  msgId: string;
-  status: OutgoingMessageStatus;
-  value: string | number;
-}
-
-export interface SendingMessageStatus {
-  msgId?: string;
-  status: web3n.asmail.DeliveryProgress | undefined;
-  info: MessageDeliveryInfo | undefined;
-}
 
 function getErrorText(address: string, error: any): string {
   const {
@@ -63,11 +57,6 @@ function getErrorText(address: string, error: any): string {
   return 'Unknown error.';
 }
 
-export interface SendingError {
-  mail: string;
-  text: string;
-}
-
 export function checkSendingErrors(status: web3n.asmail.DeliveryProgress): Record<string, SendingError> {
   const { recipients } = status;
   return Object.keys(recipients).reduce((res, mail: string) => {
@@ -84,7 +73,8 @@ export function checkSendingErrors(status: web3n.asmail.DeliveryProgress): Recor
 }
 
 export function prepareMessageDeliveryInfo(
-  msgId: string, status: web3n.asmail.DeliveryProgress | undefined,
+  msgId: string,
+  status: web3n.asmail.DeliveryProgress | undefined,
 ): MessageDeliveryInfo | undefined {
   if (!status) {
     return undefined;
@@ -98,7 +88,7 @@ export function prepareMessageDeliveryInfo(
     };
   }
 
-  // XXX this should produce more precise status values
+  // TODO this should produce more precise status values
 
   const { recipients, msgSize } = status;
   const hasError = Object.keys(recipients).every(address => !!recipients[address].err);
@@ -107,7 +97,7 @@ export function prepareMessageDeliveryInfo(
     const isCanceled = Object.values(errors).every(error => error.text.includes('Canceled'));
     return {
       msgId,
-      status: isCanceled ? 'sent:canceled' : 'sent:all-failed',
+      status: isCanceled ? 'canceled' : 'error',
       value: isCanceled ? 'canceled' : Object.values(errors).map(err => err.text).join(' '),
     };
   }
@@ -125,34 +115,65 @@ export function prepareMessageDeliveryInfo(
   };
 }
 
-type ASMailSendException = web3n.asmail.ASMailSendException;
-type ServLocException = web3n.asmail.ServLocException;
-type ConnectException = web3n.ConnectException;
-
-export async function checkAddressExistenceForASMail(
-  addr: string
-): Promise<AddressCheckResult> {
+export async function checkAddressExistenceForASMail(addr: string): Promise<AddressCheckResult> {
   try {
     await w3n.mail!.delivery.preFlight(addr);
     return 'found';
   } catch (err) {
     if ((err as ASMailSendException).type === 'asmail-delivery') {
       const exc = err as ASMailSendException;
+
       if (exc.unknownRecipient) {
         return 'not-present-at-domain';
-      } else if (exc.inboxIsFull) {
-        return 'found';
-      } else if (exc.senderNotAllowed) {
-        return 'found-but-access-restricted';
-      } else {
-        throw exc;
       }
-    } else if ((err as ConnectException).type === 'http-connect') {
-      throw err;
-    } else if ((err as ServLocException).type === 'service-locating') {
-      return 'no-service-for-domain';
-    } else {
+
+      if (exc.inboxIsFull) {
+        return 'found';
+      }
+
+      if (exc.senderNotAllowed) {
+        return 'found-but-access-restricted';
+      }
+
+      if (exc.recipientPubKeyFailsValidation) {
+        return 'not-valid-public-key';
+      }
+
+      throw exc;
+    }
+
+    if ((err as ConnectException).type === 'connect') {
       throw err;
     }
+
+    if ((err as ServLocException).type === 'service-locating') {
+      return 'no-service-for-domain';
+    }
+
+    throw err;
   }
+}
+
+export async function ensureAllAddressesExist(members: Record<string, { hasAccepted: boolean }>): Promise<{
+  status: 'success' | 'error';
+  errorData?: {
+    addr: string;
+    check: AddressCheckResult | undefined;
+    exc: any;
+  }[];
+}> {
+  const checks = await Promise.all(Object.keys(members).map(async addr => {
+    const { check, exc } = await checkAddressExistenceForASMail(addr).then(
+      check => ({ check, exc: undefined }),
+      exc => ({ check: undefined, exc }),
+    );
+    return { addr, check, exc };
+  }));
+
+  const failedAddresses = checks.filter(({ check }) => (check !== 'found'));
+
+  return {
+    status: failedAddresses.length ? 'error' : 'success',
+    ...(failedAddresses.length && { errorData: failedAddresses }),
+  };
 }

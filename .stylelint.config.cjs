@@ -5,13 +5,9 @@ module.exports = {
 
   rules: {
     'length-zero-no-unit': null,
-    'at-rule-empty-line-before': [
-      'always',
-      {
-        ignore: ['after-comment'],
-        except: ['inside-block', 'after-same-name'],
-      },
-    ],
+    'value-keyword-case': null,
+    'at-rule-empty-line-before': null,
+    'declaration-block-no-redundant-longhand-properties': null,
     'no-empty-source': null,
     'no-descending-specificity': null,
     'color-function-notation': null,
@@ -27,8 +23,22 @@ module.exports = {
     'at-rule-no-unknown': [
       true,
       {
-        ignoreAtRules: ['include', 'function', 'return', 'mixin', 'if', 'else', 'for', 'extend', 'each', 'content'],
+        ignoreAtRules: [
+          'include',
+          'function',
+          'return',
+          'mixin',
+          'if',
+          'else',
+          'for',
+          'extend',
+          'each',
+          'content',
+          'use',
+        ],
       },
     ],
+    'no-invalid-position-declaration': null,
+    'property-no-deprecated': [true, { ignoreProperties: ['-webkit-box-orient'] }],
   },
 };

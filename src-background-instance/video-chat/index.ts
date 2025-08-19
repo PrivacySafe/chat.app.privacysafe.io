@@ -19,9 +19,19 @@
 import { MultiConnectionIPCWrap } from '../../shared-libs/ipc/ipc-service.js';
 import { sleep } from '../../shared-libs/processes/sleep.ts';
 import { includesAddress, toCanonicalAddress } from '../../shared-libs/address-utils.ts';
-import type { ChatIdObj, ChatIncomingMessage, ChatInfoForCall, ChatWebRTCMsgV1, IncomingCallCmdArg, VideoChatEvent, VideoGUIOpener, WebRTCMsg, WebRTCOffBandMessage } from '../../types/index.ts';
+import {
+  ChatIdObj,
+  ChatIncomingMessage,
+  ChatInfoForCall,
+  ChatWebRTCMsgV1,
+  IncomingCallCmdArg,
+  VideoChatEvent,
+  VideoGUIOpener,
+  WebRTCMsg,
+  WebRTCOffBandMessage,
+} from '../../types/index.ts';
 import { ChatService } from '../chat-service/index.ts';
-import { ChatDbEntry } from '../dataset/versions/v1/chats-db.ts';
+import type { ChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
 import { ObserversSet } from '../../shared-libs/observer-utils.ts';
 import { areAddressesEqual } from '../../shared-libs/address-utils.ts';
 import { CallInChat } from './call.ts';
@@ -29,7 +39,10 @@ import { CallInChat } from './call.ts';
 export type WebRTCSignalHandler = (msg: ChatIncomingMessage) => Promise<void>;
 
 export type IncomingCallHandler = (
-  chat: ChatDbEntry, chatId: ChatIdObj, peer: string, msg: WebRTCMsg
+  chat: ChatDbEntry,
+  chatId: ChatIdObj,
+  peer: string,
+  msg: WebRTCMsg,
 ) => Promise<void>;
 
 const rtcStaticConfig: RTCConfiguration = {
@@ -38,11 +51,80 @@ const rtcStaticConfig: RTCConfiguration = {
   }, {
     urls: ['turns:t1.3nweb.net:443'],
     username: 'chat-app',
-    credential: 'WLIvWVDTrxHpy78GknE6tNsNiqjNNFU5mN4qSUU'
+    credential: 'WLIvWVDTrxHpy78GknE6tNsNiqjNNFU5mN4qSUU',
   }],
-  iceTransportPolicy: 'all',
+  iceTransportPolicy: 'relay',
 };
 
+const MSG_REMOVAL_DELAY_MILLIS = 10 * 1000;
+
+function checkChatMessageJSONforWebRTC(msg: ChatIncomingMessage): {
+  webrtcMsg: ChatWebRTCMsgV1['webrtcMsg'];
+  chatId: ChatIdObj;
+} | undefined {
+  const { sender, jsonBody } = msg;
+  if (msg.jsonBody.v !== 1) {
+    return;
+  }
+
+  const { chatMessageType, groupChatId, webrtcMsg } = jsonBody as ChatWebRTCMsgV1;
+
+  if (chatMessageType !== 'webrtc-call' || !webrtcMsg) {
+    return;
+  }
+
+  const { id, stage, data } = webrtcMsg;
+
+  if ((typeof stage !== 'string') || (typeof id !== 'number') || !checkData(data)) {
+    return;
+  }
+
+  const chatId: ChatIdObj = (typeof groupChatId === 'string') && groupChatId
+    ? { isGroupChat: true, chatId: groupChatId }
+    : { isGroupChat: false, chatId: toCanonicalAddress(sender) };
+
+  if (chatId.isGroupChat && chatId.chatId.includes('@')) {
+    return;
+  }
+
+  return { chatId, webrtcMsg };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function checkData(data: WebRTCOffBandMessage | WebRTCOffBandMessage[]): boolean {
+  // TODO add sanity checks here, and for outgoing thing we may add filtering
+  return true;
+}
+
+export function setupAndStartVideoGUIOpener(
+  ownAddr: string,
+  findChatEntry: ChatService['findChatEntry'],
+  postProcessingForVideoChat: () => {
+    doAfterStartCall: (
+      { chatId, direction, sender }:
+      { chatId: ChatIdObj; direction: 'incoming' | 'outgoing'; sender?: string },
+    ) => Promise<void>,
+    doAfterEndCall: (chatId: ChatIdObj) => Promise<void>,
+  },
+): { webrtcMsgsHandler: WebRTCSignalHandler; getChatsWithVideoCall: () => Promise<ChatIdObj[]> } {
+  const guisCtrl = new VideoGUIsController(ownAddr, findChatEntry, postProcessingForVideoChat);
+
+  const videoOpenerWrap = new MultiConnectionIPCWrap('VideoGUIOpener');
+  videoOpenerWrap.exposeReqReplyMethods(guisCtrl, [
+    'startVideoCallForChatRoom',
+    'joinOrDismissCallInRoom',
+    'endVideoCallInChatRoom',
+  ]);
+  videoOpenerWrap.exposeObservableMethods(guisCtrl, [
+    'watchVideoChats',
+  ]);
+  videoOpenerWrap.startIPC();
+
+  return {
+    webrtcMsgsHandler: guisCtrl.handleIncomingWebRTCMsg.bind(guisCtrl),
+    getChatsWithVideoCall: guisCtrl.getChatsWithVideoCall.bind(guisCtrl),
+  };
+}
 
 class VideoGUIsController implements VideoGUIOpener {
   private readonly videoChatsObs = new ObserversSet<VideoChatEvent>();
@@ -50,12 +132,19 @@ class VideoGUIsController implements VideoGUIOpener {
 
   constructor(
     private readonly ownAddr: string,
-    private readonly getChatEntry: ChatService['findChatEntry']
-  ) {}
+    private readonly getChatEntry: ChatService['findChatEntry'],
+    private readonly postProcessingForVideoChat: ChatService['postProcessingForVideoChat'],
+  ) {
+  }
 
-  private createAndRegisterCall(
-    chat: ChatDbEntry, chatId: ChatIdObj
-  ): CallInChat {
+  async getChatsWithVideoCall(): Promise<ChatIdObj[]> {
+    return [...this.calls.keys()].map(key => ({
+      isGroupChat: !key.includes('@'),
+      chatId: key,
+    }));
+  }
+
+  private createAndRegisterCall(chat: ChatDbEntry, chatId: ChatIdObj): CallInChat {
     const callInfo = this.chatInfoForNewCall(chat, chatId);
     const call = new CallInChat(
       callInfo,
@@ -64,18 +153,16 @@ class VideoGUIsController implements VideoGUIOpener {
         if (this.calls.get(chatId.chatId) === call) {
           this.calls.delete(chatId.chatId);
         }
-      }
+      },
+      this.postProcessingForVideoChat,
     );
-    this.calls.set(chatId.chatId, call)
+
+    this.calls.set(chatId.chatId, call);
     return call;
   }
 
   private nameFromAddr(addr: string): string {
-    if (addr.indexOf('@') === 0) {
-      return addr;
-    } else {
-      return addr.substring(0, addr.indexOf('@'));
-    }
+    return addr.indexOf('@') === 0 ? addr : addr.substring(0, addr.indexOf('@'));
   }
 
   async startVideoCallForChatRoom(chatId: ChatIdObj): Promise<void> {
@@ -85,23 +172,29 @@ class VideoGUIsController implements VideoGUIOpener {
       call = this.createAndRegisterCall(chat, chatId);
     }
     await call.startCall();
+
+    console.log(`### START CALL [${this.ownAddr}] ###`);
+    const { doAfterStartCall } = this.postProcessingForVideoChat();
+    await doAfterStartCall({ chatId, direction: 'outgoing' });
   }
 
-  private readonly sinkForGUIEvents = this.videoChatsObs.next.bind(
-    this.videoChatsObs
-  );
-
-  private chatInfoForNewCall(
-    chat: ChatDbEntry, chatId: ChatIdObj
-  ): ChatInfoForCall {
-    let peers: { addr: string; name: string; }[];
-    if (chat.isGroupChat) {
-      peers = chat.members
-      .filter(addr => !areAddressesEqual(addr, this.ownAddr))
-      .map(addr => ({ addr, name: this.nameFromAddr(addr) }));
-    } else {
-      peers = [ { addr: chat.peerAddr, name: chat.name } ];
+  async endVideoCallInChatRoom(chatId: ChatIdObj): Promise<void> {
+    const call = this.calls.get(chatId.chatId);
+    if (!call) {
+      return;
     }
+    await call.endCallInGUI();
+  }
+
+  private readonly sinkForGUIEvents = this.videoChatsObs.next.bind(this.videoChatsObs);
+
+  private chatInfoForNewCall(chat: ChatDbEntry, chatId: ChatIdObj): ChatInfoForCall {
+    const peers = chat.isGroupChat
+      ? Object.keys(chat.members)
+        .filter(addr => !areAddressesEqual(addr, this.ownAddr))
+        .map(addr => ({ addr, name: this.nameFromAddr(addr) }))
+      : [{ addr: chat.peerAddr, name: chat.name }];
+
     return {
       chatId,
       ownAddr: this.ownAddr,
@@ -116,16 +209,21 @@ class VideoGUIsController implements VideoGUIOpener {
    * All incoming calls go throw this controller first, creating call objects
    * that open other UI elements. Those other elements send tell to either join
    * or ignore call.
-   * @param chatId 
+   * @param chatId
    * @param join tells to either join call (true value), or dismiss it (false)
+   * @param sender who was the current call's initiator
    */
-  async joinOrDismissCallInRoom(chatId: ChatIdObj, join: boolean): Promise<void> {
+  async joinOrDismissCallInRoom(chatId: ChatIdObj, join: boolean, sender?: string): Promise<void> {
     const call = this.calls.get(chatId.chatId);
     if (!call) {
       return;
     }
+
     if (join) {
+      console.log(`### JOIN CALL [${this.ownAddr}] from ${sender} ###`);
       await call.startCall();
+      const { doAfterStartCall } = this.postProcessingForVideoChat();
+      await doAfterStartCall({ chatId, direction: 'incoming', sender });
     } else {
       await call.end();
     }
@@ -137,7 +235,10 @@ class VideoGUIsController implements VideoGUIOpener {
   }
 
   private async handleIncomingCall(
-    chat: ChatDbEntry, chatId: ChatIdObj, peer: string, webrtcMsg: WebRTCMsg
+    chat: ChatDbEntry,
+    chatId: ChatIdObj,
+    peer: string,
+    webrtcMsg: WebRTCMsg,
   ): Promise<void> {
     const call = this.createAndRegisterCall(chat, chatId);
     call.handleWebRTCSignalFrom(peer, webrtcMsg);
@@ -154,7 +255,8 @@ class VideoGUIsController implements VideoGUIOpener {
     const checkMsgBody = checkChatMessageJSONforWebRTC(msg);
     if (!checkMsgBody) {
       return await this.removeMessageFromInbox(
-        msgId, `Incoming WebRTC chat message ${msgId} failed body check. Removing it from inbox.`
+        msgId,
+        `Incoming WebRTC chat message ${msgId} failed body check. Removing it from inbox.`,
       );
     }
 
@@ -162,13 +264,15 @@ class VideoGUIsController implements VideoGUIOpener {
     const chat = this.getChatEntry(chatId);
     if (!chat) {
       return await this.removeMessageFromInbox(
-        msgId, `Incoming WebRTC chat message ${msgId}, type has no known chat. Removing it from inbox.`
+        msgId,
+        `Incoming WebRTC chat message ${msgId}, type has no known chat. Removing it from inbox.`,
       );
     }
 
-    if (chat.isGroupChat && !includesAddress(chat.members, sender)) {
+    if (chat.isGroupChat && !includesAddress(Object.keys(chat.members), sender)) {
       return await this.removeMessageFromInbox(
-        msgId, `Sender ${sender} is not a member of group chat ${chat.chatId}. Removing it from inbox.`
+        msgId,
+        `Sender ${sender} is not a member of group chat ${chat.chatId}. Removing it from inbox.`,
       );
     }
 
@@ -176,6 +280,7 @@ class VideoGUIsController implements VideoGUIOpener {
       const call = this.calls.get(chatId.chatId);
       if (call) {
         const removeMsg = call.handleWebRTCSignalFrom(sender, webrtcMsg);
+
         if (removeMsg) {
           await this.removeMessageFromInbox(msgId);
         }
@@ -188,9 +293,7 @@ class VideoGUIsController implements VideoGUIOpener {
     }
   }
 
-  private async removeMessageFromInbox(
-    msgId: string, logInfo?: string, delay?: true
-  ): Promise<void> {
+  private async removeMessageFromInbox(msgId: string, logInfo?: string, delay?: true): Promise<void> {
     if (logInfo) {
       await w3n.log('info', logInfo);
     }
@@ -198,72 +301,10 @@ class VideoGUIsController implements VideoGUIOpener {
       await sleep(MSG_REMOVAL_DELAY_MILLIS);
     }
     await w3n.mail!.inbox.removeMsg(msgId)
-    .catch(async (e: web3n.asmail.InboxException) => {
-      if (!e.msgNotFound) {
-        await w3n.log(
-          'error', `Error deleting message ${msgId} from INBOX. `, e
-        );
-      }
-    });
+      .catch(async (e: web3n.asmail.InboxException) => {
+        if (!e.msgNotFound) {
+          await w3n.log('error', `Error deleting message ${msgId} from INBOX. `, e);
+        }
+      });
   }
-
 }
-
-
-const MSG_REMOVAL_DELAY_MILLIS = 10*1000;
-
-function checkChatMessageJSONforWebRTC(
-  msg: ChatIncomingMessage
-): {
-  webrtcMsg: ChatWebRTCMsgV1['webrtcMsg'];
-  chatId: ChatIdObj;
-}|undefined {
-  const { sender, jsonBody } = msg;
-  if (msg.jsonBody.v !== 1) {
-    return;
-  }
-  const { chatMessageType, groupChatId, webrtcMsg } = jsonBody as ChatWebRTCMsgV1;
-  if ((chatMessageType !== 'webrtc-call') || !webrtcMsg) {
-    return;
-  }
-  const { id, stage, data } = webrtcMsg;
-  if ((typeof stage !== 'string') || (typeof id !== 'number')
-  || !checkData(data)) {
-    return;
-  }
-  const chatId: ChatIdObj = (((typeof groupChatId === 'string') && groupChatId) ?
-    { isGroupChat: true, chatId: groupChatId } :
-    { isGroupChat: false, chatId: toCanonicalAddress(sender) }
-  );
-  if (chatId.isGroupChat && chatId.chatId.includes('@')) {
-    return;
-  }
-  return { chatId, webrtcMsg };
-}
-
-function checkData(data: WebRTCOffBandMessage|WebRTCOffBandMessage[]): boolean {
-
-  // XXX add sanity checks here, and for outgoing thing we may add filterring
-
-  return true;
-}
-
-
-export function setupAndStartVideoGUIOpener(
-	ownAddr: string, findChatEntry: ChatService['findChatEntry']
- ): WebRTCSignalHandler {
-	const guisCtrl = new VideoGUIsController(ownAddr, findChatEntry);
-
-  const videoOpenerWrap = new MultiConnectionIPCWrap('VideoGUIOpener');
-	videoOpenerWrap.exposeReqReplyMethods(guisCtrl, [
-	  'startVideoCallForChatRoom',
-    'joinOrDismissCallInRoom',
-	]);
-	videoOpenerWrap.exposeObservableMethods(guisCtrl, [
-	  'watchVideoChats',
-	]);
-	videoOpenerWrap.startIPC();
-
-  return guisCtrl.handleIncomingWebRTCMsg.bind(guisCtrl);
-}
- 

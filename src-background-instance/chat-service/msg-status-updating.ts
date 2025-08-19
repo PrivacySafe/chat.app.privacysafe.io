@@ -16,12 +16,12 @@
 */
 
 import { ChatsData } from '../dataset/index.ts';
-import { ChatMessageId } from "../../types/asmail-msgs.types.ts";
+import { ChatMessageId } from '../../types/asmail-msgs.types.ts';
 import type { ChatService } from './index.ts';
 import { chatIdOfChat, recipientsInChat } from './common-transforms.ts';
-import { ChatDbEntry } from '../dataset/versions/v1/chats-db.ts';
+import { ChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
 import { UpdatedMsgStatusSysMsgData } from '../../types/asmail-msgs.types.ts';
-import { MsgDbEntry } from '../dataset/versions/v1/msgs-db.ts';
+import { MsgDbEntry } from '../dataset/versions/v2/msgs-db.ts';
 import { sendSystemMessage } from '../utils/send-chat-msg.ts';
 import { makeDbRecordException } from '../utils/exceptions.ts';
 
@@ -30,12 +30,13 @@ export class MsgStatusUpdating {
   constructor(
     private readonly data: ChatsData,
     private readonly emit: ChatService['emit'],
-    private readonly ownAddr: string
-  ) {}
+    private readonly ownAddr: string,
+  ) {
+  }
 
   async markMessageAsReadNotifyingSender({
-    chatId, chatMessageId
-  }: ChatMessageId): Promise<void> {
+                                           chatId, chatMessageId,
+                                         }: ChatMessageId): Promise<void> {
     const chat = this.data.findChat(chatId);
     if (!chat) {
       throw makeDbRecordException({ chatNotFound: true });
@@ -44,7 +45,7 @@ export class MsgStatusUpdating {
     // update local data
     const updatedMsg = await this.data.updateMessageRecord(
       { chatId, chatMessageId },
-      { status: 'read' }
+      { status: 'read' },
     );
     if (!updatedMsg) {
       throw makeDbRecordException({ messageNotFound: true });
@@ -56,18 +57,19 @@ export class MsgStatusUpdating {
     await sendSystemMessage({
       chatId, recipients, chatSystemData: {
         event: 'update:status',
-        value: { chatMessageId, status: 'read' }
-      }
+        value: { chatMessageId, status: 'read' },
+      },
     });
   }
 
   async handleUpdateMessageStatus(
-    sender: string, chat: ChatDbEntry,
+    sender: string,
+    chat: ChatDbEntry,
     { chatMessageId, status }: UpdatedMsgStatusSysMsgData['value'],
-    timestamp: number
+    timestamp: number,
   ): Promise<void> {
     // check request
-    if ((status !== 'received') && (status !== 'read')) {
+    if ((status !== 'sent') && (status !== 'read')) {
       return;
     }
     const chatId = chatIdOfChat(chat);
@@ -75,10 +77,10 @@ export class MsgStatusUpdating {
     const msg = await this.data.getMessage(id);
     if (!msg || msg.isIncomingMsg) {
       return;
-    }    
+    }
 
     // update local data, if needed
-    let updatedMsg: MsgDbEntry|undefined;
+    let updatedMsg: MsgDbEntry | undefined;
     if (chat.isGroupChat) {
 
       // XXX current code is simplistic.
@@ -90,7 +92,7 @@ export class MsgStatusUpdating {
       }
 
       updatedMsg = await this.data.updateMessageRecord(id, {
-        status
+        status,
       });
 
     } else {
@@ -102,7 +104,7 @@ export class MsgStatusUpdating {
       }
 
       updatedMsg = await this.data.updateMessageRecord(id, {
-        status
+        status,
       });
     }
     this.emit.message.updated(updatedMsg);

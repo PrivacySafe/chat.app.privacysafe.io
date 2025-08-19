@@ -15,18 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-export async function ensureDefaultAnonSenderMaxMsgSize(
-  defaultMsgSize: number
-): Promise<void> {
-
+export async function ensureDefaultAnonSenderMaxMsgSize(defaultMsgSize: number): Promise<void> {
   const anonPolicy = await w3n.mail!.config.getOnServer('anon-sender/policy');
   if ((typeof anonPolicy?.defaultMsgSize !== 'number')
-  || (anonPolicy.defaultMsgSize < defaultMsgSize)) {
+    || (anonPolicy.defaultMsgSize < defaultMsgSize)) {
     await w3n.mail!.config.setOnServer('anon-sender/policy', {
       accept: !!anonPolicy?.accept,
       acceptWithInvitesOnly: !!anonPolicy?.acceptWithInvitesOnly,
-      defaultMsgSize
+      defaultMsgSize,
     });
   }
-
 }

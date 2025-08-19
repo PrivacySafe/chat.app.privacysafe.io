@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022, 2024 3NSoft Inc.
+ Copyright (C) 2022, 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -25,11 +25,14 @@ declare namespace web3n.shell {
 		getStartedCmd?: commands.GetStartedCmd;
 		watchStartCmds?: commands.WatchStartCmds;
 		getFSResource?: GetFSResource;
+		openDashboard?: OpenDashboard;
 	}
 
 	type GetFSResource = (
 		appDomain: string|null|undefined, resourceName: string
 	) => Promise<web3n.files.ReadonlyFS|web3n.files.ReadonlyFile>;
+
+	type OpenDashboard = () => Promise<void>;
 
 	interface FSResourceException extends RuntimeException {
 		type: 'fs-resource';

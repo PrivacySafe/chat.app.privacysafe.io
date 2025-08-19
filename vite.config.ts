@@ -1,9 +1,7 @@
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import { defineConfig, UserConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
-// Checker can be used, in absence of implicit check by "vue-tsc --noEmit"
-// import checker from 'vite-plugin-checker';
 
 export const makeConfig = ({ mode }: UserConfig) => {
   const isDev = mode === 'development';
@@ -15,16 +13,7 @@ export const makeConfig = ({ mode }: UserConfig) => {
   };
   const define = { 'process.env': {} };
 
-  const plugins = [
-    vue(),
-    vueDevTools(),
-    // Checker can be used, in absence of implicit check by "vue-tsc --noEmit"
-    // checker({
-    //   typescript: {
-    //     tsconfigPath: 'tsconfig.json'
-    //   }
-    // })
-  ];
+  const plugins = [vue(), vueDevTools()];
 
   let optimizeDeps = {};
   if (isDev) {
@@ -53,15 +42,25 @@ export const makeConfig = ({ mode }: UserConfig) => {
       rollupOptions: {
         input: {
           main: resolve(__dirname, './index.html'),
+          'main-mobile': resolve(__dirname, './index-mobile.html'),
           videoChat: resolve(__dirname, './video-chat.html'),
-        } as Record<string, string>,
+          'videoChat-mobile': resolve(__dirname, './video-chat-mobile.html'),
+        },
         output: [
           {
             name: 'main',
             dir: 'app',
           },
           {
+            name: 'main-mobile',
+            dir: 'app',
+          },
+          {
             name: 'videoChat',
+            dir: 'app',
+          },
+          {
+            name: 'videoChat-mobile',
             dir: 'app',
           },
         ],

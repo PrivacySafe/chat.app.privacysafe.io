@@ -60,6 +60,16 @@ declare namespace web3n.caps {
 		exposedFSResources?: {
 			[resourceName: string]: FSResourceDescriptor;
 		};
+
+		// XXX 
+		// App that uses connectors (TBD) may want to provide default connector
+		// settings, allowing user to start with non-empty configuration that may
+		// evolve into some custom settings, e.g. Thunderbird will let one setup
+		// gmail with simple parameters of user name and password, indicating
+		// that technical details come from app.
+		// Besides having info here, we may see json format developing to allow
+		// easy passing of connectivity data from providers to their users.
+		// defaultConnections?: {}[];
 	}
 
 	/**
@@ -251,6 +261,7 @@ declare namespace web3n.caps {
 		fileDialog?: FileDialogsCAPSettings;
 		mountFS?: DeviceMountFSCAPSetting;
 		userNotifications?: true;
+		openDashboard?: true;
 		startAppCmds?: ResourcesRequest;
 		fsResource?: ResourcesRequest;
 	}

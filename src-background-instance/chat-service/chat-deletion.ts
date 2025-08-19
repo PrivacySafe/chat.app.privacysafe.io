@@ -16,7 +16,7 @@
 */
 
 import { ChatsData } from '../dataset/index.ts';
-import { ChatIdObj } from "../../types/asmail-msgs.types.ts";
+import { ChatIdObj } from '../../types/asmail-msgs.types.ts';
 import type { ChatService } from './index.ts';
 import { recipientsInChat } from './common-transforms.ts';
 import { includesAddress } from '../../shared-libs/address-utils.ts';
@@ -25,35 +25,40 @@ import { sendSysMsgsAboutRemovalFromChat } from '../utils/send-chat-msg.ts';
 import { removeMsgDataNotInDB } from './msg-deletion.ts';
 
 export class ChatDeletion {
-
   constructor(
     private readonly data: ChatsData,
     private readonly emit: ChatService['emit'],
     private readonly filesStore: ChatService['filesStore'],
     private readonly ownAddr: string,
     private readonly removeMessageFromInbox:
-      ChatService['removeMessageFromInbox']
-  ) {}
+    ChatService['removeMessageFromInbox'],
+  ) {
+  }
 
-  // Note that for everyone deletion of chat is effectivly the same as removal
+  // Note that for everyone deletion of chat is effectively the same as removal
   // from chat. Hence, there is no handling of anything here.
 
   async deleteChat(chatId: ChatIdObj): Promise<void> {
     // check request
     const chat = this.data.findChat(chatId);
+
     if (!chat) {
       throw makeDbRecordException({ chatNotFound: true });
-    } else if (chat.isGroupChat
-    && !includesAddress(chat.admins, this.ownAddr)) {
-      throw makeDbRecordException({ notAdmin: true });
+    }
+
+    if (
+      chat.isGroupChat
+      && includesAddress(chat.admins, this.ownAddr)
+      && chat.admins.length === 1
+      && Object.keys(chat.members).length > 1
+    ) {
+      throw makeDbRecordException({ chatWithMembers: true });
     }
 
     // do local changes and notifications
     const msgsDataToRm = await this.data.deleteChat(chatId);
     if (msgsDataToRm) {
-      removeMsgDataNotInDB(
-        msgsDataToRm, this.removeMessageFromInbox, this.filesStore
-      );
+      removeMsgDataNotInDB(msgsDataToRm, this.removeMessageFromInbox, this.filesStore);
     }
     this.emit.chat.removed(chatId);
 
@@ -61,5 +66,4 @@ export class ChatDeletion {
     const peersToNotify = recipientsInChat(chat, this.ownAddr);
     await sendSysMsgsAboutRemovalFromChat(chatId, peersToNotify, true);
   }
-
 }

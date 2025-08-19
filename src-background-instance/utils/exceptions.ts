@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { makeRuntimeException } from "../../shared-libs/runtime.ts";
+import { makeRuntimeException } from '../../shared-libs/runtime.ts';
 
 export interface DbRecordException extends web3n.RuntimeException {
   type: 'db-record';
@@ -25,6 +25,7 @@ export interface DbRecordException extends web3n.RuntimeException {
   chatAlreadyExists?: true;
   duplicateChatName?: true;
   messageNotFound?: true;
+  chatWithMembers?: true;
   notAdmin?: true;
   notGroupChat?: true;
   notChatMember?: true;
@@ -32,9 +33,7 @@ export interface DbRecordException extends web3n.RuntimeException {
   address?: string;
 }
 
-export function makeDbRecordException(
-  params: Partial<DbRecordException>
-): DbRecordException {
+export function makeDbRecordException(params: Partial<DbRecordException>): DbRecordException {
   return makeRuntimeException('db-record', params, {});
 }
 

@@ -15,12 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // @deno-types="../../shared-libs/sqlite-on-3nstorage/index.d.ts"
-import { Database, QueryExecResult, SQLiteOn3NStorage, objectFromQueryExecResult } from '../../shared-libs/sqlite-on-3nstorage/index.js';
 // @deno-types="../../shared-libs/sqlite-on-3nstorage/sqljs.d.ts"
+import { QueryExecResult, objectFromQueryExecResult } from '../../shared-libs/sqlite-on-3nstorage/index.js';
 import { ParamsObject, SqlValue } from '../../shared-libs/sqlite-on-3nstorage/sqljs.js';
-import { toCanonicalAddress } from '../../shared-libs/address-utils.ts';
-import { makeDbRecordException } from './exceptions.ts';
 
 export type TransformDefinition<T> = {
   [field in keyof T]: {

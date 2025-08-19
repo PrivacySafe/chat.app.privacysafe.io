@@ -16,13 +16,19 @@
 */
 
 import { fstIsPolite } from '../utils/for-perfect-negotiation.ts';
-import type { ChatIdObj, ChatOutgoingMessage, ChatWebRTCMsgV1, WebRTCMsg, WebRTCOffBandMessage } from '../../types/index.ts';
+import type {
+  ChatIdObj,
+  ChatOutgoingMessage,
+  ChatWebRTCMsgV1,
+  WebRTCMsg,
+  WebRTCOffBandMessage,
+} from '../../types/index.ts';
 
 export type WebRTCSignalListener = (signal: WebRTCMsg) => void;
 
 export class WebRTCSignalingPeerChannel {
 
-  private channelListener: WebRTCSignalListener|undefined = undefined;
+  private channelListener: WebRTCSignalListener | undefined = undefined;
   private receivingBuffer: WebRTCMsg[] | undefined = undefined;
   private sendingProc: Promise<void> | undefined = undefined;
   private sendingBuffer: WebRTCMsg[] | undefined = undefined;
@@ -32,13 +38,15 @@ export class WebRTCSignalingPeerChannel {
   constructor(
     public readonly ownAddr: string,
     public readonly chatId: ChatIdObj,
-    public readonly peerAddr: string
-  ) {}
+    public readonly peerAddr: string,
+  ) {
+  }
 
   attachGUI(signalsListener: WebRTCSignalListener): void {
     if (this.channelListener) {
       throw new Error(`Message listener is already set for peer ${this.peerAddr} in chat ${this.chatId}`);
     }
+
     this.channelListener = signalsListener;
     if (this.receivingBuffer) {
       this.receivingBuffer.sort(startStageFirst);
@@ -60,15 +68,18 @@ export class WebRTCSignalingPeerChannel {
     if (this.state === 'disconnected') {
       return (this.id === msg.id);
     }
+
     const { stage } = msg;
-    if (stage === 'start') {
-      return this.handleStartSignal(msg);
-    } else if (stage === 'signalling') {
-      return this.handleRegularSignal(msg);
-    } else if (stage === 'disconnect') {
-      return this.handleDisconnectSignal(msg);
-    } else {
-      throw `Unrecognized stage ${stage} of WebRTC signalling`;
+
+    switch (stage) {
+      case 'start':
+        return this.handleStartSignal(msg);
+      case 'signalling':
+        return this.handleRegularSignal(msg);
+      case 'disconnect':
+        return this.handleDisconnectSignal(msg);
+      default:
+        throw `Unrecognized stage ${stage} of WebRTC signalling`;
     }
   }
 
@@ -76,49 +87,62 @@ export class WebRTCSignalingPeerChannel {
     if (this.channelListener) {
       this.channelListener(msg);
       return true;
-    } else {
-      this.addToReceivingBuffer(msg);
-      return false;
     }
+
+    this.addToReceivingBuffer(msg);
+    return false;
   }
 
   private handleStartSignal(msg: WebRTCMsg): boolean {
-    if (this.state === 'not-started') {
-      this.state = 'signalling';
-      this.id = msg.id;
-      return this.passMsgToGUI(msg);
-    } else if (this.state === 'starting') {
-      this.state = 'signalling';
-      if (fstIsPolite(this.ownAddr, this.peerAddr)) {
+    switch (this.state) {
+      case 'not-started': {
+        this.state = 'signalling';
         this.id = msg.id;
+        return this.passMsgToGUI(msg);
       }
-      return this.passMsgToGUI(msg);
-    } else if ((this.state === 'signalling') && (this.id === msg.id)) {
-      return this.passMsgToGUI(msg);
+      case 'starting': {
+        this.state = 'signalling';
+        if (fstIsPolite(this.ownAddr, this.peerAddr)) {
+          this.id = msg.id;
+        }
+        return this.passMsgToGUI(msg);
+      }
+      case 'signalling': {
+        return this.id === msg.id
+          ? this.passMsgToGUI(msg)
+          : false;
+      }
+      default:
+        return false;
     }
-    return false;
   }
 
   private handleRegularSignal(msg: WebRTCMsg): boolean {
     if (this.id !== msg.id) {
       return false;
     }
-    if (this.state === 'signalling') {
-      return this.passMsgToGUI(msg);
-    } else if (this.state === 'starting') {
-      this.state = 'signalling';
-      return this.passMsgToGUI(msg);
+
+    switch (this.state) {
+      case 'signalling':
+        return this.passMsgToGUI(msg);
+      case 'starting': {
+        this.state = 'signalling';
+        return this.passMsgToGUI(msg);
+      }
+      default:
+        return false;
     }
-    return false;
   }
 
   private handleDisconnectSignal(msg: WebRTCMsg): boolean {
-    if (this.id !== msg.id) {
-      return false;
-    }
+    if (this.id !== msg.id) {return false;}
+
     if (this.state === 'signalling') {
       this.passMsgToGUI(msg);
+      // TODO maybe
+      // return this.passMsgToGUI(msg);
     }
+
     if (this.chatId.isGroupChat) {
       this.id = Math.floor(Number.MAX_SAFE_INTEGER * Math.random());
       this.state = 'not-started';
@@ -130,12 +154,11 @@ export class WebRTCSignalingPeerChannel {
 
   async sendMsgToPeer(
     stage: 'signalling' | 'disconnect',
-    data: WebRTCOffBandMessage
+    data: WebRTCOffBandMessage,
   ): Promise<void> {
-    if (this.state === 'disconnected') {
-      return;
-    }
-    if ((stage === 'signalling') && (this.state === 'not-started')) {
+    if (this.state === 'disconnected') {return;}
+
+    if (stage === 'signalling' && this.state === 'not-started') {
       (stage as WebRTCMsg['stage']) = 'start';
       this.state = 'starting';
     }
@@ -143,15 +166,19 @@ export class WebRTCSignalingPeerChannel {
     if (this.sendingProc) {
       this.addToSendingBuffer(stage, data);
     }
+
     this.sendingProc = this.sendWebRTCMsg({ stage, data, id: this.id });
+
     if (stage === 'disconnect') {
       this.state = 'disconnected';
     }
+
     return this.sendingProc;
   }
 
   private addToSendingBuffer(
-    stage: WebRTCMsg['stage'], data: WebRTCOffBandMessage,
+    stage: WebRTCMsg['stage'],
+    data: WebRTCOffBandMessage,
   ): void {
     if (!this.sendingBuffer) {
       this.sendingBuffer = [{ stage, data, id: this.id }];
@@ -175,8 +202,6 @@ export class WebRTCSignalingPeerChannel {
       const msg = this.sendingBuffer.pop();
       if (msg) {
         return this.sendWebRTCMsg(msg);
-      } else {
-        this.sendingBuffer = undefined;
       }
     }
     this.sendingProc = undefined;
@@ -188,7 +213,7 @@ export class WebRTCSignalingPeerChannel {
 
 }
 
-function startStageFirst(a: WebRTCMsg, b: WebRTCMsg): -1|0|1 {
+function startStageFirst(a: WebRTCMsg, b: WebRTCMsg): -1 | 0 | 1 {
   if (a.stage === 'start') {
     return -1;
   } else if (b.stage === 'start') {
@@ -199,23 +224,25 @@ function startStageFirst(a: WebRTCMsg, b: WebRTCMsg): -1|0|1 {
 }
 
 async function sendWebRTCMsg(
-  chatId: ChatIdObj, peerAddr: string, webrtcMsg: WebRTCMsg
+  chatId: ChatIdObj,
+  peerAddr: string,
+  webrtcMsg: WebRTCMsg,
 ): Promise<void> {
-
   const jsonBody: ChatWebRTCMsgV1 = {
     v: 1,
     chatMessageType: 'webrtc-call',
     groupChatId: (chatId.isGroupChat ? chatId.chatId : undefined),
-    webrtcMsg
+    webrtcMsg,
   };
   const msg: ChatOutgoingMessage = {
     msgType: 'chat',
-    jsonBody
+    jsonBody,
   };
 
   const deliveryId = `chat-webrtc-${Date.now()}-${Math.floor(10000 * Math.random())}`;
+
   try {
-    await w3n.mail!.delivery.addMsg([ peerAddr ], msg, deliveryId);
+    await w3n.mail!.delivery.addMsg([peerAddr], msg, deliveryId);
   } catch (err) {
     await w3n.log('error', `Fail to add webrtc signalling message to delivery`, err);
     return;
@@ -226,9 +253,8 @@ async function sendWebRTCMsg(
       let isDone = false;
       w3n.mail!.delivery.observeDelivery(deliveryId, {
         next: p => {
-          if (isDone) {
-            return;
-          }
+          if (isDone) {return;}
+
           if (p.allDone) {
             isDone = true;
             if (p.allDone === 'all-ok') {

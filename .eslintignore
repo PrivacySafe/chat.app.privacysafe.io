@@ -1,7 +1,0 @@
-src-main/libs/**/*.js
-src-main/libs/**/*.d.ts
-src-background-instance/**/*.js
-src-background-instance/**/*.d.ts
-/doc/**/*.*
-/app/**/*.*
-

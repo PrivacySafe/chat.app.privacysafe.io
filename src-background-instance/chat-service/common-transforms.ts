@@ -15,61 +15,123 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { MsgDbEntry } from '../dataset/versions/v1/msgs-db.ts';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+import { MsgDbEntry } from '../dataset/versions/v2/msgs-db.ts';
 import { areAddressesEqual } from '../../shared-libs/address-utils.ts';
-import { ChatListItemView, ChatMessageView, RegularMsgView } from '../../types/chat.types.ts';
-import { ChatIdObj, ChatSystemMessageData, InvitationProcessMsgData } from "../../types/asmail-msgs.types.ts";
-import { ChatDbEntry, GroupChatDbEntry, OTOChatDbEntry } from '@bg/dataset/versions/v1/chats-db.ts';
+import type { ChatListItemView, ChatMessageView, RegularMsgView } from '../../types/chat.types.ts';
+import type {
+  ChatIdObj,
+  ChatSystemMessageData,
+  InvitationProcessMsgData,
+  StoredInvitationParams,
+} from '../../types/asmail-msgs.types.ts';
+import type { ChatDbEntry, GroupChatDbEntry, OTOChatDbEntry } from '@bg/dataset/versions/v2/chats-db.ts';
 import { ChatsData } from '@bg/dataset/index.ts';
 
+function msgDbEntryToChatMessageView(data: MsgDbEntry): ChatMessageView {
+  const {
+    groupChatId,
+    otoPeerCAddr,
+    chatMessageId,
+    isIncomingMsg,
+    incomingMsgId,
+    groupSender,
+    body,
+    attachments,
+    chatMessageType,
+    status,
+    timestamp,
+  } = data;
+
+  const isGroupChat = !!groupChatId;
+
+  return {
+    chatId: { isGroupChat, chatId: isGroupChat ? groupChatId! : otoPeerCAddr! },
+    chatMessageId,
+    timestamp,
+    isIncomingMsg,
+    incomingMsgId: incomingMsgId || undefined,
+    sender: isIncomingMsg ? groupSender || otoPeerCAddr! : '',
+    chatMessageType,
+    status: status || undefined,
+    attachments: attachments || undefined,
+    ...(chatMessageType === 'regular' && { body }),
+    ...(chatMessageType === 'system' && body && { systemData: JSON.parse(body!) as ChatSystemMessageData }),
+    ...(chatMessageType === 'invitation' && body && { inviteData: JSON.parse(body) as StoredInvitationParams }),
+  } as ChatMessageView;
+}
+
 export function chatViewFromOTOChatDbEntry(
-  {
-    peerCAddr, peerAddr, name, createdAt, lastUpdatedAt, status
-  }: OTOChatDbEntry,
-  { unread, lastMsg }: {
-    unread: number;
-    lastMsg?: ChatMessageView;
-  }
+  otoChatDbEntry: OTOChatDbEntry,
+  options?: unknown,
 ): ChatListItemView {
+  const {
+    peerCAddr,
+    peerAddr,
+    name,
+    createdAt,
+    lastUpdatedAt,
+    status,
+    lastMsg,
+    unread = 0,
+  } = otoChatDbEntry;
+
   return {
     isGroupChat: false,
     chatId: peerCAddr,
-    peerAddr, name, createdAt, lastUpdatedAt, status,
-    unread, lastMsg
+    peerAddr,
+    name,
+    createdAt,
+    lastUpdatedAt,
+    status,
+    unread,
+    lastMsg: lastMsg ? msgDbEntryToChatMessageView(lastMsg) : null,
   };
 }
 
 export function chatViewFromGroupChatDbEntry(
-  {
-    chatId, admins, createdAt, lastUpdatedAt, members, name, status
-  }: GroupChatDbEntry,
-  { unread, lastMsg }: {
-    unread: number;
-    lastMsg?: ChatMessageView;
-  }
+  groupChatDbEntry: GroupChatDbEntry,
+  options?: unknown,
 ): ChatListItemView {
+  const {
+    chatId,
+    admins,
+    createdAt,
+    lastUpdatedAt,
+    members,
+    name,
+    status,
+    lastMsg,
+    unread = 0,
+  } = groupChatDbEntry;
+
   return {
     isGroupChat: true,
-    chatId, admins, createdAt, lastUpdatedAt, members, name, status,
-    unread, lastMsg
+    chatId,
+    admins,
+    createdAt,
+    lastUpdatedAt,
+    members,
+    name,
+    status,
+    unread,
+    lastMsg: lastMsg ? msgDbEntryToChatMessageView(lastMsg) : null,
   };
 }
 
-export function chatViewFromChatDbEntry(
-  chat: GroupChatDbEntry|OTOChatDbEntry
-): ChatListItemView {
-  if ((chat as OTOChatDbEntry).peerCAddr) {
-    return chatViewFromOTOChatDbEntry(chat as OTOChatDbEntry, { unread: 0 });
-  } else {
-    return chatViewFromGroupChatDbEntry(
-      chat as GroupChatDbEntry, { unread: 0 }
-    );
-  }
+export function chatViewFromChatDbEntry(chat: GroupChatDbEntry | OTOChatDbEntry): ChatListItemView {
+  return (chat as OTOChatDbEntry).peerCAddr
+    ? chatViewFromOTOChatDbEntry(chat as OTOChatDbEntry)
+    : chatViewFromGroupChatDbEntry(chat as GroupChatDbEntry);
 }
 
 export function msgDbEntryForIncomingSysMsg(
-  sender: string, chatId: ChatIdObj, chatMessageId: string, timestamp: number,
-  chatSystemData: ChatSystemMessageData
+  sender: string,
+  chatId: ChatIdObj,
+  chatMessageId: string,
+  timestamp: number,
+  chatSystemData: ChatSystemMessageData,
 ): MsgDbEntry {
   return {
     isIncomingMsg: true,
@@ -85,92 +147,114 @@ export function msgDbEntryForIncomingSysMsg(
     history: null,
     incomingMsgId: null,
     reactions: null,
-    relatedMessage: null
+    relatedMessage: null,
   };
 }
 
-export function msgViewFromDbEntry({
-    attachments, body, chatMessageId, chatMessageType, groupChatId, groupSender,
-    history, incomingMsgId, isIncomingMsg, otoPeerCAddr, reactions, status, timestamp
-  }: MsgDbEntry,
+export function msgViewFromDbEntry(
+  msgDbEntry: MsgDbEntry,
   relatedMessage: RegularMsgView['relatedMessage'],
-  ownAddr: string
+  ownAddr: string,
 ): ChatMessageView {
+  const {
+    attachments,
+    body,
+    chatMessageId,
+    chatMessageType,
+    groupChatId,
+    groupSender,
+    incomingMsgId,
+    isIncomingMsg,
+    otoPeerCAddr,
+    status,
+    timestamp,
+  } = msgDbEntry;
+
   const chatId: ChatIdObj = {
     isGroupChat: !!groupChatId,
-    chatId: (groupChatId ? groupChatId : otoPeerCAddr!)
+    chatId: groupChatId ? groupChatId : otoPeerCAddr!,
   };
-  const sender = (chatId.isGroupChat ?
-    groupSender :
-    (isIncomingMsg ? otoPeerCAddr : ownAddr)
-  )!;
-  if (chatMessageType === 'regular') {
-    return {
-      chatId,
-      chatMessageId,
-      isIncomingMsg,
-      incomingMsgId: incomingMsgId ?? undefined,
-      chatMessageType,
-      timestamp,
-      sender,
-      body: body ?? '',
-      attachments: attachments ?? undefined,
-      relatedMessage,
-      status: status!
-    };
-  } else if (chatMessageType === 'system') {
-    let systemData: ChatSystemMessageData;
-    try {
-      systemData = JSON.parse(body!);
-    } catch (_) {
-      systemData = {} as any;
+  const sender = chatId.isGroupChat
+    ? groupSender!
+    : isIncomingMsg ? otoPeerCAddr! : ownAddr;
+
+  switch (chatMessageType) {
+    case 'regular':
+      return {
+        chatId,
+        chatMessageId,
+        isIncomingMsg,
+        incomingMsgId: incomingMsgId ?? undefined,
+        chatMessageType,
+        timestamp,
+        sender,
+        body: body ?? '',
+        attachments: attachments ?? undefined,
+        relatedMessage,
+        status: status!,
+      };
+
+    case 'system': {
+      let systemData: ChatSystemMessageData;
+
+      try {
+        systemData = JSON.parse(body!);
+
+      } catch (err) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        systemData = {} as any;
+      }
+
+      return {
+        chatId,
+        chatMessageId,
+        isIncomingMsg,
+        chatMessageType,
+        timestamp,
+        sender,
+        systemData,
+      };
     }
-    return {
-      chatId,
-      chatMessageId,
-      isIncomingMsg,
-      chatMessageType,
-      timestamp,
-      sender,
-      systemData
-    };
-  } else {
-    let inviteData: InvitationProcessMsgData;
-    try {
-      inviteData = JSON.parse(body!);
-    } catch (_) {
-      inviteData = {} as any;
+
+    default: {
+      let inviteData: InvitationProcessMsgData;
+      try {
+        inviteData = JSON.parse(body!);
+
+      } catch (err) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        inviteData = {} as any;
+      }
+      return {
+        chatId,
+        chatMessageId,
+        isIncomingMsg,
+        chatMessageType,
+        timestamp,
+        sender,
+        inviteData,
+      };
     }
-    return {
-      chatId,
-      chatMessageId,
-      isIncomingMsg,
-      chatMessageType,
-      timestamp,
-      sender,
-      inviteData
-    };
   }
 }
 
-export function chatIdOfChat(chat: GroupChatDbEntry|OTOChatDbEntry): ChatIdObj {
-  return (((chat as OTOChatDbEntry).peerCAddr) ?
+export function chatIdOfChat(chat: GroupChatDbEntry | OTOChatDbEntry): ChatIdObj {
+  return (chat as OTOChatDbEntry).peerCAddr ?
     chatIdOfOTOChat(chat as OTOChatDbEntry) :
-    chatIdOfGroupChat(chat as GroupChatDbEntry)
-  );
+    chatIdOfGroupChat(chat as GroupChatDbEntry);
 }
 
 export function chatIdOfOTOChat({ peerCAddr }: OTOChatDbEntry): ChatIdObj {
   return {
     isGroupChat: false,
-    chatId: peerCAddr
+    chatId: peerCAddr,
   };
 }
 
 export function chatIdOfGroupChat({ chatId }: GroupChatDbEntry): ChatIdObj {
   return {
     isGroupChat: true,
-    chatId
+    chatId,
   };
 }
 
@@ -178,7 +262,7 @@ export function chatIdOfMsg(msg: MsgDbEntry): ChatIdObj {
   const { groupChatId, otoPeerCAddr } = msg;
   return {
     isGroupChat: !!groupChatId,
-    chatId: (groupChatId ? groupChatId : otoPeerCAddr!)
+    chatId: (groupChatId ? groupChatId : otoPeerCAddr!),
   };
 }
 
@@ -186,35 +270,24 @@ export function excludeAddrFrom(lst: string[], excludeAddr: string): string[] {
   return lst.filter(addr => !areAddressesEqual(addr, excludeAddr));
 }
 
-export function chatViewForGroupChat(
-  chat: GroupChatDbEntry, data: ChatsData
-): ChatListItemView {
-  return chatViewFromGroupChatDbEntry(chat, {
-    unread: data.getUnreadMsgsCountIn(chatIdOfGroupChat(chat)),
-    lastMsg: undefined
-  });
+export function chatViewForGroupChat(chat: GroupChatDbEntry, data: ChatsData): ChatListItemView {
+  return chatViewFromGroupChatDbEntry(chat);
 }
 
-export function chatViewForOTOChat(
-  chat: OTOChatDbEntry, data: ChatsData
-): ChatListItemView {
-  return chatViewFromOTOChatDbEntry(chat, {
-    unread: data.getUnreadMsgsCountIn(chatIdOfOTOChat(chat)),
-    lastMsg: undefined
-  });
+export function chatViewForOTOChat(chat: OTOChatDbEntry, data: ChatsData): ChatListItemView {
+  return chatViewFromOTOChatDbEntry(chat);
 }
 
 export function recipientsInChat(chat: ChatDbEntry, ownAddr: string): string[] {
-  return (chat.isGroupChat ?
-    chat.members.filter(addr => !areAddressesEqual(addr, ownAddr)) :
-    [ chat.peerAddr ]
-  );
+  return chat.isGroupChat
+    ? Object.keys(chat.members).filter(addr => !areAddressesEqual(addr, ownAddr))
+    : [chat.peerAddr];
 }
 
 export function makeMsgDbEntry(
   chatMessageType: MsgDbEntry['chatMessageType'],
   chatMessageId: string,
-  params: Partial<MsgDbEntry>
+  params: Partial<MsgDbEntry>,
 ): MsgDbEntry {
   return {
     isIncomingMsg: false,
@@ -228,12 +301,12 @@ export function makeMsgDbEntry(
     reactions: null,
     relatedMessage: null,
     status: ((chatMessageType === 'regular') ?
-      (params.isIncomingMsg ? 'unread' : 'sending') :
-      null
+        (params.isIncomingMsg ? 'unread' : 'sending') :
+        null
     ),
     timestamp: 0,
     ...params,
     chatMessageType,
-    chatMessageId
+    chatMessageId,
   };
 }

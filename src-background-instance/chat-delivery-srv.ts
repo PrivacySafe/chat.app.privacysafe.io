@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* eslint-disable @typescript-eslint/triple-slash-reference, @typescript-eslint/no-explicit-any, max-len */
+
 /// <reference path="../@types/platform-defs/injected-w3n.d.ts" />
 /// <reference path="../@types/platform-defs/test-stand.d.ts" />
 import { SingleProc } from '../shared-libs/processes/single.ts';
@@ -44,17 +44,19 @@ export class ChatDeliveryService {
   private constructor(
     private readonly chatMessages: ChatMessagesHandler,
     private readonly webrtcSignalsHandler: WebRTCSignalHandler,
-    private readonly data: LocalServiceDataStore
-  ) {}
+    private readonly data: LocalServiceDataStore,
+  ) {
+  }
 
   static async setupAndStartServing(
     chatMessagesHandler: ChatMessagesHandler,
     webrtcSignalsHandler: WebRTCSignalHandler,
-    latestIncomingMsgTS: number|undefined
+    latestIncomingMsgTS: number | undefined,
   ): Promise<() => void> {
     const deliverySrv = new ChatDeliveryService(
-      chatMessagesHandler, webrtcSignalsHandler,
-      await LocalServiceDataStore.make(latestIncomingMsgTS)
+      chatMessagesHandler,
+      webrtcSignalsHandler,
+      await LocalServiceDataStore.make(latestIncomingMsgTS),
     );
 
     const stopMsgWatching = await deliverySrv.start();
@@ -115,11 +117,11 @@ export class ChatDeliveryService {
         await this.data.setLastReceivedMessageTimestamp(msg.deliveryTS);
       } catch (err) {
         await w3n.log(
-          'error', `Processing incoming chat message threw an error.`, err
+          'error', `Processing incoming chat message threw an error.`, err,
         );
       }
     }
-  }
+  };
 
   private processQueuedWebRTCMsg = async (): Promise<void> => {
     while (this.webRTCMsgsQueue.length > 0) {
@@ -129,16 +131,16 @@ export class ChatDeliveryService {
         await this.data.setLastReceivedMessageTimestamp(msg.deliveryTS);
       } catch (err) {
         await w3n.log(
-          'error', `Processing incoming WebRTC signalling message threw an error.`, err
+          'error', `Processing incoming WebRTC signalling message threw an error.`, err,
         );
       }
     }
-  }
+  };
 
   private handleSendingProgress(info: SendingProgressInfo): void {
     const { localMeta } = info.progress;
     if (localMeta && (typeof localMeta === 'object')
-    && (localMeta as LocalMetadataInDelivery).chatId) {
+      && (localMeta as LocalMetadataInDelivery).chatId) {
       this.progressNotificationsQueue.push(info);
       if (!this.notificationsProc.getP()) {
         this.notificationsProc.start(this.processQueuedNotifications);
@@ -153,7 +155,7 @@ export class ChatDeliveryService {
         await this.chatMessages.handleSendingProgress(info);
       } catch (err) {
         await w3n.log(
-          'error', `Processing sending progress info threw an error.`, err
+          'error', `Processing sending progress info threw an error.`, err,
         );
       }
     }
@@ -172,13 +174,14 @@ class LocalServiceDataStore {
   readonly proc = new SingleProc();
   private needsSaving = true;
 
-  private constructor (
+  private constructor(
     private readonly file: WritableFile,
-    private readonly data: DeliveryServiceData
-  ) {}
+    private readonly data: DeliveryServiceData,
+  ) {
+  }
 
   static async make(
-    latestIncomingMsgTS: number|undefined
+    latestIncomingMsgTS: number | undefined,
   ): Promise<LocalServiceDataStore> {
     const fs = await w3n.storage!.getAppLocalFS();
     const file = await fs.writableFile(deliveryServiceDataFileName);
@@ -186,14 +189,14 @@ class LocalServiceDataStore {
     if (file.isNew) {
       data = {
         lastReceivedMessageTimestamp: ((latestIncomingMsgTS === undefined) ?
-          0 : latestIncomingMsgTS
+            0 : latestIncomingMsgTS
         ),
       };
       await file.writeJSON(data);
     } else {
       data = await file.readJSON<DeliveryServiceData>();
       if ((latestIncomingMsgTS !== undefined)
-      && (data.lastReceivedMessageTimestamp < latestIncomingMsgTS)) {
+        && (data.lastReceivedMessageTimestamp < latestIncomingMsgTS)) {
         data.lastReceivedMessageTimestamp = latestIncomingMsgTS;
         await file.writeJSON(data);
       }

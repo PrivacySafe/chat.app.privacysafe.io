@@ -16,15 +16,15 @@
 */
 
 import { ChatsData } from '../dataset/index.ts';
-import { ChatIdObj, ChatMessageId } from "../../types/asmail-msgs.types.ts";
+import { ChatIdObj, ChatMessageId } from '../../types/asmail-msgs.types.ts';
 import type { ChatService } from './index.ts';
 import { chatIdOfChat, recipientsInChat } from './common-transforms.ts';
-import { ChatDbEntry } from '../dataset/versions/v1/chats-db.ts';
+import { ChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
 import { includesAddress } from '../../shared-libs/address-utils.ts';
 import { DeleteMessageSysMsgData } from '../../types/asmail-msgs.types.ts';
 import { makeDbRecordException } from '../utils/exceptions.ts';
 import { sendSystemMessage } from '../utils/send-chat-msg.ts';
-import { RefsToMsgsDataNoInDB } from '../dataset/versions/v1/msgs-db.ts';
+import { RefsToMsgsDataNoInDB } from '../dataset/versions/v2/msgs-db.ts';
 import { ChatMessageAttachmentsInfo } from '../../types/chat.types.ts';
 
 export class MsgDeletion {
@@ -35,12 +35,11 @@ export class MsgDeletion {
     private readonly filesStore: ChatService['filesStore'],
     private readonly ownAddr: string,
     private readonly removeMessageFromInbox:
-      ChatService['removeMessageFromInbox']
-  ) {}
+    ChatService['removeMessageFromInbox'],
+  ) {
+  }
 
-  async deleteMessage(
-    id: ChatMessageId, deleteForEveryone: boolean
-  ): Promise<void> {
+  async deleteMessage(id: ChatMessageId, deleteForEveryone: boolean): Promise<void> {
     const chat = this.data.findChat(id.chatId);
     if (!chat) {
       throw makeDbRecordException({ chatNotFound: true });
@@ -52,26 +51,32 @@ export class MsgDeletion {
 
     // change local data
     await this.removeMsgBytes(
-      id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments
+      id,
+      msg.isIncomingMsg,
+      msg.incomingMsgId,
+      msg.attachments,
     );
     this.emit.message.removed(id);
 
-    // send notifications, if we need
     if (deleteForEveryone) {
       const { chatId } = id;
       const recipients = recipientsInChat(chat, this.ownAddr);
       await sendSystemMessage({
-        chatId, recipients, chatSystemData: {
+        chatId,
+        recipients,
+        chatSystemData: {
           event: 'delete:message',
-          value: { oneMessage: id }
-        }
+          value: { oneMessage: id },
+        },
       });
     }
   }
 
   private async removeMsgBytes(
-    id: ChatMessageId, isIncomingMsg: boolean, incomingMsgId: string|null,
-    attachments: ChatMessageAttachmentsInfo[]|null
+    id: ChatMessageId,
+    isIncomingMsg: boolean,
+    incomingMsgId: string | null,
+    attachments: ChatMessageAttachmentsInfo[] | null,
   ): Promise<void> {
     await this.data.deleteMessage(id);
     if (isIncomingMsg && incomingMsgId) {
@@ -81,15 +86,13 @@ export class MsgDeletion {
     }
   }
 
-  async deleteMessagesInChat(
-    chatId: ChatIdObj, deleteForEveryone: boolean
-  ): Promise<void> {
+  async deleteMessagesInChat(chatId: ChatIdObj, deleteForEveryone: boolean): Promise<void> {
     const chat = this.data.findChat(chatId);
     if (!chat) {
       throw makeDbRecordException({ chatNotFound: true });
     }
     if (chat.isGroupChat && deleteForEveryone
-    && !includesAddress(chat.admins, this.ownAddr)) {
+      && !includesAddress(chat.admins, this.ownAddr)) {
       throw new Error(`Non-admin member can't delete message for everyone`);
     }
 
@@ -97,7 +100,7 @@ export class MsgDeletion {
     const msgsDataToRm = await this.data.deleteMessagesInChat(chatId);
     if (msgsDataToRm) {
       removeMsgDataNotInDB(
-        msgsDataToRm, this.removeMessageFromInbox, this.filesStore
+        msgsDataToRm, this.removeMessageFromInbox, this.filesStore,
       );
     }
     this.emit.chat.allMsgsRemoved(chatId);
@@ -108,27 +111,33 @@ export class MsgDeletion {
       await sendSystemMessage({
         chatId, recipients, chatSystemData: {
           event: 'delete:message',
-          value: { allInChat: chatId }
-        }
+          value: { allInChat: chatId },
+        },
       });
     }
   }
 
   async handleDeleteChatMessage(
-    chat: ChatDbEntry, chatMessageId: string,
-    value: DeleteMessageSysMsgData['value']
+    chat: ChatDbEntry,
+    value: DeleteMessageSysMsgData['value'],
   ): Promise<void> {
+    const { oneMessage  } = value;
+    const { chatMessageId } = oneMessage!;
     const chatId = chatIdOfChat(chat);
     const id = { chatId, chatMessageId };
     const msg = await this.data.getMessage(id);
+
     if (!msg) {
       return;
     }
 
-    // do local changes
     await this.removeMsgBytes(
-      id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments
+      id,
+      msg.isIncomingMsg,
+      msg.incomingMsgId,
+      msg.attachments,
     );
+
     this.emit.message.removed(id);
   }
 
@@ -137,7 +146,7 @@ export class MsgDeletion {
 export async function removeMsgDataNotInDB(
   refs: RefsToMsgsDataNoInDB,
   removeMessageFromInbox: ChatService['removeMessageFromInbox'],
-  filesStore: ChatService['filesStore']
+  filesStore: ChatService['filesStore'],
 ): Promise<void> {
   for (const msgId of refs.inboxMsgs) {
     await removeMessageFromInbox(msgId);
@@ -149,9 +158,9 @@ export async function removeMsgDataNotInDB(
 
 async function removeAttachmentsOfOutgoingMsg(
   attachments: ChatMessageAttachmentsInfo[],
-  filesStore: ChatService['filesStore']
+  filesStore: ChatService['filesStore'],
 ): Promise<void> {
-  
+
   for (const { id } of attachments) {
     if (id) {
       await filesStore.deleteLink(id);

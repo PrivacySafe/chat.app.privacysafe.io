@@ -15,13 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { ChatsData } from '../dataset/index.ts';
 import type { ChatService } from './index.ts';
-import { chatIdOfChat } from './common-transforms.ts';
-import { ChatDbEntry } from '../dataset/versions/v1/chats-db.ts';
-import { includesAddress } from '../../shared-libs/address-utils.ts';
-import { ChatIdObj, ChatMessageId } from "../../types/asmail-msgs.types.ts";
-import { removeMsgDataNotInDB } from './msg-deletion.ts';
+import type { ChatDbEntry, GroupChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
+import { MsgDbEntry } from '@bg/dataset/versions/v2/msgs-db.ts';
+import { generateChatMessageId } from '../../shared-libs/chat-ids.ts';
 
 export class ChatMemberRemoval {
 
@@ -31,34 +31,58 @@ export class ChatMemberRemoval {
     private readonly filesStore: ChatService['filesStore'],
     private readonly ownAddr: string,
     private readonly removeMessageFromInbox:
-      ChatService['removeMessageFromInbox']
-  ) {}
-
-  // Note 1: There is no action towards others here, as user is being removed.
-  // 
-  // Note 2: Deletion of chat by admin is also an effective removal, as whole
-  //         chat is gone, indicated by flag in system message.
-
-  async handleMemberRemovedChat(
-    sender: string, chat: ChatDbEntry, chatDeleted: boolean|undefined
-  ): Promise<void> {
-    // check request
-    if (chat.isGroupChat) {
-      if (!includesAddress(chat.admins, sender)) {
-        return;
-      }
-    }
-
-    // do local changes
-    const chatId = chatIdOfChat(chat);
-    await this.data.deleteMessagesInChat(chatId);
-    const msgsDataToRm = await this.data.deleteChat(chatId);
-    if (msgsDataToRm) {
-      removeMsgDataNotInDB(
-        msgsDataToRm, this.removeMessageFromInbox, this.filesStore
-      );
-    }
-    this.emit.chat.removed(chatId);
+    ChatService['removeMessageFromInbox'],
+  ) {
   }
 
+  async handleMemberRemovedChat(
+    sender: string,
+    chat: ChatDbEntry,
+    chatDeleted: boolean | undefined,
+  ): Promise<void> {
+    if (chat.isGroupChat) {
+      const user = await w3n.mail?.getUserId();
+      const updatedMembers = { ...(chat as GroupChatDbEntry).members };
+      !!updatedMembers[sender] && delete updatedMembers[sender];
+      const isUserOnlyMember = Object.keys(updatedMembers).length === 1
+        && Object.keys(updatedMembers)[0] === user!;
+
+      const updatedChat = await this.data.updateGroupChatRecord(chat.chatId, {
+        members: updatedMembers,
+        ...(isUserOnlyMember && { status: 'no-members' }),
+      });
+
+      updatedChat && this.emit.chat.updated(updatedChat);
+    } else {
+      const updatedChat = await this.data.updateOTOChatRecord(chat.peerCAddr, {
+        status: 'no-members',
+      });
+
+      updatedChat && this.emit.chat.updated(updatedChat);
+    }
+
+    const { chatMessageId, timestamp } = generateChatMessageId();
+    const msg: MsgDbEntry = {
+      groupChatId: chat.isGroupChat ? chat.chatId : null,
+      otoPeerCAddr: chat.isGroupChat ? null : chat.peerCAddr,
+      chatMessageId,
+      isIncomingMsg: false,
+      incomingMsgId: null,
+      groupSender: chat.isGroupChat ? sender : null,
+      body: JSON.stringify({
+        event: 'member-left',
+        value: { sender },
+      }),
+      attachments: null,
+      chatMessageType: 'system',
+      relatedMessage: null,
+      status: null,
+      timestamp,
+      history: null,
+      reactions: null,
+    };
+
+    await this.data.addMessage(msg);
+    this.emit.message.added(msg);
+  }
 }

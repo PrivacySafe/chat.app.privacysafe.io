@@ -19,7 +19,7 @@ import { ChatsData } from '../dataset/index.ts';
 import { ChatIdObj } from "../../types/asmail-msgs.types.ts";
 import type { ChatService } from './index.ts';
 import { chatIdOfChat, excludeAddrFrom, makeMsgDbEntry, msgDbEntryForIncomingSysMsg } from './common-transforms.ts';
-import { ChatDbEntry } from '../dataset/versions/v1/chats-db.ts';
+import { ChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
 import { includesAddress } from '../../shared-libs/address-utils.ts';
 import { UpdatedChatNameSysMsgData } from '../../types/asmail-msgs.types.ts';
 import { makeDbRecordException } from '../utils/exceptions.ts';
@@ -72,7 +72,7 @@ export default class ChatRenaming {
     await this.data.addMessage(msg);
     this.emit.message.added(msg);
 
-    const recipients = excludeAddrFrom(chat.members, this.ownAddr);
+    const recipients = excludeAddrFrom(Object.keys(chat.members), this.ownAddr);
     await sendSystemMessage({
       chatId, chatMessageId, recipients, chatSystemData
     });

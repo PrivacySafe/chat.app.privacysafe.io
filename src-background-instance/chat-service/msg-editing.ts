@@ -19,7 +19,7 @@ import { ChatsData } from '../dataset/index.ts';
 import { ChatIdObj, ChatMessageId } from "../../types/asmail-msgs.types.ts";
 import type { ChatService } from './index.ts';
 import { chatIdOfOTOChat, chatViewForGroupChat, chatViewForOTOChat, msgDbEntryForIncomingSysMsg } from './common-transforms.ts';
-import { GroupChatDbEntry, OTOChatDbEntry } from '../dataset/versions/v1/chats-db.ts';
+import { GroupChatDbEntry, OTOChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
 import { includesAddress } from '../../shared-libs/address-utils.ts';
 import { UpdatedMsgBodySysMsgData } from '../../types/asmail-msgs.types.ts';
 

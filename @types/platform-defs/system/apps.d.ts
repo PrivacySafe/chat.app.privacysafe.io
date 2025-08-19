@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 - 2024 3NSoft Inc.
+ Copyright (C) 2021 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -58,48 +58,25 @@ declare namespace web3n.system.apps {
 
 	interface AppsOpener {
 		/**
-		 * This lists apps in user's system, returning an array with found apps'
-		 * versions.
-		 * @param filter if present, instructs to list only app versions in given
-		 * state(s). Otherwise, all are listed.
+		 * This lists currently installed apps.
 		 */
-		listApps(filter?: AppState[]): Promise<AppVersions[]>;
+		listCurrentApps(): Promise<{ id: string; version: string; }[]>;
+
 		/**
-		 * This returns app's versions in user's system. Undefined is returned
-		 * when an app is not found in user's system.
-		 * @param id identifies app, which versions should be returned.
-		 * @param filter if present, instructs to list only app versions in given
-		 * state(s). Otherwise, all are listed.
-		 */
-		getAppVersions(
-			id: string, filter?: AppState[]
-		): Promise<AppVersions|undefined>;
-		/**
-		 * This returns a manifest of a particular app version. Undefined is
-		 * returned, when a given app version is not found in user's system.
+		 * This returns a manifest of a current installed app version.
+		 * Undefined is returned if given app is not linked as currently installed.
 		 * @param id identifies app.
-		 * @param version identifies app version. If missing, an installed
-		 * version is assumed.
 		 */
-		getAppManifest(
-			id: string, version?: string
-		): Promise<caps.AppManifest|undefined>;
+		getAppManifestOfCurrent(id: string): Promise<caps.AppManifest|undefined>;
+
 		/**
 		 * This returns bytes of a file from app's version pack. Undefined is
-		 * returned, when a given app version is not found in user's system.
+		 * returned, when a given app is not linked as currently installed.
 		 * @param id identifies app.
 		 * @param path is a path to file inside app folder of app's version pack.
-		 * @param version identifies app version. If missing, an installed
-		 * version is assumed.
 		 */
-		getAppFileBytes(
-			id: string, path: string, version?: string
-		): Promise<Uint8Array|undefined>;
-		/**
-		 * This starts watching app events, returning an unsubscribe function.
-		 * @param observer is a consumer of app events
-		 */
-		watchApps(observer: Observer<AppEvent>): () => void;
+		getAppFileBytesOfCurrent(id: string, path: string): Promise<Uint8Array|undefined>;
+
 		/**
 		 * This opens/starts app's web-gui component.
 		 * @param id identifies app.
@@ -109,6 +86,7 @@ declare namespace web3n.system.apps {
 		openApp(
 			id: string, entrypoint?: string, devTools?: boolean
 		): Promise<void>;
+
 		/**
 		 * This triggers execution of a command.
 		 * @param id identifies app.
@@ -118,11 +96,13 @@ declare namespace web3n.system.apps {
 		executeCommand(
 			id: string, cmd: shell.commands.CmdParams, devTools?: boolean
 		): Promise<void>;
+
 		/**
 		 * This triggers execution of all on-system-startup launchers.
 		 * Such call is needed after the first system initialization setup.
 		 */
 		triggerAllStartupLaunchers(): Promise<void>;
+
 		/**
 		 * This closes apps that are running non-current versions after an update.
 		 * @param appsToClose ids of apps that need old versions to be closed.
@@ -130,26 +110,8 @@ declare namespace web3n.system.apps {
 		closeAppsAfterUpdate(appsToClose: string[]): Promise<void>;
 	}
 
-	interface AppVersions {
-		/**
-		 * id is a unique identitfier of an app, usually app domain
-		 */
-		id: string;
-		/**
-		 * current is a currently installed version, if any.
-		 * Only one version of an app can be installed at any moment.
-		 */
-		current?: string;
-		/**
-		 * packs is an array of app versions in user's system.
-		 */
-		packs?: string[];
-	}
-
-	type AppState = 'current' | 'packs';
-
 	interface AppEvent {
-		type: 'installed' | 'uninstalled';
+		type: 'installed' | 'uninstalled' | 'pack-removed';
 		id: string;
 		version: string;
 	}
@@ -197,13 +159,102 @@ declare namespace web3n.system.apps {
 	}
 
 	interface AppsInstaller {
-		unpackBundledApp(
+
+		/**
+		 * This lists bundled 3NWeb apps.
+		 */
+		listBundledApps(): Promise<{ id: string; version: string; }[]>;
+
+		/**
+		 * This unzips bundled app into user's packs' system folder.
+		 * @param id 
+		 * @param observer of unzipping process
+		 */
+		addPackFromBundledApps(
 			id: string, observer: Observer<BundleUnpackProgress>
 		): () => void;
+
+		/**
+		 * This adds 
+		 * @param appPackFS 
+		 * @param observer 
+		 */
+		addAppPackFromFolder(
+			appPackFS: files.ReadonlyFS, observer: Observer<BundleUnpackProgress>
+		): () => void;
+
+		/**
+		 * This adds 
+		 * @param appPackFS 
+		 * @param observer 
+		 */
+		addAppPackFromZipFile(
+			appPackFile: files.ReadonlyFile, observer: Observer<BundleUnpackProgress>
+		): () => void;
+
+		/**
+		 * This lists all pack versions of all apps in user's packs' system folder.
+		 */
+		listAllAppsPacks(): Promise<{ id: string; versions: string[]; }[]>;
+
+		/**
+		 * This lists pack versions of a given app in user's packs' system folder.
+		 * Undefined is returned, when a given app is not found in user's packs' system folder.
+		 * @param id 
+		 */
+		listAppPacks(id: string): Promise<string[]|undefined>;
+
+		/**
+		 * This links given app version pack as currently installed in user's system.
+		 * @param id 
+		 * @param version 
+		 */
 		installApp(id: string, version: string): Promise<PostInstallState>;
+
+		/**
+		 * This removes app pack, if it isn't linked as currently installed.
+		 * @param id 
+		 * @param version 
+		 */
 		removeAppPack(id: string, version: string): Promise<void>;
+
+		/**
+		 * Uninstalls app by removing current link. The respective pack is not
+		 * removed from user's packs' system folder byt his call.
+		 * @param id 
+		 */
 		uninstallApp(id: string): Promise<void>;
-		// removeAppData(id: string);
+
+		/**
+		 * This removes apps data folders. If app is running, it will be closed first.
+		 * @param id 
+		 */
+		removeAppData(id: string): Promise<void>;
+
+		/**
+		 * This starts watching app events, returning an unsubscribe function.
+		 * @param observer is a consumer of app events
+		 */
+		watchApps(observer: Observer<AppEvent>): () => void;
+
+		/**
+		 * This returns a manifest of a particular app version. Undefined is
+		 * returned, when a given app version is not found in user's system.
+		 * @param id identifies app.
+		 * @param version identifies app version.
+		 */
+		getAppManifest(id: string, version: string): Promise<caps.AppManifest|undefined>;
+
+		/**
+		 * This returns bytes of a file from app's version pack. Undefined is
+		 * returned, when a given app version is not found in user's system.
+		 * @param id identifies app.
+		 * @param path is a path to file inside app folder of app's version pack.
+		 * @param version identifies app version.
+		 */
+		getAppFileBytes(
+			id: string, path: string, version: string
+		): Promise<Uint8Array|undefined>;
 	}
 
 	type PostInstallState = 'all-done' | 'need-restart' | 'need-restart-many';
@@ -224,6 +275,21 @@ declare namespace web3n.system.apps {
 	}
 
 	interface LaunchersOverrides {
+	}
+
+	interface AppInitException extends RuntimeException {
+		type: 'app-init',
+		appDomain: string;
+		entrypoint?: string;
+		service?: string;
+		command?: string;
+		version?: string;
+		badAppPack?: true;
+		notInstalled?: true;
+		noBundledPack?: true;
+		errAtInstall?: true;
+		errAtUninstall?: true;
+		errAtPackRemoval?: true;
 	}
 
 }

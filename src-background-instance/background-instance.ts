@@ -24,30 +24,33 @@ import { ensureDefaultAnonSenderMaxMsgSize } from './workarounds.ts';
 setupGlobalReportingOfUnhandledErrors(true);
 
 try {
-
   const ownAddr = await w3n.mailerid!.getUserId();
 
-  const {
-    chats, stopChatsService
-  } = await ChatService.setupAndStartServing(ownAddr);
-
-  const webrtcMsgsHandler = setupAndStartVideoGUIOpener(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { chats, stopChatsService } = await ChatService.setupAndStartServing(
     ownAddr,
-    chats.findChatEntry.bind(chats)
+    () => getChatsWithVideoCall(),
   );
 
+  const { webrtcMsgsHandler, getChatsWithVideoCall } = setupAndStartVideoGUIOpener(
+    ownAddr,
+    chats.findChatEntry.bind(chats),
+    chats.postProcessingForVideoChat.bind(chats),
+  );
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const stopDeliveryService = await ChatDeliveryService.setupAndStartServing(
     chats.makeChatMessagesHandler(),
     webrtcMsgsHandler,
-    chats.getLatestIncomingMsgTimestamp()
+    chats.getLatestIncomingMsgTimestamp(),
   );
-
 } catch (err) {
   w3n.log('error', `Error in a startup of instance with main services for chat. Can't proceed, and will close the whole component.`, err);
   setTimeout(() => w3n.closeSelf!(), 100);
 }
 
 // work around incomplete/missing inbox configuration
-ensureDefaultAnonSenderMaxMsgSize(100*1024*1024).catch(err => {
-  w3n.log('error', `Fail in checking and setting anonymous sender max message size`, err);
-});
+ensureDefaultAnonSenderMaxMsgSize(100 * 1024 * 1024)
+  .catch(err => {
+    w3n.log('error', `Fail in checking and setting anonymous sender max message size`, err);
+  });

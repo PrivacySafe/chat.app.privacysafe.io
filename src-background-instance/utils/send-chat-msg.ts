@@ -19,13 +19,19 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 /// <reference path="../../@types/platform-defs/test-stand.d.ts" />
 
 import { generatOutgoingMsgId } from '../../shared-libs/chat-ids.ts';
-import type { ChatIdObj, ChatInvitationMsgV1, ChatOutgoingMessage, ChatRegularMsgV1, ChatSystemMsgV1, LocalMetadataInDelivery, RelatedMessage } from '../../types/index.ts';
+import type {
+  ChatIdObj,
+  ChatInvitationMsgV1,
+  ChatOutgoingMessage,
+  ChatRegularMsgV1,
+  ChatSystemMsgV1,
+  LocalMetadataInDelivery,
+  RelatedMessage,
+} from '../../types/index.ts';
 
-export async function sendSystemMessage({
-  chatId, recipients, chatMessageId, chatSystemData
-}: {
-  chatId: ChatIdObj; recipients: string[];
-} & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>
+export async function sendSystemMessage(
+  { chatId, recipients, chatMessageId, chatSystemData }:
+    { chatId: ChatIdObj; recipients: string[] } & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>,
 ): Promise<void> {
   const jsonBody: ChatSystemMsgV1 = {
     v: 1,
@@ -36,19 +42,20 @@ export async function sendSystemMessage({
   };
   const outMsg: ChatOutgoingMessage = {
     msgType: 'chat',
-    jsonBody
+    jsonBody,
   };
   const deliveryMetadata: LocalMetadataInDelivery = {
     chatId,
     chatMessageType: 'system',
-    chatSystemData
+    chatSystemData,
   };
   await addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
 }
 
 async function addMessageToDeliveryList(
-  message: ChatOutgoingMessage, recipients: string[],
-  localMeta: LocalMetadataInDelivery
+  message: ChatOutgoingMessage,
+  recipients: string[],
+  localMeta: LocalMetadataInDelivery,
 ): Promise<void> {
   await w3n.mail!.delivery.addMsg(
     recipients,
@@ -56,21 +63,22 @@ async function addMessageToDeliveryList(
     generatOutgoingMsgId(),
     {
       sendImmediately: !message.attachments,
-      localMeta
+      localMeta,
     },
   );
 }
 
 export async function sendChatInvitation(
-  chatId: ChatIdObj, recipients: string[], {
-    chatMessageId, inviteData
-  }: Pick<ChatInvitationMsgV1, 'chatMessageId' | 'inviteData'>
+  chatId: ChatIdObj,
+  recipients: string[],
+  invitationMsgData: Pick<ChatInvitationMsgV1, 'chatMessageId' | 'inviteData'>,
 ): Promise<void> {
+  const { chatMessageId, inviteData } = invitationMsgData;
   const jsonBody: ChatInvitationMsgV1 = {
     v: 1,
     chatMessageType: 'invitation',
     chatMessageId,
-    inviteData
+    inviteData,
   };
   const outMsg: ChatOutgoingMessage = {
     msgType: 'chat',
@@ -78,40 +86,46 @@ export async function sendChatInvitation(
   };
   const deliveryMetadata: LocalMetadataInDelivery = {
     chatId,
-    chatMessageType: 'invitation'
+    chatMessageType: 'invitation',
   };
   await addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
 }
 
 export async function sendSysMsgsAboutRemovalFromChat(
-  chatId: ChatIdObj, recipients: string[], chatDeleted?: true
+  chatId: ChatIdObj,
+  recipients: string[],
+  chatDeleted?: true,
 ): Promise<void> {
   await Promise.allSettled(recipients.map(recipient => sendSystemMessage({
     chatId,
-    recipients: [ recipient ],
+    recipients: [recipient],
     chatSystemData: {
       event: 'member-removed',
-      chatDeleted
-    }
+      chatDeleted,
+    },
   })));
 }
 
 export async function sendSysMsgToLeaveChat(
-  chatId: ChatIdObj, chatMessageId: string, recipients: string[]
+  chatId: ChatIdObj,
+  chatMessageId: string,
+  recipients: string[],
 ): Promise<void> {
   await sendSystemMessage({
     chatId,
     chatMessageId,
     recipients,
     chatSystemData: {
-      event: 'member-left'
-    }
+      event: 'member-left',
+    },
   });
 }
 
 export async function sendRegularMessage(
-  chatId: ChatIdObj, chatMessageId: string,
-  recipients: string[], text: string,
+  chatId: ChatIdObj,
+  chatMessageId: string,
+  recipients: string[],
+  text: string,
   attachments: ChatOutgoingMessage['attachments'],
   relatedMessage: RelatedMessage | undefined,
 ): Promise<void> {
@@ -120,16 +134,19 @@ export async function sendRegularMessage(
     chatMessageType: 'regular',
     groupChatId: (chatId.isGroupChat ? chatId.chatId : undefined),
     chatMessageId,
-    relatedMessage
+    relatedMessage,
   };
+
   const outMsg: ChatOutgoingMessage = {
     msgType: 'chat',
     jsonBody,
     plainTxtBody: text,
-    attachments
+    attachments,
   };
+
   const deliveryMetadata: LocalMetadataInDelivery = {
-    chatId, chatMessageType: 'regular', chatMessageId
+    chatId, chatMessageType: 'regular', chatMessageId,
   };
+
   addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
 }

@@ -30,20 +30,21 @@ export type MakePeerChannelsInChat = (
 ) => WebRTCSignalingPeerChannel;
 
 export class VideoComponentInstance {
-
   private constructor(
     private readonly chat: ChatInfoForCall,
-    private guiSrv: VideoChatComponent
-  ) {}
+    private guiSrv: VideoChatComponent,
+  ) {
+  }
 
   static async makeAndStart(
-    chat: ChatInfoForCall, obs: web3n.Observer<CallFromVideoGUI>
+    chat: ChatInfoForCall,
+    obs: web3n.Observer<CallFromVideoGUI>,
   ): Promise<{ instance: VideoComponentInstance; startProc: Promise<void> }> {
     const srvConn = await w3n.rpc!.thisApp!('VideoChatComponent');
     const guiSrv = makeServiceCaller<VideoChatComponent>(srvConn, [
       'startVideoCallComponentForChat',
       'focusWindow',
-      'closeWindow',
+      'endCall',
       'handleWebRTCSignal',
     ], [
       'watchRequests',
@@ -58,9 +59,12 @@ export class VideoComponentInstance {
     await this.guiSrv!.focusWindow();
   }
 
+  async endCall(): Promise<void> {
+    await this.guiSrv!.endCall();
+  }
+
   getListenerForChannelTo(peer: string): WebRTCSignalListener {
     return msg => this.guiSrv!.handleWebRTCSignal(peer, msg);
   }
-
 }
 

@@ -15,9 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { randomStr } from "../../../../shared-libs/randomStr.ts";
-import { SingleProc } from "../../../../shared-libs/processes/single.ts";
-import { FileLinkStoreService } from "../../../../types/services.types.ts";
+import { randomStr } from '../../../../shared-libs/randomStr.ts';
+import { SingleProc } from '../../../../shared-libs/processes/single.ts';
+import { FileLinkStoreService } from '../../../../types/services.types.ts';
 
 export async function makeOutgoingFileLinkStore(): Promise<FileLinkStoreService> {
   const fileProc = new SingleProc();
@@ -29,7 +29,7 @@ export async function makeOutgoingFileLinkStore(): Promise<FileLinkStoreService>
 
   const checkFs = async (): Promise<void> => {
     if (!fs) {
-    await initializing();
+      await initializing();
     }
   };
 
@@ -37,46 +37,59 @@ export async function makeOutgoingFileLinkStore(): Promise<FileLinkStoreService>
     const fileId = randomStr(20);
 
     try {
-    await checkFs();
-    await fileProc.startOrChain(() => fs!.link(fileId, file));
+      await checkFs();
+      await fileProc.startOrChain(() => fs!.link(fileId, file));
     } catch (e) {
-    console.error(`Error saving link to ${file.name}. `, e);
+      // FileException
+      // eslint-disable-next-line
+      if ((e as any).notLinkableFile) {
+        await fileProc.startOrChain(() => fs!.saveFile(file, fileId));
+        return fileId;
+      }
+
+      console.error(`Error saving link to ${file.name}. `, e);
+
     }
 
     return fileId;
   };
 
-  const getLink = async (fileId: string): Promise<web3n.files.SymLink | null | undefined> => {
+  const getLink = async (fileId: string): Promise<web3n.files.SymLink  | null | undefined> => {
     try {
-    await checkFs();
-    return await fileProc.startOrChain(() => fs!.readLink(fileId));
+      await checkFs();
+      return await fileProc.startOrChain(() => fs!.readLink(fileId));
     } catch (e) {
-    console.error(`Error getting link ${fileId}. `, e);
-    const { notFound, path } = e as web3n.files.FileException;
-    if (path === fileId && notFound) {
-      return null;
-    }
+      console.error(`Error getting link ${fileId}. `, e);
+      const { notFound, path } = e as web3n.files.FileException;
+      if (path === fileId && notFound) {
+        return null;
+      }
     }
   };
 
-  const getFile = async (fileId: string): Promise<web3n.files.Linkable | null | undefined> => {
+  const getFile = async (fileId: string): Promise<web3n.files.File | null | undefined> => {
     try {
-    const link = await getLink(fileId);
-    if (link && link.isFile) {
-      return await link.target();
-    }
-    return null;
+      const stat = await fs!.stat(fileId);
+      if (stat.isLink) {
+        const link = await getLink(fileId);
+        if (link && link.isFile) {
+          return await link.target() as web3n.files.File;
+        }
+        return null;
+      }
+
+      return await fileProc.startOrChain(() => fs!.readonlyFile(fileId));
     } catch (e) {
-    console.error(`Error getting file ${fileId}. `, e);
+      console.error(`Error getting file ${fileId}. `, e);
     }
   };
 
   const deleteLink = async (fileId: string): Promise<void> => {
     try {
-    await checkFs();
-    await fileProc.startOrChain(() => fs!.deleteLink(fileId));
+      await checkFs();
+      await fileProc.startOrChain(() => fs!.deleteLink(fileId));
     } catch (e) {
-    console.error(`Error deleting link ${fileId}. `, e);
+      console.error(`Error deleting link ${fileId}. `, e);
     }
   };
 

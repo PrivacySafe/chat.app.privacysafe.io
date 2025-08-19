@@ -17,11 +17,8 @@
 
 // @deno-types="../../../../shared-libs/sqlite-on-3nstorage/index.d.ts"
 import { objectFromQueryExecResult, SQLiteOn3NStorage } from '../../../../shared-libs/sqlite-on-3nstorage/index.js';
-import { ChatIdObj, ChatMessageId } from "../../../../types/asmail-msgs.types.ts";
-import { ChatView, SingleChatView } from '../../../../types/chat.types.ts';
-import { ChatDbEntry, ChatsDB, GroupChatDbEntry, OTOChatDbEntry, initializeV1chats } from '../v1/chats-db.ts';
-import { MsgDbEntry, MsgsDBs, initializeV1msgs } from '../v1/msgs-db.ts';
-import { makeDbRecordException } from '../../../utils/exceptions.ts';
+import type { GroupChatDbEntry, OTOChatDbEntry } from '../v2/chats-db.ts';
+import type { MsgDbEntry } from '../v2/msgs-db.ts';
 import { areAddressesEqual, toCanonicalAddress } from '../../../../shared-libs/address-utils.ts';
 
 type WritableFile = web3n.files.WritableFile;
@@ -52,9 +49,9 @@ function chatDbEntryFrom(rec: ChatV0Record, ownAddr: string): {
   groupChat?: GroupChatDbEntry, otoChat?: OTOChatDbEntry, initChatId: string
 } {
   const { chatId, name, createdAt } = rec;
-  const members = JSON.parse(rec.members) as string[];
+  const members = turnMembersStringArrayToV2(JSON.parse(rec.members));
   const admins = JSON.parse(rec.admins) as string[];
-  if (members.length > 2) {
+  if (Object.values(members).length > 2) {
     return {
       initChatId: chatId,
       groupChat: {
@@ -64,11 +61,11 @@ function chatDbEntryFrom(rec: ChatV0Record, ownAddr: string): {
         createdAt,
         lastUpdatedAt: createdAt,
         admins,
-        members
-      }
+        members,
+      },
     };
   } else {
-    const peerAddr = members.find(addr => !areAddressesEqual(addr, ownAddr))!;
+    const peerAddr = Object.keys(members).find(addr => !areAddressesEqual(addr, ownAddr))!;
     return {
       initChatId: chatId,
       otoChat: {
@@ -77,20 +74,28 @@ function chatDbEntryFrom(rec: ChatV0Record, ownAddr: string): {
         name,
         status: 'on',
         peerAddr,
-        peerCAddr: toCanonicalAddress(peerAddr)
-      }
+        peerCAddr: toCanonicalAddress(peerAddr),
+      },
     };
   }
+}
+
+export function turnMembersStringArrayToV2(membersV0: string[]): GroupChatDbEntry['members'] {
+  let members: GroupChatDbEntry['members'] = {};
+  for (const member of membersV0) {
+    members[member] = { hasAccepted: true };
+  }
+  return members;
 }
 
 function msgDbEntryFrom(
   rec: MsgV0Record,
   groupChatId: MsgDbEntry['groupChatId'],
-  otoPeerCAddr: MsgDbEntry['otoPeerCAddr']
+  otoPeerCAddr: MsgDbEntry['otoPeerCAddr'],
 ): MsgDbEntry {
   const {
     body, attachments: attachStr, chatMessageId, msgId, sender,
-    status, timestamp, messageType, chatMessageType, initialMessageId
+    status, timestamp, messageType, chatMessageType, initialMessageId,
   } = rec;
   const isIncomingMsg = (messageType === 'incoming');
   const attachments: MsgDbEntry['attachments'] = (
@@ -101,7 +106,7 @@ function msgDbEntryFrom(
     (
       isIncomingMsg && attachments &&
       (attachments.length > 0) && !attachments[0].id
-    ) ?  msgId : null
+    ) ? msgId : null
   );
   return {
     isIncomingMsg,
@@ -111,24 +116,26 @@ function msgDbEntryFrom(
     chatMessageId,
     timestamp,
     chatMessageType,
+    // @ts-ignore
     status: ((chatMessageType === 'regular') ?
-      (isIncomingMsg ? 'read' : status) : null
+        (isIncomingMsg ? 'read' : status) : null
     ),
     history: null,
     reactions: null,
     relatedMessage: (initialMessageId ? {
       replyTo: {
-        chatMessageId: initialMessageId
-      }
+        chatMessageId: initialMessageId,
+      },
     } : null),
     groupChatId,
     groupSender: ((isIncomingMsg && groupChatId) ? sender : null),
-    otoPeerCAddr
+    otoPeerCAddr,
   };
 }
 
 export async function getVersionNoneData(
-  chatsDbFile: WritableFile, ownAddr: string
+  chatsDbFile: WritableFile,
+  ownAddr: string,
 ): Promise<{
   groupChats: GroupChatDbEntry[];
   otoChats: OTOChatDbEntry[];
@@ -138,20 +145,25 @@ export async function getVersionNoneData(
     groupChat?: GroupChatDbEntry; otoChat?: OTOChatDbEntry;
   }>();
   const vNone = await SQLiteOn3NStorage.makeAndStart(chatsDbFile);
-  const initChatRecs = objectFromQueryExecResult<ChatV0Record>(
-    vNone.db.exec(`SELECT * FROM chats`)[0]
-  );
+  const execResult = vNone.db.exec(`SELECT * FROM chats`)[0];
+  if (!execResult) {
+    return { groupChats: [], otoChats: [], msgRecords: [] };
+  }
+
+  const initChatRecs = objectFromQueryExecResult<ChatV0Record>(execResult);
   for (const initChat of initChatRecs) {
     try {
       const {
-        initChatId, groupChat, otoChat
+        initChatId, groupChat, otoChat,
       } = chatDbEntryFrom(initChat, ownAddr);
       chats.set(initChatId, { groupChat, otoChat });
-    } catch (err) {}
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (err) { /* empty */
+    }
   }
 
   const initMsgRecs = objectFromQueryExecResult<MsgV0Record>(
-    vNone.db.exec(`SELECT * FROM messages`)[0]
+    vNone.db.exec(`SELECT * FROM messages`)[0],
   );
   const msgRecords: MsgDbEntry[] = [];
   for (const initMsg of initMsgRecs) {
@@ -165,7 +177,7 @@ export async function getVersionNoneData(
       const msg = msgDbEntryFrom(
         initMsg,
         (groupChat ? groupChat.chatId : null),
-        (otoChat ? otoChat.peerCAddr : null)
+        (otoChat ? otoChat.peerCAddr : null),
       );
       msgRecords.push(msg);
     } catch (err) {
