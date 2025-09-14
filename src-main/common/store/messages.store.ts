@@ -15,17 +15,19 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, ref } from 'vue';
-import { defineStore, storeToRefs } from 'pinia';
+import { defineStore } from 'pinia';
 import keyBy from 'lodash/keyBy';
 import { chatService, fileLinkStoreSrv } from '@main/common/services/external-services';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
+import { useUiOutgoingStore } from '@main/common/store/ui.outgoing.store';
 import { areChatIdsEqual } from '@shared/chat-ids';
-import type {
+import {
   ChatIdObj,
   ChatMessageAttachmentsInfo,
   ChatMessageEvent,
   ChatMessageId,
+  ChatMessageSendingProgressEvent,
   ChatMessageView,
   ReadonlyFile,
 } from '~/index';
@@ -33,11 +35,8 @@ import type { DbRecordException } from '@bg/utils/exceptions.ts';
 
 export const useMessagesStore = defineStore('messages', () => {
   const chatsStore = useChatsStore();
-  const { refreshChatViewData, refreshChatList } = chatsStore;
-
   const chatStore = useChatStore();
-  const { currentChatId } = storeToRefs(chatStore);
-  const { ensureCurrentChatIsSet } = chatStore;
+  const uiOutgoingStore = useUiOutgoingStore();
 
   const objOfCurrentChatMessages = ref<Record<string, ChatMessageView>>({});
 
@@ -51,12 +50,12 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   async function fetchMessages(): Promise<void> {
-    if (!currentChatId.value) {
+    if (!chatStore.currentChatId) {
       setCurrentChatMessages([]);
       return;
     }
 
-    setCurrentChatMessages(await chatService.getMessagesByChat(currentChatId.value));
+    setCurrentChatMessages(await chatService.getMessagesByChat(chatStore.currentChatId));
   }
 
   function getMessageInCurrentChat(chatMsgId: string): ChatMessageView | undefined {
@@ -64,6 +63,20 @@ export const useMessagesStore = defineStore('messages', () => {
       return;
     }
     return objOfCurrentChatMessages.value[chatMsgId];
+  }
+
+  function upsertMessageInCurrentChat(chatMsgId: string, data: Partial<ChatMessageView>) {
+    const msg = getMessageInCurrentChat(chatMsgId);
+    if (!msg) {
+      objOfCurrentChatMessages.value[chatMsgId] = data as ChatMessageView;
+      return;
+    }
+
+    // @ts-expect-error
+    objOfCurrentChatMessages.value[chatMsgId] = {
+      ...msg,
+      ...data,
+    };
   }
 
   async function deleteMessageInChat(chatMsgId: string, deleteForEveryone?: boolean): Promise<void> {
@@ -75,10 +88,10 @@ export const useMessagesStore = defineStore('messages', () => {
     try {
       const { chatId, chatMessageId } = message;
       await chatService.deleteMessage({ chatId, chatMessageId }, !!deleteForEveryone);
-      await refreshChatViewData(chatId);
+      await chatsStore.refreshChatViewData(chatId);
     } catch (err) {
       if ((err as DbRecordException).chatNotFound) {
-        await refreshChatList();
+        await chatsStore.refreshChatList();
       } else {
         await fetchMessages();
       }
@@ -88,7 +101,7 @@ export const useMessagesStore = defineStore('messages', () => {
   async function deleteAllMessagesInChat(
     chatId: ChatIdObj, deleteForEveryone?: boolean,
   ): Promise<void> {
-    ensureCurrentChatIsSet(chatId);
+    chatStore.ensureCurrentChatIsSet(chatId);
     await chatService.deleteMessagesInChat(chatId, !!deleteForEveryone);
     await fetchMessages();
   }
@@ -130,30 +143,30 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   async function handleAddedMsg(msg: ChatMessageView): Promise<void> {
-    if (areChatIdsEqual(currentChatId.value, msg.chatId)) {
+    if (areChatIdsEqual(chatStore.currentChatId, msg.chatId)) {
       if (!objOfCurrentChatMessages.value[msg.chatMessageId]) {
-        objOfCurrentChatMessages.value[msg.chatMessageId] = msg;
+        upsertMessageInCurrentChat(msg.chatMessageId, msg);
       }
     }
-    await refreshChatViewData(msg.chatId);
+    await chatsStore.refreshChatViewData(msg.chatId);
   }
 
   async function handleUpdatedMsg(msg: ChatMessageView): Promise<void> {
-    if (areChatIdsEqual(currentChatId.value, msg.chatId)) {
-      objOfCurrentChatMessages.value[msg.chatMessageId] = msg;
+    if (areChatIdsEqual(chatStore.currentChatId, msg.chatId)) {
+      upsertMessageInCurrentChat(msg.chatMessageId, msg);
     }
-    await refreshChatViewData(msg.chatId);
+    await chatsStore.refreshChatViewData(msg.chatId);
   }
 
   async function handleRemovedMsg(msg: ChatMessageId): Promise<void> {
-    if (areChatIdsEqual(currentChatId.value, msg.chatId)) {
+    if (areChatIdsEqual(chatStore.currentChatId, msg.chatId)) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete objOfCurrentChatMessages.value[msg.chatMessageId];
     }
-    await refreshChatViewData(msg.chatId);
+    await chatsStore.refreshChatViewData(msg.chatId);
   }
 
   async function handleBackgroundMessageEvents(event: ChatMessageEvent) {
-    console.log('### HANDLE BACKGROUND MESSAGE EVENTS ### ', event);
     switch (event.event) {
       case 'added':
         return handleAddedMsg(event.msg);
@@ -161,6 +174,9 @@ export const useMessagesStore = defineStore('messages', () => {
         return handleUpdatedMsg(event.msg);
       case 'removed':
         return handleRemovedMsg(event.msgId);
+      case 'sending-progress':
+        uiOutgoingStore.updateSendingProgressesList(event as ChatMessageSendingProgressEvent);
+        break;
       default:
         console.log(`Unknown update event from ChatService:`, event);
         break;
@@ -170,8 +186,9 @@ export const useMessagesStore = defineStore('messages', () => {
   return {
     objOfCurrentChatMessages,
     currentChatMessages,
-    setCurrentChatMessages,
     fetchMessages,
+    setCurrentChatMessages,
+    upsertMessageInCurrentChat,
     getMessageInCurrentChat,
     deleteMessageInChat,
     deleteAllMessagesInChat,
@@ -179,5 +196,8 @@ export const useMessagesStore = defineStore('messages', () => {
     getChatMessage,
     getMessageAttachments,
     handleBackgroundMessageEvents,
+    handleAddedMsg,
+    handleUpdatedMsg,
+    handleRemovedMsg,
   };
 });

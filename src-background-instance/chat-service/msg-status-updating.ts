@@ -34,9 +34,8 @@ export class MsgStatusUpdating {
   ) {
   }
 
-  async markMessageAsReadNotifyingSender({
-                                           chatId, chatMessageId,
-                                         }: ChatMessageId): Promise<void> {
+  async markMessageAsReadNotifyingSender(
+    { chatId, chatMessageId }: ChatMessageId): Promise<void> {
     const chat = this.data.findChat(chatId);
     if (!chat) {
       throw makeDbRecordException({ chatNotFound: true });

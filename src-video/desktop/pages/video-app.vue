@@ -18,15 +18,17 @@
 <script lang="ts" setup>
 import { onBeforeMount, onBeforeUnmount } from 'vue';
 import { useAppStore } from '@video/common/store/app.store';
+import { useHandleSystemMessages } from '@video/common/composables/use-handle-system-messages';
 import { initializationServices } from '@video/common/services/service-provider';
 
 const { initialize, stopWatching } = useAppStore();
+const { initializeSystemMessagesHandler } = useHandleSystemMessages();
 
 onBeforeMount(async () => {
   try {
     await initialize();
     await initializationServices();
-
+    initializeSystemMessagesHandler();
   } catch (e) {
     console.error('ON_BEFORE_MOUNT ERROR: ', e);
     throw e;

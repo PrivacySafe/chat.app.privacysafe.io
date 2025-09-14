@@ -64,7 +64,7 @@ export function useAppSize() {
 
   return {
     appElement,
-
+    appWindowSize,
     stopWatching,
   };
 }

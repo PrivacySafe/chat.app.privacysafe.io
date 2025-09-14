@@ -15,20 +15,24 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, ref } from 'vue';
-import { defineStore, storeToRefs } from 'pinia';
+import { defineStore } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import cloneDeep from 'lodash/cloneDeep';
 import { useAppStore } from '@main/common/store/app.store';
-import type { ChatIdObj, ChatMessageId } from '~/asmail-msgs.types';
-import {
+import { useMessagesStore } from '@main/common/store/messages.store';
+import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
+import type {
+  ChatIdObj,
+  ChatMessageId,
   ChatListItemView,
   IncomingCallCmdArg,
   AddressCheckResult,
   ChatEvent,
+  ChatWebRTCCallEvent,
 } from '~/index';
 import { getChatName } from '@main/common/utils/chat-ui.helper';
 import { chatService } from '@main/common/services/external-services';
-import { areChatIdsEqual } from '@shared/chat-ids';
+import { areChatIdsEqual, generateChatMessageId } from '@shared/chat-ids';
 import { randomStr } from '@shared/randomStr';
 
 export type ChatsStore = ReturnType<typeof useChatsStore>;
@@ -47,7 +51,9 @@ export const useChatsStore = defineStore('chats', () => {
   const route = useRoute();
   const router = useRouter();
 
-  const { user: me } = storeToRefs(useAppStore());
+  const appStore = useAppStore();
+  const messagesStore = useMessagesStore();
+  const uiIncomingStore = useUiIncomingStore();
 
   const chatList = ref<ChatListItemView[]>([]);
   const incomingCalls = ref<IncomingCallCmdArg[]>([]);
@@ -122,7 +128,7 @@ export const useChatsStore = defineStore('chats', () => {
   async function acceptChatInvitation({ chatId, chatMessageId }: ChatMessageId, ownName?: string): Promise<void> {
     try {
       if (!ownName) {
-        ownName = me.value.substring(0, me.value.indexOf('@'));
+        ownName = appStore.user.substring(0, appStore.user.indexOf('@'));
       }
       return await chatService.acceptChatInvitation(chatId, chatMessageId, ownName);
     } catch (err) {
@@ -172,7 +178,6 @@ export const useChatsStore = defineStore('chats', () => {
   }
 
   async function handleBackgroundChatEvents(event: ChatEvent): Promise<void> {
-    console.log('# CHAT EVENT => ', event);
     switch (event.event) {
       case 'updated': {
         const { chat } = event;
@@ -210,6 +215,80 @@ export const useChatsStore = defineStore('chats', () => {
           chatList.value.splice(chatInd, 1);
         }
         resetRouteIfItPointsToRemovedChat();
+        break;
+      }
+
+      case 'webRTCCall': {
+        const { value } = event as ChatWebRTCCallEvent;
+        const { data } = value || {};
+        const { chatId, sender, subType } = data || {};
+        if (!chatId) {
+          return;
+        }
+
+        const chatInd = findIndexOfChatInCurrentList(chatId);
+        if (chatInd === -1) {
+          return;
+        }
+
+        const chat = chatList.value[chatInd];
+        const { isGroupChat, callStart, incomingCall } = chat;
+        if (!callStart && !incomingCall) {
+          return;
+        }
+
+        if (incomingCall && subType === 'outgoing-call-cancelled') {
+          const { chatMessageId, timestamp } = generateChatMessageId();
+          const systemMsg = await chatService.makeAndSaveMsgToDb(appStore.user, {
+              chatMessageType: 'system',
+              isIncomingMsg: true,
+              groupChatId: isGroupChat ? chat.chatId : null,
+              otoPeerCAddr: isGroupChat ? null : chat.chatId,
+              groupSender: isGroupChat ? sender : null,
+              chatMessageId,
+              timestamp,
+              body: JSON.stringify({
+                event: 'webrtc-call',
+                value: {
+                  sender,
+                  subType,
+                  chatId,
+                },
+              }),
+            },
+          );
+          await uiIncomingStore.dismissIncomingCall(chatId, true);
+          await messagesStore.handleAddedMsg(systemMsg);
+          return;
+        }
+
+        if (subType === 'incoming-call-cancelled') {
+          const { chatMessageId, timestamp } = generateChatMessageId();
+          const systemMsg = await chatService.makeAndSaveMsgToDb(
+            appStore.user,
+            {
+              chatMessageType: 'system',
+              isIncomingMsg: true,
+              groupChatId: isGroupChat ? chat.chatId : null,
+              otoPeerCAddr: isGroupChat ? null : chat.chatId,
+              groupSender: isGroupChat ? sender : null,
+              chatMessageId,
+              timestamp,
+              body: JSON.stringify({
+                event: 'webrtc-call',
+                value: {
+                  sender,
+                  subType,
+                  chatId,
+                },
+              }),
+            },
+          );
+
+          !isGroupChat && await uiIncomingStore.endCall(chatId);
+          await messagesStore.handleAddedMsg(systemMsg);
+        }
+
         break;
       }
 

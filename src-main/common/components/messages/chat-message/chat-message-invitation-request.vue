@@ -149,13 +149,12 @@ async function addContactToList() {
   overflow: hidden;
   height: var(--spacing-l);
   margin: var(--spacing-s) auto;
-  border-radius: var(--spacing-l);
+  //border-radius: var(--spacing-l);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  column-gap: var(--spacing-m);
+  column-gap: var(--spacing-s);
   padding: 0 12px;
-  background-color: var(--color-bg-block-primary-default);
   font-size: var(--font-12);
   font-weight: 500;
   user-select: none;

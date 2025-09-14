@@ -5,9 +5,8 @@ node_modules
 /test-runner
 /test-data
 /temp
-/test-setup.json
-/test-user-creds-alone.json
-/test-users-creds.json
+/test-setup.*
+/test-user*.json
 /setup-w3n.bundle.js
 
 # local env files

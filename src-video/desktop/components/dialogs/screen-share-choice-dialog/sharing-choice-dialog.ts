@@ -92,7 +92,6 @@ export function useScreenShareChoiceDialog(
   }
 
   async function displayChoicesCollectionCB(choices: DisplaySourceInfo): Promise<string | undefined> {
-    console.log('# displayChoicesCollectionCB => ', choices);
     if (mediaIdToGet === undefined) {
       screenChoices.value = choices.screens?.map(info => {
         const { id: srcId, name, display_id } = info;

@@ -37,8 +37,9 @@ const emits = defineEmits<ChatMessagesEmits>();
 const {
   listElement,
   msgActionsMenuProps,
+  handleClickOnMessagesBlock,
+  handleRightClickOnAttachmentElement,
   goToMessage,
-  openMessageMenu,
   clearMessageMenu,
   handleAction,
 } = useChatMessages(emits);
@@ -60,9 +61,9 @@ watch(
   <div
     id="chat-messages"
     ref="list-element"
-    v-ui3n-long-press="{ handler: openMessageMenu, delay: 1000 }"
+    v-ui3n-long-press="{ handler: handleClickOnMessagesBlock, delay: 1000 }"
     :class="$style.chatMessages"
-    @click.right="openMessageMenu"
+    @click.right="handleClickOnMessagesBlock"
     @click="goToMessage"
   >
     <chat-message
@@ -71,6 +72,7 @@ watch(
       :msg="item"
       :prev-msg-sender="index === 0 ? '' : props.messages[index - 1].sender"
       :related-message="(item as RegularMsgView).relatedMessage"
+      @click:right="handleRightClickOnAttachmentElement"
     />
 
     <teleport

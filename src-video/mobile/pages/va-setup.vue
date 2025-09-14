@@ -16,7 +16,7 @@
 -->
 <script lang="ts" setup>
 import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
-import { useVaSetup } from '@video/common/composables/useVaSetup';
+import { useVaSetup } from '@video/common/composables/use-va-setup';
 import VideoPlaceholder from '@video/common/components/video-placeholder.vue';
 
 const {

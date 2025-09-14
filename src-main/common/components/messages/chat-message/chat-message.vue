@@ -29,6 +29,9 @@ const props = defineProps<{
   relatedMessage?: RegularMsgView['relatedMessage'];
   prevMsgSender: string | undefined;
 }>();
+const emits = defineEmits<{
+  (event: 'click:right', value: MouseEvent): void;
+}>();
 
 const messagesStore = useMessagesStore();
 const { markMessageAsRead } = messagesStore;
@@ -83,6 +86,7 @@ onMounted(() => {
   <div
     :id="`msg-${msg.chatMessageId}`"
     ref="chat-msg-element"
+    class="chat-message"
     :class="[
       $style.chatMessage,
       currentMsgSender !== prevMsgSender && !isMsgSystem && $style.withOffset,
@@ -105,6 +109,7 @@ onMounted(() => {
       :wrap-msg-element="chatMsgElement"
       :related-message="relatedMessage"
       :prev-msg-sender="prevMsgSender"
+      @click:right="emits('click:right', $event)"
     />
   </div>
 </template>

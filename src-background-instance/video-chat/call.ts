@@ -134,6 +134,11 @@ export class CallInChat {
         case 'close-channel': {
           const { peerAddr } = request;
           this.channelTo(peerAddr).detachGUI();
+          this.sinkGUIEvent({
+            type: 'close-channel',
+            chatId: this.info.chatId,
+            peerAddr,
+          });
           break;
         }
 
@@ -156,7 +161,6 @@ export class CallInChat {
   }
 
   private onGUIComplete(): void {
-    console.log(`### on GUI COMPLETE [${this.info.ownAddr}] ###`);
     this.sinkGUIEvent({
       type: 'call-ended',
       chatId: this.info.chatId,

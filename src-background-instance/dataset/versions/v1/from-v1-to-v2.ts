@@ -16,7 +16,7 @@
 */
 
 // @deno-types="../../../../shared-libs/sqlite-on-3nstorage/index.d.ts"
-import { objectFromQueryExecResult, SQLiteOn3NStorage } from '../../../../shared-libs/sqlite-on-3nstorage/index.js';
+import { objectFromQueryExecResult, SQLiteOn3NStorage, Database } from '../../../../shared-libs/sqlite-on-3nstorage/index.js';
 import { turnMembersStringArrayToV2 } from '../v0-none/read-v0.ts';
 import { GroupChatTableFields } from '../v2/chats-db.ts';
 
@@ -25,18 +25,35 @@ import { GroupChatTableFields } from '../v2/chats-db.ts';
  * Table are same as v2.
  */
 export async function turnV1jsonFieldValueToV2InChatDb(chats: SQLiteOn3NStorage): Promise<void> {
-  const [sqlValue] = chats.db.exec(
+
+  adjustGroupChatRecords(chats.db);
+
+  adjustOTOChatRecords(chats.db);
+
+  await chats.saveToFile({ skipUpload: true });
+}
+
+function adjustOTOChatRecords(db: Database): void {
+  db.exec(`UPDATE oto_chats SET status='on'`);
+}
+
+function adjustGroupChatRecords(db: Database): void {
+  const [sqlValue] = db.exec(
     `SELECT chatId, members FROM group_chats`
   );
+  if (!sqlValue) {
+    return;
+  }
   const initialValues = objectFromQueryExecResult<{
     chatId: string; members: GroupChatTableFields['members'];
   }>(sqlValue);
-  for (const { chatId, members: membersV1 } of initialValues) {
+  for (const { chatId, members } of initialValues) {
+    const membersV1 = JSON.parse((members as unknown as string));
     if (!Array.isArray(membersV1)) {
       continue;
     }
     const membersV2 = turnMembersStringArrayToV2(membersV1);
-    chats.db.exec(
+    db.exec(
       `UPDATE group_chats
        SET members=$members, status='on'
        WHERE chatId=$chatId
@@ -47,8 +64,4 @@ export async function turnV1jsonFieldValueToV2InChatDb(chats: SQLiteOn3NStorage)
       }
     );
   }
-
-  chats.db.exec(`UPDATE oto_chats SET status='on'`);
-
-  await chats.saveToFile({ skipUpload: true });
 }

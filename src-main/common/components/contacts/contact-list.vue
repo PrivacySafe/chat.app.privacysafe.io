@@ -23,10 +23,10 @@ import type { PersonView } from '~/index';
 import ContactListItem from './contact-list-item.vue';
 
 interface ContactListProps {
-  contactList: Array<PersonView & { displayName: string }>;
+  contactList: (PersonView & { displayName: string })[];
   searchText?: string;
-  selectedContacts?: Array<PersonView & { displayName: string }>;
-  nonSelectableContacts?: Array<PersonView & { displayName: string }>;
+  selectedContacts?: (PersonView & { displayName: string })[];
+  nonSelectableContacts?: (PersonView & { displayName: string })[];
   withoutAnchor?: boolean;
   readonly?: boolean;
 }
@@ -48,7 +48,7 @@ defineSlots<{
   extra?: (props: { contactId: string, mail: string }) => VNode;
 }>();
 
-const contactListByLetters = computed<Record<string, Array<PersonView & { displayName: string }>>>(() => {
+const contactListByLetters = computed<Record<string, (PersonView & { displayName: string })[]>>(() => {
   return props.contactList
     .filter(c => c.displayName.toLocaleLowerCase().includes(props.searchText.toLocaleLowerCase()))
     .reduce((res, item) => {
@@ -59,7 +59,7 @@ const contactListByLetters = computed<Record<string, Array<PersonView & { displa
 
       res[letter].push(item);
       return res;
-    }, {} as Record<string, Array<PersonView & { displayName: string }>>);
+    }, {} as Record<string, (PersonView & { displayName: string })[]>);
 });
 
 const isMailValid = computed<boolean>(() => mailReg.test(props.searchText || ''));

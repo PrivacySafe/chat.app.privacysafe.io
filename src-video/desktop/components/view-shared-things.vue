@@ -15,9 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, inject, nextTick, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import size from 'lodash/size';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import {
   Ui3nButton,
   Ui3nIcon,
@@ -29,15 +30,17 @@ import type { OwnScreen } from '@video/common/types';
 import { useStreamsStore } from '@video/common/store/streams.store.ts';
 import VideoStream from '@video/common/components/video-stream.vue';
 
-type PeerShared = {
+interface PeerShared {
   peerAddr: string;
   peerName: string;
   stream: MediaStream;
-};
+}
 
 const props = defineProps<{
-  things: Array<OwnScreen | PeerShared>;
+  things: (OwnScreen | PeerShared)[];
 }>();
+
+const { $tr } = inject(I18N_KEY)!;
 
 const streamsStore = useStreamsStore();
 const { isSharingOwnDeskSound } = storeToRefs(streamsStore);

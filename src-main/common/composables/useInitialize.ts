@@ -15,8 +15,6 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { shallowRef } from 'vue';
-import { storeToRefs } from 'pinia';
-import size from 'lodash/size';
 import { chatService, videoOpenerSrv } from '@main/common/services/external-services';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
@@ -27,8 +25,11 @@ export function useInitialize() {
   const chatsStore = useChatsStore();
   const messagesStore = useMessagesStore();
 
-  const { chatList } = storeToRefs(chatsStore);
-  const { handleBackgroundChatEvents, findIndexOfChatInCurrentList, refreshChatList } = chatsStore;
+  const {
+    handleBackgroundChatEvents,
+    refreshChatList,
+    updateChatItemInList,
+  } = chatsStore;
   const { handleBackgroundMessageEvents } = messagesStore;
 
   const updatesQueue: UpdateEvent[] = [];
@@ -56,19 +57,6 @@ export function useInitialize() {
     }
   }
 
-  async function prepareInfoAboutCurrentChatsWithVideoCalls() {
-    const chatsWithVideoCall = await chatService.getChatsWithVideoCall();
-
-    if (size(chatsWithVideoCall) > 0) {
-      for (const chatIdObj of chatsWithVideoCall) {
-        const chatInd = findIndexOfChatInCurrentList(chatIdObj);
-        if (chatInd !== -1) {
-          chatList.value[chatInd].callStart = Date.now();
-        }
-      }
-    }
-  }
-
   async function initialize() {
     await refreshChatList();
 
@@ -83,21 +71,21 @@ export function useInitialize() {
       error: err => console.error(`Error occurred in observation of updates events from ChatService: `, err),
     });
 
-    await prepareInfoAboutCurrentChatsWithVideoCalls();
-
     stopVideoCallsWatching.value = videoOpenerSrv.watchVideoChats({
-      next: data => {
+      next: async data => {
         const { type, chatId } = data;
-        const chatIndex = findIndexOfChatInCurrentList(chatId);
-
         // eslint-disable-next-line default-case
         switch (type) {
           case 'call-started':
-            chatList.value[chatIndex].callStart = Date.now();
+            await updateChatItemInList(chatId, { callStart: Date.now() });
             break;
 
           case 'call-ended':
-            chatList.value[chatIndex].callStart = undefined;
+            await updateChatItemInList(chatId, { callStart: undefined });
+            break;
+
+          case 'close-channel':
+            // TODO
             break;
         }
       },

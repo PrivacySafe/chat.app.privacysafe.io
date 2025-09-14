@@ -121,7 +121,7 @@ const {
         icon="round-call-end"
         icon-color="var(--warning-fill-default)"
         icon-position="left"
-        @click.stop.prevent="() => dismissIncomingCall(currentChatObjId)"
+        @click.stop.prevent="() => dismissIncomingCall(currentChatObjId, false)"
       >
         {{ $tr('va.presettings.btn.decline') }}
       </ui3n-button>

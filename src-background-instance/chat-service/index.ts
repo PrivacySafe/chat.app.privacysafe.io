@@ -35,7 +35,11 @@ import type {
   ChatSystemMessageData,
   UpdateMembersSysMsgData,
   LocalMetadataInDelivery,
-  RelatedMessage, UpdateAdminsSysMsgData,
+  RelatedMessage,
+  UpdateAdminsSysMsgData,
+  WebRTCMsgBodySysMsgData,
+  ChatOutgoingMessage,
+  RegularMsgView,
 } from '../../types/index.ts';
 import type {
   AddressCheckResult,
@@ -57,14 +61,16 @@ import { ChatDeletion } from './chat-deletion.ts';
 import { ChatMemberRemoval } from './chat-member-removal.ts';
 import { MsgDeletion } from './msg-deletion.ts';
 import { ChatMembersUpdating } from './chat-members-updating.ts';
+import { WebRTCCallReaction } from './webrtc-call-reaction.ts';
 import { MsgSending } from './msg-sending.ts';
 import { MsgStatusUpdating } from './msg-status-updating.ts';
 import { MsgReactions } from './msg-reaction.ts';
 import { MsgEditing } from './msg-editing.ts';
-import { ChatDbEntry, GroupChatDbEntry, OTOChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
-import { MsgDbEntry } from '../dataset/versions/v2/msgs-db.ts';
+import type { ChatDbEntry, GroupChatDbEntry, OTOChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
+import type { MsgDbEntry } from '../dataset/versions/v2/msgs-db.ts';
 import { makeOutgoingFileLinkStore } from '../dataset/versions/v0-none/attachments.ts';
 import { makeDbRecordException } from '../utils/exceptions.ts';
+import { sendSystemDeletableMessage as _sendSystemDeletableMessage } from '../utils/send-chat-msg.ts';
 import { generateChatMessageId } from '../../shared-libs/chat-ids.ts';
 
 export interface ChatMessagesHandler {
@@ -84,7 +90,6 @@ function exposeServiceOnIPC(chats: ChatService): () => void {
     'createGroupChat',
     'acceptChatInvitation',
     'getChatList',
-    'getChatsWithVideoCall',
     'getChat',
     'renameChat',
     'deleteChat',
@@ -98,6 +103,8 @@ function exposeServiceOnIPC(chats: ChatService): () => void {
     'markMessageAsReadNotifyingSender',
     'checkAddressExistenceForASMail',
     'getIncomingMessage',
+    'sendSystemDeletableMessage',
+    'makeAndSaveMsgToDb',
   ]);
   srvWrapInternal.exposeObservableMethods(chats, [
     'watch',
@@ -188,6 +195,7 @@ export class ChatService implements ChatServiceIPC {
   private readonly chatDeletion: ChatDeletion;
   private readonly chatMemberRemoval: ChatMemberRemoval;
   private readonly chatMembersUpdating: ChatMembersUpdating;
+  private readonly webRTCCallReaction: WebRTCCallReaction;
   private readonly msgSending: MsgSending;
   private readonly msgDeletion: MsgDeletion;
   private readonly msgStatusUpdating: MsgStatusUpdating;
@@ -198,7 +206,6 @@ export class ChatService implements ChatServiceIPC {
     private readonly data: ChatsData,
     private readonly filesStore: FileLinkStoreService,
     private readonly ownAddr: string,
-    public readonly getChatsWithVideoCall: () => Promise<ChatIdObj[]>,
   ) {
     const removeMessageFromInbox = this.removeMessageFromInbox.bind(this);
 
@@ -224,6 +231,8 @@ export class ChatService implements ChatServiceIPC {
 
     this.chatMembersUpdating = new ChatMembersUpdating(this.data, this.emit, this.ownAddr);
 
+    this.webRTCCallReaction = new WebRTCCallReaction(this.emit);
+
     this.msgSending = new MsgSending(
       this.data,
       this.emit,
@@ -247,16 +256,13 @@ export class ChatService implements ChatServiceIPC {
     this.msgEditing = new MsgEditing(this.data, this.emit, this.ownAddr);
   }
 
-  static async setupAndStartServing(
-    ownAddr: string,
-    getChatsWithVideoCall: () => Promise<ChatIdObj[]>,
-  ): Promise<{
+  static async setupAndStartServing(ownAddr: string): Promise<{
     chats: ChatService;
     stopChatsService: () => void;
   }> {
     const data = await ChatsData.makeAndStart(ownAddr);
     const filesStore = await makeOutgoingFileLinkStore();
-    const chats = new ChatService(data, filesStore, ownAddr, getChatsWithVideoCall);
+    const chats = new ChatService(data, filesStore, ownAddr);
     const stopChatsService = exposeServiceOnIPC(chats);
 
     return { chats, stopChatsService };
@@ -346,6 +352,12 @@ export class ChatService implements ChatServiceIPC {
   }
 
   private async handleSendingProgress(info: SendingProgressInfo): Promise<void> {
+    this.emitChatEvent({
+      updatedEntityType: 'message',
+      event: 'sending-progress',
+      data: info,
+    });
+
     const { id, progress: { allDone, localMeta } } = info;
 
     try {
@@ -413,6 +425,15 @@ export class ChatService implements ChatServiceIPC {
 
         case 'member-removed':
           return await this.chatMemberRemoval.handleMemberRemovedChat(msg.sender, chat, sysData.chatDeleted);
+
+        case 'webrtc-call':
+          return await this.webRTCCallReaction.handleReactionToWebRTCCall(msg, {
+            ...sysData.value,
+            chatId: {
+              isGroupChat: chat.isGroupChat,
+              chatId: chat.isGroupChat ? chat.chatId : chat.peerCAddr,
+            },
+          });
 
         // case 'update:reaction':
         //   return await this.msgReactions.handleReactionToMessage(
@@ -482,6 +503,18 @@ export class ChatService implements ChatServiceIPC {
         updatedEntityType: 'chat',
         event: 'messages-removed',
         chatId,
+      }),
+
+      webRTCCall: (
+        msg: ChatIncomingMessage | ChatOutgoingMessage,
+        value: WebRTCMsgBodySysMsgData['value'],
+      ) => this.emitChatEvent({
+        updatedEntityType: 'chat',
+        event: 'webRTCCall',
+        value: {
+          msg,
+          data: value,
+        },
       }),
     },
 
@@ -632,11 +665,6 @@ export class ChatService implements ChatServiceIPC {
       { chatId, direction, sender }:
       { chatId: ChatIdObj; direction: 'incoming' | 'outgoing'; sender?: string },
     ): Promise<void> => {
-      console.log('### DO AFTER START CALL => ', JSON.stringify({
-        chatId,
-        direction,
-        sender,
-      }, null, 2));
       const { chatMessageId, timestamp } = generateChatMessageId();
       const msg: MsgDbEntry = {
         groupChatId: chatId.isGroupChat ? chatId.chatId : null,
@@ -665,13 +693,11 @@ export class ChatService implements ChatServiceIPC {
     };
 
     const doAfterEndCall = async (chatId: ChatIdObj): Promise<void> => {
-      console.log('### DO AFTER END CALL 000 => ', JSON.stringify(chatId, null, 2));
       const now = Date.now();
       const notRegularMsgs = this.data.getNotRegularMessagesByChat(chatId);
       const systemMsgs = notRegularMsgs
         .filter(m => m.chatMessageType === 'system')
         .sort((a, b) => a.timestamp - b.timestamp ? -1 : 1);
-      console.log('### DO AFTER END CALL 111 => ', JSON.stringify(systemMsgs, null, 2));
 
       if (systemMsgs.length > 0) {
         const lastSystemMsg = systemMsgs[0];
@@ -685,13 +711,11 @@ export class ChatService implements ChatServiceIPC {
 
         lastSystemMsgBody.value.endTimestamp = now;
 
-        console.log('### DO AFTER END CALL 222 => ', JSON.stringify(lastSystemMsgBody, null, 2));
-
         const updatedMsg = await this.data.updateMessageRecord(
           { chatId, chatMessageId: lastSystemMsg.chatMessageId },
           { body: JSON.stringify(lastSystemMsgBody) },
         );
-        console.log('### DO AFTER END CALL 333 => ', JSON.stringify(updatedMsg, null, 2));
+
         this.emit.message.updated(updatedMsg);
       }
     };
@@ -746,5 +770,52 @@ export class ChatService implements ChatServiceIPC {
     } catch (e) {
       await w3n.log('error', `Error getting the message ${msgId}.`, e);
     }
+  }
+
+  async sendSystemDeletableMessage(
+    { chatId, recipients, chatMessageId, chatSystemData }:
+      { chatId: ChatIdObj; recipients: string[] } & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>,
+  ): Promise<void> {
+    return _sendSystemDeletableMessage({
+      chatId,
+      recipients,
+      chatMessageId,
+      chatSystemData,
+    });
+  }
+
+  async makeAndSaveMsgToDb(ownAddr: string, msgData: Partial<MsgDbEntry>): Promise<ChatMessageView> {
+    const { chatMessageId } = msgData;
+    if (!chatMessageId) {
+      throw Error('There is no chatMessageId in the message being created.');
+    }
+
+    const chatMessageType = msgData.chatMessageType || 'regular';
+    const msgDbEntry: MsgDbEntry = {
+      isIncomingMsg: false,
+      incomingMsgId: null,
+      groupChatId: null,
+      otoPeerCAddr: null,
+      attachments: null,
+      body: null,
+      groupSender: null,
+      history: null,
+      reactions: null,
+      relatedMessage: null,
+      status: chatMessageType === 'regular'
+        ? msgData.isIncomingMsg ? 'unread' : 'sending'
+        : null,
+      timestamp: 0,
+      ...msgData,
+      chatMessageType,
+      chatMessageId,
+    };
+    await this.data.addMessage(msgDbEntry);
+
+    return msgViewFromDbEntry(
+      msgDbEntry,
+      msgDbEntry.relatedMessage as RegularMsgView['relatedMessage'],
+      ownAddr,
+    );
   }
 }

@@ -39,11 +39,32 @@ const statusUiInfo = computed(() => {
 </script>
 
 <template>
-  <ui3n-icon
-    v-if="statusUiInfo"
-    :icon="statusUiInfo.icon"
-    :width="iconSize"
-    :height="iconSize"
-    :color="statusUiInfo.color"
-  />
+  <div :class="[$style.chatMessageStatus, value === 'sending' && $style.sending]">
+    <ui3n-icon
+      v-if="statusUiInfo"
+      :icon="statusUiInfo.icon"
+      :size="iconSize"
+      :color="statusUiInfo.color"
+    />
+  </div>
 </template>
+
+<style lang="scss" module>
+.chatMessageStatus {
+  @keyframes rotation {
+    from {
+      transform: rotate(0deg);
+    }
+    
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  position: relative;
+}
+
+.sending {
+  animation: rotation 1s infinite linear;
+}
+</style>

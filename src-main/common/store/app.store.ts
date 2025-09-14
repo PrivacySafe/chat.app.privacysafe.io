@@ -45,7 +45,7 @@ export const useAppStore = defineStore('app', () => {
   const commonLoading = ref(false);
   const isMobileMode = ref<boolean>(false);
   const appSize = useAppSize();
-  const { appElement } = appSize;
+  const { appElement, appWindowSize } = appSize;
 
   const connectivity = useConnectivityStatus();
   const { connectivityStatus } = connectivity;
@@ -80,6 +80,7 @@ export const useAppStore = defineStore('app', () => {
     customLogoSrc,
     connectivityStatus,
     appElement,
+    appWindowSize,
     setMobileMode,
     initialize,
     stopWatching,

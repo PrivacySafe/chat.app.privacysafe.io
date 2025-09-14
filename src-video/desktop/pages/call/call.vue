@@ -170,7 +170,7 @@ onBeforeUnmount(doBeforeUnmount);
           icon="round-phone-disabled"
           icon-color="var(--error-fill-default)"
           icon-position="left"
-          @click.stop.prevent="endCall"
+          @click.stop.prevent="() => endCall(false)"
         >
           {{ $tr('va.end.call') }}
         </ui3n-button>

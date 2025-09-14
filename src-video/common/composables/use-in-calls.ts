@@ -32,8 +32,8 @@ export function useInCalls() {
 
   const { user: ownName } = useAppStore();
   const streams = useStreamsStore();
-  const { isGroupChat, peers, singlePeer, ownScreens, isSharingOwnDeskSound } = storeToRefs(streams);
-  const { endCall, removeOwnScreen, addOwnScreen, setOwnDeskSoundSharing } = streams;
+  const { isGroupChat, peers, ownScreens, isSharingOwnDeskSound } = storeToRefs(streams);
+  const { handlePeerDisconnected, endCall, removeOwnScreen, addOwnScreen, setOwnDeskSoundSharing } = streams;
 
   const isFullscreen = ref(false);
 
@@ -63,10 +63,7 @@ export function useInCalls() {
   }
 
   async function endCallWhenPeerCloses({ peerAddr }: { peerAddr: string }) {
-    if (singlePeer.value.peerAddr === peerAddr) {
-      $emitter.off('peer:disconnected', endCallWhenPeerCloses);
-      w3n.closeSelf();
-    }
+    await handlePeerDisconnected(peerAddr);
   }
 
   function fullscreenchangeHandler() {
@@ -120,17 +117,13 @@ export function useInCalls() {
   function doOnMounted() {
     document.addEventListener('fullscreenchange', fullscreenchangeHandler);
 
-    if (!isGroupChat.value) {
-      $emitter.on('peer:disconnected', endCallWhenPeerCloses);
-    }
+    $emitter.on('peer:disconnected', endCallWhenPeerCloses);
   }
 
   function doBeforeUnmount() {
     document.removeEventListener('fullscreenchange', fullscreenchangeHandler);
 
-    if (!isGroupChat.value) {
-      $emitter.off('peer:disconnected', endCallWhenPeerCloses);
-    }
+    $emitter.off('peer:disconnected', endCallWhenPeerCloses);
   }
 
   return {

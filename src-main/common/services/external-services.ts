@@ -53,7 +53,6 @@ export async function initializeServices() {
         'acceptChatInvitation',
         'getChat',
         'getChatList',
-        'getChatsWithVideoCall',
         'renameChat',
         'deleteChat',
         'updateGroupMembers',
@@ -65,7 +64,9 @@ export async function initializeServices() {
         'sendRegularMessage',
         'markMessageAsReadNotifyingSender',
         'checkAddressExistenceForASMail',
-        'getIncomingMessage'
+        'getIncomingMessage',
+        'sendSystemDeletableMessage',
+        'makeAndSaveMsgToDb',
       ], [
         'watch'
       ]) as ChatServiceIPC),
@@ -78,7 +79,6 @@ export async function initializeServices() {
       ], [
         'watchVideoChats',
       ]) as VideoGUIOpener),
-
     ]));
 
     console.info('<- SERVICES ARE INITIALIZED ->');

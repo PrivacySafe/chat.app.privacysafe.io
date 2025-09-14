@@ -34,7 +34,7 @@ import type {
 } from '~/index';
 import {
   copyMessageToClipboard,
-  downloadFile,
+  downloadAttachments,
 } from '@main/common/utils/chat-message-actions.helpers';
 import { getMessageActions } from '@main/common/utils/chats.helper';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
@@ -83,36 +83,8 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
     }
   }
 
-  function handleClick(ev: MouseEvent): ChatMessageView | undefined {
-    ev.preventDefault();
-    const { target } = ev;
-    const { id, classList } = target as Element;
-
-    return classList.contains('chat-message__content') && id
-      ? getMessageFromCurrentChat(id)
-      : undefined;
-  }
-
-  function goToMessage(ev: MouseEvent) {
-    const msg = handleClick(ev);
-    if (
-      msg?.chatMessageType === 'regular'
-      && msg.relatedMessage
-      && msg.relatedMessage.replyTo
-      && msg.relatedMessage.replyTo.chatMessageId
-    ) {
-      const initialMessageElement = document.getElementById(`msg-${msg.relatedMessage.replyTo.chatMessageId}`);
-      initialMessageElement && initialMessageElement.scrollIntoView(false);
-    }
-  }
-
-  function openMessageMenu(ev: MouseEvent) {
-    const msg = handleClick(ev);
-
+  function openMessageMenu(msg: ChatMessageView | undefined) {
     if (msg && (msg.chatMessageType !== 'system' && msg.chatMessageType !== 'invitation')) {
-      // const messageElement = document.getElementById(`msg-${msg.chatMessageId}`)
-      // messageElement && messageElement.scrollIntoView();
-
       msgActionsMenuProps.value = {
         open: true,
         actions: getMessageActions(msg, $tr),
@@ -133,6 +105,57 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
     return currentChatMessages.value.find(
       m => (m.chatMessageId === chatMessageId),
     ) as RegularMsgView | undefined;
+  }
+
+  function getMessageByElement(ev: MouseEvent, isNestedElement?: boolean): ChatMessageView | undefined {
+    const { target } = ev;
+
+    if (isNestedElement) {
+      const getMsg = (el: Element): ChatMessageView | undefined => {
+        const { parentElement } = el;
+        const { id, classList } = parentElement as Element;
+        if (classList.contains('chat-message')) {
+          return undefined;
+        }
+
+        if (classList.contains('chat-message__content') && id) {
+          return getMessageFromCurrentChat(id);
+        }
+
+        return getMsg(parentElement as Element);
+      };
+
+      return getMsg(target as Element);
+    }
+
+    const { id, classList } = target as Element;
+    return classList.contains('chat-message__content') && id
+      ? getMessageFromCurrentChat(id)
+      : undefined;
+  }
+
+  function goToMessage(ev: MouseEvent) {
+    const msg = getMessageByElement(ev);
+    if (
+      msg?.chatMessageType === 'regular'
+      && msg.relatedMessage
+      && msg.relatedMessage.replyTo
+      && msg.relatedMessage.replyTo.chatMessageId
+    ) {
+      const initialMessageElement = document.getElementById(`msg-${msg.relatedMessage.replyTo.chatMessageId}`);
+      initialMessageElement && initialMessageElement.scrollIntoView(false);
+    }
+  }
+
+  function handleClickOnMessagesBlock(ev: MouseEvent) {
+    ev.preventDefault();
+    const msg = getMessageByElement(ev);
+    openMessageMenu(msg);
+  }
+
+  function handleRightClickOnAttachmentElement(ev: MouseEvent) {
+    const msg = getMessageByElement(ev, true);
+    openMessageMenu(msg);
   }
 
   async function copyMsgText(chatMessageId: string) {
@@ -166,7 +189,7 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
     if (msg?.chatMessageType !== 'regular') {
       return;
     }
-    const res = await downloadFile(msg, $tr);
+    const res = await downloadAttachments(msg, $tr);
     if (res === false) {
       notifications?.$createNotice({
         type: 'error',
@@ -253,8 +276,9 @@ export default function useChatMessages(emit: ChatMessagesEmits) {
     $tr,
     listElement,
     msgActionsMenuProps,
+    handleClickOnMessagesBlock,
+    handleRightClickOnAttachmentElement,
     goToMessage,
-    openMessageMenu,
     clearMessageMenu,
     handleAction,
   };

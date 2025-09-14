@@ -85,10 +85,45 @@ export class ChatDeliveryService {
       error: err => w3n.log('error', `Send error: `, err),
     });
 
+    await this.handleMissedInboxMessages();
+
     return () => {
       stopInboxWatching();
       stopDeliveryWatch();
     };
+  }
+
+  private async handleMissedInboxMessages(): Promise<void> {
+    const listMessages = await w3n.mail!.inbox.listMsgs(
+      Math.max(this.data.lastReceivedMessageTimestamp - 60 * 1000, 0),
+    ).catch(err => w3n.log('error', `Fail to list messages`, err));
+
+    if (listMessages) {
+      let latestDeliveryTS = 0;
+      for (const item of listMessages) {
+        const { msgId, msgType, deliveryTS } = item;
+        if (msgType === 'chat') {
+          try {
+            const msg = await w3n.mail!.inbox.getMsg(msgId) as ChatIncomingMessage;
+            if (msg) {
+              if (msg.jsonBody?.chatMessageType === 'webrtc-call') {
+                w3n.mail!.inbox.removeMsg(msg.msgId).catch(noop);
+              } else {
+                this.handleIncomingMessage(msg);
+                if (deliveryTS > latestDeliveryTS) {
+                  latestDeliveryTS = deliveryTS;
+                }
+              }
+            }
+          } catch (e) {
+            w3n.log('error', `Fail to get message ${msgId}`, e);
+          }
+        }
+      }
+      if (latestDeliveryTS > 0) {
+        await this.data.setLastReceivedMessageTimestamp(latestDeliveryTS);
+      }
+    }
   }
 
   private handleIncomingMessage(msg: IncomingMessage): void {
@@ -139,8 +174,9 @@ export class ChatDeliveryService {
 
   private handleSendingProgress(info: SendingProgressInfo): void {
     const { localMeta } = info.progress;
-    if (localMeta && (typeof localMeta === 'object')
-      && (localMeta as LocalMetadataInDelivery).chatId) {
+    if (
+      localMeta && (typeof localMeta === 'object') && (localMeta as LocalMetadataInDelivery).chatId
+    ) {
       this.progressNotificationsQueue.push(info);
       if (!this.notificationsProc.getP()) {
         this.notificationsProc.start(this.processQueuedNotifications);
@@ -160,7 +196,10 @@ export class ChatDeliveryService {
       }
     }
   };
+}
 
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+function noop() {
 }
 
 interface DeliveryServiceData {
@@ -224,5 +263,4 @@ class LocalServiceDataStore {
       await this.saveOrderly();
     }
   }
-
 }

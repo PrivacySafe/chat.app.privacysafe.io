@@ -106,7 +106,7 @@ export function setupAndStartVideoGUIOpener(
     ) => Promise<void>,
     doAfterEndCall: (chatId: ChatIdObj) => Promise<void>,
   },
-): { webrtcMsgsHandler: WebRTCSignalHandler; getChatsWithVideoCall: () => Promise<ChatIdObj[]> } {
+): { webrtcMsgsHandler: WebRTCSignalHandler } {
   const guisCtrl = new VideoGUIsController(ownAddr, findChatEntry, postProcessingForVideoChat);
 
   const videoOpenerWrap = new MultiConnectionIPCWrap('VideoGUIOpener');
@@ -122,7 +122,6 @@ export function setupAndStartVideoGUIOpener(
 
   return {
     webrtcMsgsHandler: guisCtrl.handleIncomingWebRTCMsg.bind(guisCtrl),
-    getChatsWithVideoCall: guisCtrl.getChatsWithVideoCall.bind(guisCtrl),
   };
 }
 
@@ -135,13 +134,6 @@ class VideoGUIsController implements VideoGUIOpener {
     private readonly getChatEntry: ChatService['findChatEntry'],
     private readonly postProcessingForVideoChat: ChatService['postProcessingForVideoChat'],
   ) {
-  }
-
-  async getChatsWithVideoCall(): Promise<ChatIdObj[]> {
-    return [...this.calls.keys()].map(key => ({
-      isGroupChat: !key.includes('@'),
-      chatId: key,
-    }));
   }
 
   private createAndRegisterCall(chat: ChatDbEntry, chatId: ChatIdObj): CallInChat {
@@ -173,7 +165,6 @@ class VideoGUIsController implements VideoGUIOpener {
     }
     await call.startCall();
 
-    console.log(`### START CALL [${this.ownAddr}] ###`);
     const { doAfterStartCall } = this.postProcessingForVideoChat();
     await doAfterStartCall({ chatId, direction: 'outgoing' });
   }
@@ -220,7 +211,6 @@ class VideoGUIsController implements VideoGUIOpener {
     }
 
     if (join) {
-      console.log(`### JOIN CALL [${this.ownAddr}] from ${sender} ###`);
       await call.startCall();
       const { doAfterStartCall } = this.postProcessingForVideoChat();
       await doAfterStartCall({ chatId, direction: 'incoming', sender });

@@ -32,7 +32,9 @@ import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
 interface ChatCreateDialogEmits {
   (ev: 'select', val: ChatIdObj): void;
   (ev: 'close'): void;
+  // eslint-disable-next-line @typescript-eslint/unified-signatures
   (ev: 'confirm'): void;
+  // eslint-disable-next-line @typescript-eslint/unified-signatures
   (ev: 'cancel'): void;
 }
 
@@ -49,7 +51,7 @@ const { fetchContacts, addContact } = contactsStore;
 const { createNewOneToOneChat, createNewGroupChat } = useChatsStore();
 
 const searchText = ref<string>('');
-const selectedContacts = ref<Array<PersonView & { displayName: string }>>([]);
+const selectedContacts = ref<(PersonView & { displayName: string })[]>([]);
 const groupChatModeStep = ref(1);
 const chatName = ref('');
 

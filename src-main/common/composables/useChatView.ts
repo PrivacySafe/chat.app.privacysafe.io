@@ -14,7 +14,7 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { computed, inject, nextTick, ref, toRaw, watch } from 'vue';
+import { computed, inject, nextTick, provide, ref, toRaw, watch } from 'vue';
 import {
   NavigationGuardNext,
   RouteLocationNormalized,
@@ -40,6 +40,7 @@ import type {
 } from '~/index';
 import type { ChatRoute, ChatRouteType, ChatWithFwdMsgRef, ChatWithIncomingCall } from '@main/desktop/router';
 import type { RouteChat } from '@main/mobile/types';
+import { useTaskRunner } from '@main/common/composables/useTaskRunner';
 import { useAppStore } from '@main/common/store/app.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
@@ -74,6 +75,9 @@ interface NavigationUtils {
 }
 
 export function useChatView(navigationUtils: () => NavigationUtils) {
+  const { addTask, cancelTasks } = useTaskRunner();
+  provide('task-runner', { addTask });
+
   const { $tr } = inject(I18N_KEY)!;
 
   const {
@@ -247,7 +251,6 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     { immediate: true },
   );
 
-
   async function doBeforeMount() {
     const chatId = getChatIdFromRoute();
 
@@ -268,7 +271,9 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   ) {
     const chatIdFrom = getChatIdFromRoute(from.params as ChatRouteType['params']);
     const chatIdTo = getChatIdFromRoute(to.params as ChatRouteType['params']);
+
     if (chatIdTo && !areChatIdsEqual(chatIdFrom, chatIdTo)) {
+      cancelTasks();
       await setChatAndFetchMessages(chatIdTo);
       await setStateFollowingRouteQuery(to.query as ChatWithFwdMsgRef['query']);
       msgText.value = '';

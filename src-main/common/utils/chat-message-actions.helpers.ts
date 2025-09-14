@@ -34,7 +34,7 @@ export async function copyMessageToClipboard(message: RegularMsgView | undefined
   await navigator.clipboard.writeText(copiedText);
 }
 
-export async function downloadFile(
+export async function downloadAttachments(
   message: RegularMsgView | undefined,
   $tr: (key: string, placeholders?: Record<string, string>) => string,
 ): Promise<boolean | undefined> {

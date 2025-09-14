@@ -15,7 +15,7 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, ref } from 'vue';
-import { defineStore, storeToRefs } from 'pinia';
+import { defineStore } from 'pinia';
 import { includesAddress, toCanonicalAddress } from '@shared/address-utils';
 import { areChatIdsEqual } from '@shared/chat-ids';
 import { chatService } from '@main/common/services/external-services';
@@ -29,18 +29,15 @@ import type { ChatIdObj, RelatedMessage  } from '~/index';
 
 export const useChatStore = defineStore('chat', () => {
   const appStore = useAppStore();
-  const { user: me } = storeToRefs(appStore);
-
   const chatsStore = useChatsStore();
-  const { refreshChatList, getChatView } = chatsStore;
 
   const currentChatId = ref<ChatIdObj>();
 
-  const currentChat = computed(() => currentChatId.value ? getChatView(currentChatId.value) : null);
+  const currentChat = computed(() => currentChatId.value ? chatsStore.getChatView(currentChatId.value) : null);
 
   const isAdminOfGroupChat = computed(() => {
     const chat = currentChat.value;
-    return ((chat && chat.isGroupChat) ? chat.admins.includes(me.value) : false);
+    return ((chat && chat.isGroupChat) ? chat.admins.includes(appStore.user) : false);
   });
 
   function isMemberAdminOfGroupChat(user: string): boolean {
@@ -52,9 +49,9 @@ export const useChatStore = defineStore('chat', () => {
       return;
     }
 
-    if (!getChatView(chatId)) {
-      await refreshChatList();
-      if (!getChatView(chatId)) {
+    if (!chatsStore.getChatView(chatId)) {
+      await chatsStore.refreshChatList();
+      if (!chatsStore.getChatView(chatId)) {
         throw new Error(`Chat is not found with id ${JSON.stringify(chatId)}`);
       }
     }
@@ -121,6 +118,7 @@ export const useChatStore = defineStore('chat', () => {
       withoutCurrentChatCheck?: boolean,
     }) {
     !withoutCurrentChatCheck && ensureCurrentChatIsSet(chatId);
+
     await chatService.sendRegularMessage(chatId, text, files ?? [], relatedMessage);
     appStore.$emitter.emit('send:message', { chatId });
   }
@@ -146,7 +144,7 @@ export const useChatStore = defineStore('chat', () => {
     const chatIdObj = { isGroupChat: true, chatId };
     ensureCurrentChatIsSet(chatIdObj);
 
-    if (!includesAddress(Object.keys(newMembers), me.value)) {
+    if (!includesAddress(Object.keys(newMembers), appStore.user)) {
       throw new Error(`This function can't remove self from members. Own address should be among new members.`);
     }
 
@@ -176,7 +174,7 @@ export const useChatStore = defineStore('chat', () => {
     }, {} as Record<string, { hasAccepted: boolean }>);
 
     const checkResult = await ensureAllAddressesExist(Object.keys(membersToAdd).filter(
-      member => (toCanonicalAddress(member) !== toCanonicalAddress(me.value)),
+      member => (toCanonicalAddress(member) !== toCanonicalAddress(appStore.user)),
     ));
     if (!checkResult) {
       return false;

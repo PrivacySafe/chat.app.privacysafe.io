@@ -18,7 +18,7 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 /// <reference path="../../@types/platform-defs/injected-w3n.d.ts" />
 /// <reference path="../../@types/platform-defs/test-stand.d.ts" />
 
-import { generatOutgoingMsgId } from '../../shared-libs/chat-ids.ts';
+import { generateOutgoingMsgId } from '../../shared-libs/chat-ids.ts';
 import type {
   ChatIdObj,
   ChatInvitationMsgV1,
@@ -32,7 +32,7 @@ import type {
 export async function sendSystemMessage(
   { chatId, recipients, chatMessageId, chatSystemData }:
     { chatId: ChatIdObj; recipients: string[] } & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>,
-): Promise<void> {
+): Promise<string> {
   const jsonBody: ChatSystemMsgV1 = {
     v: 1,
     chatMessageType: 'system',
@@ -49,23 +49,32 @@ export async function sendSystemMessage(
     chatMessageType: 'system',
     chatSystemData,
   };
-  await addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
+
+  return await addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
 }
 
 async function addMessageToDeliveryList(
   message: ChatOutgoingMessage,
   recipients: string[],
   localMeta: LocalMetadataInDelivery,
-): Promise<void> {
-  await w3n.mail!.delivery.addMsg(
-    recipients,
-    message,
-    generatOutgoingMsgId(),
-    {
-      sendImmediately: !message.attachments,
-      localMeta,
-    },
-  );
+): Promise<string> {
+  const deliveryId = generateOutgoingMsgId();
+
+  try {
+    await w3n.mail!.delivery.addMsg(
+      recipients,
+      message,
+      deliveryId,
+      {
+        sendImmediately: !message.attachments,
+        localMeta,
+      },
+    );
+    return deliveryId;
+  } catch (err) {
+    await w3n.log('error', `Fail to add system message to delivery`, err);
+    throw Error(JSON.stringify(err, null, 2));
+  }
 }
 
 export async function sendChatInvitation(
@@ -149,4 +158,60 @@ export async function sendRegularMessage(
   };
 
   addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
+}
+
+export async function sendSystemDeletableMessage(
+  { chatId, recipients, chatMessageId, chatSystemData }:
+    { chatId: ChatIdObj; recipients: string[] } & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>,
+): Promise<void> {
+  const deliveryId = await sendSystemMessage({
+    chatId,
+    recipients,
+    chatMessageId,
+    chatSystemData,
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      let isDone = false;
+      w3n.mail!.delivery.observeDelivery(deliveryId, {
+        next: p => {
+          if (isDone) {return;}
+
+          if (p.allDone) {
+            isDone = true;
+            if (p.allDone === 'all-ok') {
+              resolve();
+            } else if (p.allDone === 'with-errors') {
+              const errs = Object.keys(p.recipients).reduce((res, peerAddr) => {
+                const { err } = p.recipients[peerAddr];
+
+                if (err) {
+                  res.push(err);
+                }
+                return res;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              }, [] as any[]);
+
+              reject(errs);
+            }
+          }
+        },
+        complete: () => {
+          if (!isDone) {
+            isDone = true;
+            resolve();
+          }
+        },
+        error: err => {
+          if (!isDone) {
+            isDone = true;
+            reject(err);
+          }
+        },
+      });
+    });
+  } finally {
+    w3n.mail!.delivery.rmMsg(deliveryId).catch(err => console.error(err));
+  }
 }

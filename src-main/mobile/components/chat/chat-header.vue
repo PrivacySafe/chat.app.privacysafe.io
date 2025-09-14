@@ -117,7 +117,7 @@ async function goToChats() {
         color="var(--warning-content-default)"
         icon="round-call-end"
         icon-color="var(--warning-fill-default)"
-        @click.stop.prevent="() => dismissIncomingCall(currentChatObjId)"
+        @click.stop.prevent="() => dismissIncomingCall(currentChatObjId, false)"
       />
     </template>
 

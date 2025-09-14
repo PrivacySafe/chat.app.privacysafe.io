@@ -24,23 +24,17 @@ import {
   notifications,
   storeVueBus,
   vueBus,
-  VueEventBus,
 } from '@v1nt1248/3nclient-lib/plugins';
 
 import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
 import '@main/common/assets/styles/main.css';
 
-import { VideoChat } from '@video/common/services/video-component-srv';
-import { PeerEvents } from '@video/common/types/events.ts';
-import { useStreamsStore } from '@video/common/store/streams.store';
 import VideoApp from '@video/mobile/pages/video-app.vue';
 import VASetup from '@video/mobile/pages/va-setup.vue';
 import Call from '@video/mobile/pages/call.vue';
 
 import en from '@main/common/data/i18/en.json';
-
-const srvStart = VideoChat.startService();
 
 const app = createApp(VideoApp);
 const pinia = createPinia();
@@ -76,8 +70,3 @@ app
   .use(notifications)
   .use(router)
   .mount('#video-mobile');
-
-srvStart.then(srv => srv.attachToVue(
-  useStreamsStore(),
-  app.config.globalProperties.$emitter as VueEventBus<PeerEvents>,
-));

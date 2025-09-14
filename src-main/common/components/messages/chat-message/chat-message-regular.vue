@@ -25,8 +25,9 @@ import type { OutgoingMessageStatus, RegularMsgView } from '~/index';
 import { useAppStore } from '@main/common/store/app.store';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
+import { useUiOutgoingStore } from '@main/common/store/ui.outgoing.store';
 import ChatMessageStatus from './chat-message-status.vue';
-import ChatMessageAttachments from './chat-message-attachments.vue';
+import ChatMessageAttachments from './chat-message-attachments/chat-message-attachments.vue';
 
 const props = defineProps<{
   msg: RegularMsgView;
@@ -34,12 +35,18 @@ const props = defineProps<{
   relatedMessage?: RegularMsgView['relatedMessage'];
   prevMsgSender: string | undefined;
 }>();
+const emits = defineEmits<{
+  (event: 'click:right', value: MouseEvent): void;
+}>();
 
 const { $tr } = inject(I18N_KEY)!;
 
 const { user: ownAddr, isMobileMode } = storeToRefs(useAppStore());
 const { getContactName } = useContactsStore();
 const { objOfCurrentChatMessages } = storeToRefs(useMessagesStore());
+const { msgsSendingProgress } = storeToRefs(useUiOutgoingStore());
+
+const chatMsgInfo = computed(() => JSON.stringify([props.msg.chatId.chatId, props.msg.chatMessageId]));
 
 const isIncomingMsg = computed(() => props.msg.isIncomingMsg);
 
@@ -124,9 +131,17 @@ const forwardMessageSender = computed(() => props.relatedMessage && props.relate
 
         <chat-message-attachments
           v-if="msg.attachments"
-          :attachments="msg.attachments"
+          :message="msg"
           :disabled="!isIncomingMsg"
+          @click:right="emits('click:right', $event)"
         />
+
+        <div
+          v-if="msgsSendingProgress[chatMsgInfo]"
+          :class="$style.progress"
+        >
+          {{ msgsSendingProgress[chatMsgInfo] }}%
+        </div>
 
         <div :class="$style.time">
           {{ prepareDateAsSting(msg.timestamp) }}
@@ -234,6 +249,17 @@ const forwardMessageSender = computed(() => props.relatedMessage && props.relate
   line-height: var(--font-20);
   margin: 0;
   white-space: pre-wrap;
+}
+
+.progress {
+  position: absolute;
+  font-size: var(--font-10);
+  line-height: var(--font-12);
+  font-weight: 500;
+  color: var(--color-text-chat-bubble-other-default);
+  right: var(--spacing-s);
+  top: var(--spacing-xs);
+  z-index: 1;
 }
 
 .time {

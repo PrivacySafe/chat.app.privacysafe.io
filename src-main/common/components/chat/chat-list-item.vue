@@ -75,7 +75,7 @@ const message = computed<string>(() => {
     }
 
     case 'system':
-      return `<i>${getTextForChatSystemMessage(lastMsg, ownAddr.value)}</i>`;
+      return `<i>${getTextForChatSystemMessage(lastMsg, props.data.isGroupChat, ownAddr.value)}</i>`;
 
     case 'invitation':
       return `<i>${getTextForChatInvitationMessage(lastMsg, props.data.status)}</i>`;
@@ -191,7 +191,7 @@ watch(
               icon="round-call-end"
               icon-color="var(--warning-fill-default)"
               icon-position="left"
-              @click.stop.prevent="() => dismissIncomingCall(currentChatObjId)"
+              @click.stop.prevent="() => dismissIncomingCall(currentChatObjId, false)"
             >
               {{ $tr('va.presettings.btn.decline') }}
             </ui3n-button>

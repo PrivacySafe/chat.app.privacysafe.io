@@ -62,7 +62,6 @@ export class SystemSettings implements AppConfigs, AppConfigsInternal {
   }
 
   async saveSettingsFile(data: AppConfig): Promise<void> {
-    console.log(`@ saveSettingsFile data is`, data);
     const settingsJSON = data as SettingsJSON;
     const { file, syncProc } = this.writableFile;
     await syncProc.startOrChain(() => file.writeJSON(settingsJSON));

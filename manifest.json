@@ -1,7 +1,7 @@
 {
   "name": "Chat",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.10.3",
+  "version": "0.10.8",
   "icon": "logo.png",
   "description": "Send secure text messages, share files or start a video meeting.",
 
@@ -29,9 +29,7 @@
           "openDashboard": true
         },
         "storage": {
-          "appFS": "default",
-          "userFS": "all",
-          "sysFS": "all"
+          "appFS": "default"
         },
         "appRPC": [
           "AppChatsInternal",
@@ -90,9 +88,7 @@
           "openDashboard": true
         },
         "storage": {
-          "appFS": "default",
-          "userFS": "all",
-          "sysFS": "all"
+          "appFS": "default"
         },
         "appRPC": [
           "AppChatsInternal",
@@ -141,6 +137,10 @@
       "formFactor": ["desktop", "tablet"],
       "capsRequested": {
         "mailerid": true,
+        "mail": {
+          "sendingTo": "all",
+          "receivingFrom": "all"
+        },
         "shell": {
           "fsResource": {
             "otherApps": {
@@ -176,6 +176,10 @@
       "formFactor": "phone",
       "capsRequested": {
         "mailerid": true,
+        "mail": {
+          "sendingTo": "all",
+          "receivingFrom": "all"
+        },
         "shell": {
           "fsResource": {
             "otherApps": {
@@ -216,6 +220,12 @@
             "/index.html",
             "/index-mobile.html"
           ]
+        },
+        "VideoChatComponent": {
+          "thisAppComponents": [
+            "/index.html",
+            "/index-mobile.html"
+          ]
         }
       },
       "runtime": "deno",
@@ -239,9 +249,7 @@
           }
         },
         "storage": {
-          "appFS": "default",
-          "userFS": "all",
-          "sysFS": "all"
+          "appFS": "default"
         }
       }
     }

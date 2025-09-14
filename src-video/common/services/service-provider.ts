@@ -27,7 +27,8 @@ export async function initializationServices() {
     'startVideoCallComponentForChat',
     'focusWindow',
     'endCall',
-    'handleWebRTCSignal'
+    'handleWebRTCSignal',
+    'sendSystemWebRTCMsg',
   ]);
   srvWrap.exposeObservableMethods(videoChatSrv, [
     'watchRequests'

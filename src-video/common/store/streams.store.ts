@@ -17,32 +17,43 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 
 import { defineStore } from 'pinia';
 import { computed, ref, type Ref } from 'vue';
+import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { toRO } from '@main/common/utils/readonly';
 import { usePeerFuncs } from './utils/peer';
 import { makePeerState } from './utils/utils';
 import { useOwnVideoAudio } from './utils/own-video-audio';
 import { useOwnScreenShare } from './utils/own-screen-share';
-// import { videoChatSrv } from '@video/common/services/video-component-srv';
+import { areAddressesEqual } from '@shared/address-utils';
+import { useAppStore } from '@video/common/store/app.store';
 import { videoChatSrv } from '@video/common/services/service-provider';
 import { PeerChannelWithStreams } from '@video/common/services/streaming-channel';
 import type { PeerState } from '@video/common/types';
+import type { ChatIdObj } from '~/asmail-msgs.types';
+import { generateChatMessageId } from '@shared/chat-ids';
+import { isEmpty } from 'lodash';
 
+// eslint-disable-next-line @typescript-eslint/no-empty-function
 function noop() {
 }
 
 export const useStreamsStore = defineStore('streams', () => {
+  const appStore = useAppStore();
+
   const peers = ref<PeerState[]>([]);
+  const chatObjId = ref<Nullable<ChatIdObj>>(null);
   const chatName = ref('');
   const ownName = ref('');
   const ownAddr = ref('');
 
   function initialize(
+    chatId: ChatIdObj,
     chatNom: string,
     ownNom: string,
     ownAddress: string,
     otherPeers: { addr: string, name: string }[],
     makePeerChannel: (peerAddr: string) => PeerChannelWithStreams,
   ): void {
+    chatObjId.value = chatId;
     chatName.value = chatNom;
     ownName.value = ownNom;
     ownAddr.value = ownAddress;
@@ -51,14 +62,14 @@ export const useStreamsStore = defineStore('streams', () => {
     ));
   }
 
-  const isGroupChat = computed(() => (peers.value.length > 1));
+  const isGroupChat = computed(() => chatObjId.value?.isGroupChat);
   const isAnyOneConnected = computed(
     () => !!peers.value.find(p => p.webRTCConnected),
   );
   const singlePeer = computed(() => peers.value[0]);
 
   function getPeer(peerAddr: string) {
-    const peer = peers.value.find(p => (p.peerAddr === peerAddr));
+    const peer = peers.value.find(p => areAddressesEqual(p.peerAddr, peerAddr));
     if (!peer) {
       throw new Error(`Peer with address ${peerAddr} not found among ${peers.value.length} peers. Is it exact spelling as is used in chat info?`);
     }
@@ -83,7 +94,13 @@ export const useStreamsStore = defineStore('streams', () => {
     videoChatSrv.notifyBkgrndInstanceOnCallStart();
   }
 
-  async function endCall() {
+  async function endCall(withoutSendSystemMsg?: boolean) {
+    const { chatMessageId } = generateChatMessageId();
+
+    const whoToSendSystemMessageTo = isGroupChat.value
+      ? peers.value.filter(p => !p.webRTCConnected)
+      : [singlePeer.value].filter(p => !p.webRTCConnected);
+
     if (isGroupChat.value) {
       await Promise.allSettled(
         peers.value.map(({ channel }) => channel.close().catch(err => console.error(err)),
@@ -92,7 +109,40 @@ export const useStreamsStore = defineStore('streams', () => {
       await singlePeer.value.channel.close();
     }
 
+    if (!isEmpty(whoToSendSystemMessageTo) && !withoutSendSystemMsg) {
+      videoChatSrv.sendSystemWebRTCMsg({
+        chatId: chatObjId.value!,
+        recipients: whoToSendSystemMessageTo.map(p => p.peerAddr),
+        chatMessageId,
+        chatSystemData: {
+          event: 'webrtc-call',
+          value: {
+            subType: 'outgoing-call-cancelled',
+            sender: appStore.user!,
+            chatId: chatObjId.value!,
+          },
+        },
+      });
+    }
+
     w3n.closeSelf();
+  }
+
+  async function handlePeerDisconnected(peerAddr: string): Promise<void> {
+    const peer = getPeer(peerAddr);
+    if (!peer) {
+      await endCall(true);
+    }
+
+    if (!peer?.webRTCConnected) {
+      peers.value = peers.value.filter(peer => peer.peerAddr !== peerAddr);
+      !isGroupChat.value && w3n.closeSelf();
+      return;
+    }
+
+    await peer.channel?.close();
+    peers.value = peers.value.filter(peer => peer.peerAddr !== peerAddr);
+    !isGroupChat.value && w3n.closeSelf();
   }
 
   return {
@@ -102,6 +152,7 @@ export const useStreamsStore = defineStore('streams', () => {
     ownAddr: toRO(ownAddr),
 
     isGroupChat,
+    chatObjId,
     isAnyOneConnected,
     singlePeer,
 
@@ -112,6 +163,7 @@ export const useStreamsStore = defineStore('streams', () => {
     ...usePeerFuncs(getPeer),
     ...ownVideoAudio,
     ...ownScreenShare,
+    handlePeerDisconnected,
   };
 });
 

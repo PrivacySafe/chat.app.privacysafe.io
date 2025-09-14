@@ -58,14 +58,6 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
     offBandComm: OffBandSignalingChannel,
     isPolite: boolean,
   ): PeerChannelWithStreams {
-    console.log('# MAKE_WITH #');
-    console.log('# peerAddr => ', peerAddr);
-    console.log('# store => ', store);
-    console.log('# eventBus => ', eventBus, eventBus.emit);
-    console.log('# rtcConfig => ', rtcConfig);
-    console.log('# offBandComm => ', offBandComm);
-    console.log('# isPolite => ', isPolite);
-
     const peer = new PeerChannelWithStreams(
       peerAddr,
       store,
@@ -202,6 +194,7 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
         stream: partial.stream,
         tracks: partial.tracks!,
       });
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete this.partials[streamId];
     } else {
       this.partials[streamId] = {
@@ -233,6 +226,7 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
           stream,
           tracks: [trackId],
         });
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
         delete this.partials[stream.id];
       } else {
         partial.tracks!.push(trackId);

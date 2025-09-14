@@ -24,7 +24,7 @@ import { useInitialize } from '@main/common/composables/useInitialize';
 export type AppViewInstance = ReturnType<typeof useAppView>;
 
 export function useAppView() {
-  const { start } = useCommandHandler();
+  const { start: startHandlingCommands } = useCommandHandler();
 
   const appStore = useAppStore();
   const contactsStore = useContactsStore();
@@ -54,10 +54,10 @@ export function useAppView() {
 
   onBeforeMount(async () => {
     try {
-      await start();
       await appStore.initialize();
       await contactsStore.initialize();
       await initialize();
+      await startHandlingCommands();
     } catch (e) {
       console.error('Error while the app component mounting. ', e);
       throw e;

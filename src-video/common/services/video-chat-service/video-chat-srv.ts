@@ -24,12 +24,17 @@ import { toCanonicalAddress } from '@shared/address-utils';
 import { PeerChannelWithStreams } from '../streaming-channel';
 import type {
   CallFromVideoGUI,
+  ChatIdObj,
   ChatInfoForCall,
+  ChatOutgoingMessage,
+  ChatSystemMsgV1,
   VideoChatComponent,
   WebRTCMsg,
+  WebRTCMsgBodySysMsgData,
   WebRTCOffBandMessage,
 } from '~/index';
-import type { OffBandSignalingChannel } from '@video/common/types';
+import { OffBandSignalingChannel } from '@video/common/types';
+import { generateOutgoingMsgId } from '@shared/chat-ids.ts';
 
 type SignalsListener = (data: WebRTCOffBandMessage) => Promise<void>;
 
@@ -63,8 +68,6 @@ export function useVideoChatSrv(): VideoChatComponent {
   const chat = shallowRef<ChatInfoForCall | undefined>(undefined);
 
   async function startVideoCallComponentForChat(value: ChatInfoForCall): Promise<void> {
-    console.log('# startVideoCallComponentForChat => ', value);
-
     if (chat.value) {
       throw `Chat room is already set for this window`;
     }
@@ -81,8 +84,12 @@ export function useVideoChatSrv(): VideoChatComponent {
     return await streamsStore.endCall();
   }
 
-  async function handleWebRTCSignal(peerAddr: string, msg: WebRTCMsg): Promise<void> {
-    const { data } = msg;
+  async function handleWebRTCSignal(peerAddr: string, { data, stage }: WebRTCMsg): Promise<void> {
+    if (stage === 'disconnect') {
+      await streamsStore.handlePeerDisconnected(peerAddr);
+      return;
+    }
+
     const listener = getListener(peerAddr);
     if (!listener) {
       return;
@@ -99,8 +106,78 @@ export function useVideoChatSrv(): VideoChatComponent {
   }
 
   function notifyBkgrndInstanceOnCallStart() {
-    console.log('# VIDEO_CHAT_SRV notifyBkgrndInstanceOnCallStart # ', ctrlObs.value);
     ctrlObs.value?.next!({ type: 'call-started-event' });
+  }
+
+  async function sendSystemWebRTCMsg(
+    { chatId, recipients, chatMessageId, chatSystemData }:
+    { chatId: ChatIdObj; recipients: string[]; chatMessageId?: string; chatSystemData: WebRTCMsgBodySysMsgData }
+  ): Promise<void> {
+    const jsonBody: ChatSystemMsgV1 = {
+      v: 1,
+      chatMessageType: 'system',
+      groupChatId: chatId.isGroupChat ? chatId.chatId : undefined,
+      chatMessageId,
+      chatSystemData,
+    };
+
+    const msg: ChatOutgoingMessage = {
+      msgType: 'chat',
+      jsonBody,
+    };
+
+    const deliveryId = generateOutgoingMsgId();
+
+    try {
+      await w3n.mail!.delivery.addMsg(recipients, msg, deliveryId);
+    } catch (err) {
+      await w3n.log('error', `Fail to add system message to delivery`, err);
+      return;
+    }
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        let isDone = false;
+        w3n.mail!.delivery.observeDelivery(deliveryId, {
+          next: p => {
+            if (isDone) {return;}
+
+            if (p.allDone) {
+              isDone = true;
+              if (p.allDone === 'all-ok') {
+                resolve();
+              } else if (p.allDone === 'with-errors') {
+                const errs = Object.keys(p.recipients).reduce((res, peerAddr) => {
+                  const { err } = p.recipients[peerAddr];
+
+                  if (err) {
+                    res.push(err);
+                  }
+                  return res;
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                }, [] as any[]);
+
+                reject(errs);
+              }
+            }
+          },
+          complete: () => {
+            if (!isDone) {
+              isDone = true;
+              resolve();
+            }
+          },
+          error: err => {
+            if (!isDone) {
+              isDone = true;
+              reject(err);
+            }
+          },
+        });
+      });
+    } finally {
+      w3n.mail!.delivery.rmMsg(deliveryId).catch(err => console.error(err));
+    }
   }
 
   function watchRequests(obs: web3n.Observer<CallFromVideoGUI>): () => void {
@@ -134,8 +211,8 @@ export function useVideoChatSrv(): VideoChatComponent {
   }
 
   function passInitialDataToStreamsStore() {
-    console.log('<- passInitialDataToStreamsStore ->');
     streamsStore.initialize(
+      chat.value!.chatId,
       chat.value!.chatName,
       chat.value!.ownName,
       chat.value!.ownAddr,
@@ -158,5 +235,6 @@ export function useVideoChatSrv(): VideoChatComponent {
     handleWebRTCSignal,
     watchRequests,
     notifyBkgrndInstanceOnCallStart,
+    sendSystemWebRTCMsg,
   };
 }

@@ -27,12 +27,9 @@ try {
   const ownAddr = await w3n.mailerid!.getUserId();
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { chats, stopChatsService } = await ChatService.setupAndStartServing(
-    ownAddr,
-    () => getChatsWithVideoCall(),
-  );
+  const { chats, stopChatsService } = await ChatService.setupAndStartServing(ownAddr);
 
-  const { webrtcMsgsHandler, getChatsWithVideoCall } = setupAndStartVideoGUIOpener(
+  const { webrtcMsgsHandler } = setupAndStartVideoGUIOpener(
     ownAddr,
     chats.findChatEntry.bind(chats),
     chats.postProcessingForVideoChat.bind(chats),

@@ -23,12 +23,13 @@ import {
   ChatInvitationMsgView,
   OneToOneChatParameters,
   SingleChatStatus,
-  GroupChatStatus, CallMsgBodySysMsgData,
+  GroupChatStatus,
+  CallMsgBodySysMsgData,
+  WebRTCMsgBodySysMsgData,
 } from '~/index.ts';
 
 export function getChatName(chat: ChatListItemView): string {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { name, isGroupChat, chatId } = chat;
+  const { name, isGroupChat } = chat;
   const { getContactName } = useContactsStore();
 
   return isGroupChat
@@ -36,7 +37,11 @@ export function getChatName(chat: ChatListItemView): string {
     : name ? name : getContactName(chat.peerAddr);
 }
 
-export function getTextForChatSystemMessage(message: ChatSysMsgView, ownAddr?: string): string {
+export function getTextForChatSystemMessage(
+  message: ChatSysMsgView,
+  isGroupChat: boolean,
+  ownAddr?: string,
+): string {
   const { sender, systemData, isIncomingMsg } = message;
 
   const { getContactName } = useContactsStore();
@@ -137,6 +142,21 @@ export function getTextForChatSystemMessage(message: ChatSysMsgView, ownAddr?: s
         : appStore.$i18n.tr('va.outgoing.call');
     }
 
+    case 'webrtc-call': {
+      const { sender: byUser, subType } = systemData.value as WebRTCMsgBodySysMsgData['value'];
+      if (isIncomingMsg) {
+        return subType === 'outgoing-call-cancelled'
+          ? appStore.$i18n.tr('va.missed.incoming.call', { sender: byUser })
+          : isGroupChat
+            ? appStore.$i18n.tr('va.incoming.call.not.accepted', { user: byUser })
+            : appStore.$i18n.tr('va.outgoing.call.cancelled.by', { user: byUser });
+      }
+
+      return subType === 'outgoing-call-cancelled'
+        ? ''
+        : appStore.$i18n.tr('va.incoming.call.cancelled', { sender: byUser });
+    }
+
     default:
       return '';
   }
@@ -205,4 +225,14 @@ export function getTextForChatInvitationMessage(
       return appStore.$i18n.tr('chat.invitation.sent');
     }
   }
+}
+
+export function timeInSecondsToString(timeInSeconds: number): string {
+  let remainder = timeInSeconds;
+  const hours = remainder > 3600 ? `${Math.floor(remainder / 3600)}` : 0;
+  remainder = remainder % 3600;
+  const minutes = `${Math.floor(remainder / 60)}`;
+  const seconds = `${Math.floor(remainder % 60)}`;
+  const str = `${minutes.padStart(2, '0')}:${seconds.padStart(2, '0')}`;
+  return hours === 0 ? str : `${hours.padStart(2, '0')}:${str}`;
 }

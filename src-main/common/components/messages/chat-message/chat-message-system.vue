@@ -21,7 +21,13 @@ import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
 import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from '@main/common/utils/chat-ui.helper';
 import { useAppStore } from '@main/common/store/app.store';
-import { CallMsgBodySysMsgData, ChatInvitationMsgView, ChatMessageView, ChatSysMsgView } from '~/index';
+import {
+  CallMsgBodySysMsgData,
+  ChatInvitationMsgView,
+  ChatMessageView,
+  ChatSysMsgView,
+  WebRTCMsgBodySysMsgData,
+} from '~/index';
 
 const props = defineProps<{
   msg: ChatMessageView;
@@ -36,8 +42,13 @@ const data = computed(() => {
     : (props.msg as ChatInvitationMsgView).inviteData;
 });
 
-const isSystemMsgByCall = computed(() => (data.value as ChatSysMsgView['systemData']).event === 'call');
-const isSystemMsgByIncomingCall = computed(() => isSystemMsgByCall.value && ((data.value as ChatSysMsgView['systemData']) as CallMsgBodySysMsgData).value.direction === 'incoming');
+const isSystemMsgByCall = computed(() => ['call', 'webrtc-call'].includes((data.value as ChatSysMsgView['systemData']).event));
+const isSystemMsgByMissedCall = computed(() => (data.value as ChatSysMsgView['systemData']).event === 'webrtc-call');
+const isSystemMsgByIncomingCall = computed(() => isSystemMsgByCall.value
+  && (
+    ((data.value as ChatSysMsgView['systemData']) as CallMsgBodySysMsgData).value.direction === 'incoming'
+  || ((data.value as ChatSysMsgView['systemData']) as WebRTCMsgBodySysMsgData).value.subType === 'outgoing-call-cancelled'
+));
 const callDuration = computed(() => {
   if (!isSystemMsgByCall.value) {
     return null;
@@ -72,7 +83,7 @@ const msgText = computed(() => {
     case 'invitation':
       return getTextForChatInvitationMessage(props.msg);
     case 'system': {
-      const text = getTextForChatSystemMessage(props.msg, ownAddr.value);
+      const text = getTextForChatSystemMessage(props.msg, props.msg.chatId.isGroupChat, ownAddr.value);
       return isSystemMsgByCall.value && callDuration.value ? `${text} (${callDuration.value})` : text;
     }
     default:
@@ -91,7 +102,8 @@ const date = computed(() => {
     :class="[
       $style.chatMessageSystem,
       isMobileMode && $style.chatMessageSystemMobile,
-      isSystemMsgByCall && $style.byCall
+      isSystemMsgByCall && $style.byCall,
+      isSystemMsgByMissedCall && $style.warning,
     ]"
   >
     <ui3n-icon
@@ -123,13 +135,12 @@ const date = computed(() => {
   overflow: hidden;
   height: var(--spacing-l);
   margin: var(--spacing-s) auto;
-  border-radius: var(--spacing-l);
+  //border-radius: var(--spacing-l);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  column-gap: var(--spacing-m);
+  column-gap: var(--spacing-s);
   padding: 0 12px;
-  background-color: var(--color-bg-block-primary-default);
   font-size: var(--font-12);
   font-weight: 500;
   line-height: var(--font-16);
@@ -158,7 +169,6 @@ const date = computed(() => {
   }
 
   &.byCall {
-    background-color: var(--color-bg-chat-bubble-user-default);
     padding-left: var(--spacing-l);
 
     .icon {
@@ -170,6 +180,14 @@ const date = computed(() => {
     .text {
       span {
         color: var(--color-text-block-primary-default)
+      }
+    }
+
+    &.warning {
+      .text {
+        span {
+          color: var(--color-text-block-warning-default);
+        }
       }
     }
   }

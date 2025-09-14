@@ -90,7 +90,7 @@ function prepareMsgDataToExport(
   const author = getContactName(isIncomingMsg ? sender : ownAddr);
 
   const text = type === 'system'
-    ? getTextForChatSystemMessage(msg, ownAddr)
+    ? getTextForChatSystemMessage(msg, msg.chatId.isGroupChat, ownAddr)
     : type === 'invitation' ? getTextForChatInvitationMessage(msg) : html2text(msg.body);
 
   const attachInfo = type !== 'regular' || isEmpty(msg.attachments)

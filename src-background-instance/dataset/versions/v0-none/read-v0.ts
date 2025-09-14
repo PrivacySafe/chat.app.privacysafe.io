@@ -81,7 +81,7 @@ function chatDbEntryFrom(rec: ChatV0Record, ownAddr: string): {
 }
 
 export function turnMembersStringArrayToV2(membersV0: string[]): GroupChatDbEntry['members'] {
-  let members: GroupChatDbEntry['members'] = {};
+  const members: GroupChatDbEntry['members'] = {};
   for (const member of membersV0) {
     members[member] = { hasAccepted: true };
   }
@@ -169,7 +169,6 @@ export async function getVersionNoneData(
   for (const initMsg of initMsgRecs) {
     const chat = chats.get(initMsg.chatId);
     if (!chat) {
-      console.log(`skipped message from chat ${initMsg.chatId}`);
       continue;
     }
     try {

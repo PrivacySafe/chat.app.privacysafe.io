@@ -46,7 +46,7 @@ export const chatMenuItems: {
   icon: string;
   action: string; // XXX this can be typed, can't it?
   text: string;
-  chatTypes: Array<'single' | 'group' | 'group&admin'>;
+  chatTypes: ('single' | 'group' | 'group&admin')[];
   disabled?: boolean;
   isAccent?: boolean;
   margin?: boolean;

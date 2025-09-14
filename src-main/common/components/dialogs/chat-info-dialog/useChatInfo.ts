@@ -40,8 +40,8 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
   const editMembersMode = ref(false);
   const memberSearch = ref('');
   const userSearch = ref('');
-  const initialSelectedUsers = ref<Array<PersonView & { displayName: string }>>([]);
-  const selectedUsers = ref<Array<PersonView & { displayName: string }>>([]);
+  const initialSelectedUsers = ref<(PersonView & { displayName: string })[]>([]);
+  const selectedUsers = ref<(PersonView & { displayName: string })[]>([]);
   const listItemMenuProps = ref<{
     open: boolean;
     canClose: boolean;
@@ -85,7 +85,7 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
     return value;
   });
 
-  const members = computed<Array<PersonView & { displayName: string }>>(() => {
+  const members = computed<(PersonView & { displayName: string })[]>(() => {
     const addrsInChat = props.chat.isGroupChat
       ? Object.keys(props.chat.members)
       : [ownAddr.value, props.chat.peerAddr];

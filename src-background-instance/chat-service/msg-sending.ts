@@ -179,6 +179,7 @@ export class MsgSending {
     };
 
     const msg = await this.data.getMessage(chatMessageId);
+
     if (!msg) {
       return;
     }
@@ -198,6 +199,7 @@ export class MsgSending {
       chatMessageId,
       { status, history },
     );
+
     this.emit.message.updated(updatedMsg);
   }
 }

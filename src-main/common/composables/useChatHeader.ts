@@ -31,7 +31,7 @@ import ConfirmationDialog from '@main/common/components/dialogs/confirmation-dia
 import ChatRenameDialog from '@main/common/components/dialogs/chat-rename-dialog.vue';
 import ChatInfoDialog from '@main/common/components/dialogs/chat-info-dialog/chat-info-dialog.vue';
 
-type ChatActionHandlers = {
+interface ChatActionHandlers {
   history: {
     export: () => Promise<void>;
     clean: () => Promise<void>;
@@ -43,7 +43,7 @@ type ChatActionHandlers = {
     delete: () => Promise<void> | void;
     leave: () => Promise<void> | void;
   };
-};
+}
 
 export function useChatHeader(
   { chat, messages, goToChats, isMobileMode }:

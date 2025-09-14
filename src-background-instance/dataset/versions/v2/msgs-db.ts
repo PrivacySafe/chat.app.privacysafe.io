@@ -450,6 +450,10 @@ export class MsgsDBs {
        FROM messages
        WHERE isIncomingMsg = 1`,
     );
+    if (!sqlValue) {
+      return;
+    }
+
     const { maxTS } = objectFromQueryExecResult<{ maxTS: number | null }>(sqlValue)[0];
 
     return maxTS === null ? undefined : maxTS;

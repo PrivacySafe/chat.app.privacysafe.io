@@ -85,21 +85,21 @@ async function initChatDbFromFile(ownAddr: string): Promise<{ chats: ChatsDB; ms
     );
 
     return { chats, msgs };
-  } else if (info.datasetVersion === 1) {
+  } else if ((info.datasetVersion === 1) || (info.datasetVersion === 2)) {
     const chats = await existingDbIn(chatsFile);
     const msgs = await existingDbIn(
       await msgsFolder.writableFile(msgDbFNameFor(0)),
     );
 
     await turnV1jsonFieldValueToV2InChatDb(chats)
-    info.datasetVersion = 2;
+    info.datasetVersion = 2.1;
     await chatsFile.updateXAttrs({ set: { [DATASET_META_ATTR]: info } });
 
     return {
       chats: new ChatsDB(chats),
       msgs: new MsgsDBs(msgs),
     };
-  } else if (info.datasetVersion === 2) {
+  } else if (info.datasetVersion === 2.1) {
     const chats = await existingDbIn(chatsFile);
     const msgs = await existingDbIn(
       await msgsFolder.writableFile(msgDbFNameFor(0)),
@@ -109,7 +109,7 @@ async function initChatDbFromFile(ownAddr: string): Promise<{ chats: ChatsDB; ms
       chats: new ChatsDB(chats),
       msgs: new MsgsDBs(msgs),
     };
-  } else if (info.datasetVersion > 2) {
+  } else if (info.datasetVersion > 2.1) {
     throw new Error(`Chat db data version ${info.datasetVersion} is greater than 1. Newer app version should be run.`);
   } else {
     // ToDo

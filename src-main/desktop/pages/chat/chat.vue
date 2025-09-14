@@ -133,7 +133,7 @@ onBeforeUnmount(doBeforeUnMount);
             <ui3n-button
               type="icon"
               color="transparent"
-              icon="round-send "
+              icon="round-send"
               icon-size="20"
               :icon-color="!sendBtnDisabled ? 'var(--color-icon-block-accent-default)' : 'var(--color-icon-block-secondary-default)'"
               :disabled="sendBtnDisabled"
@@ -170,7 +170,7 @@ onBeforeUnmount(doBeforeUnMount);
                   type="icon"
                   color="transparent"
                   size="small"
-                  icon="round-close "
+                  icon="round-close"
                   icon-size="16"
                   icon-color="var(--color-icon-control-secondary-default)"
                   @click="clearInitialInfo"
@@ -194,7 +194,7 @@ onBeforeUnmount(doBeforeUnMount);
                   :class="$style.attachmentsClear"
                   type="icon"
                   color="transparent"
-                  icon="round-close "
+                  icon="round-close"
                   icon-size="16"
                   icon-color="#828282"
                   @click="clearAttachments"
@@ -209,7 +209,7 @@ onBeforeUnmount(doBeforeUnMount);
 </template>
 
 <style lang="scss" module>
-@use '../../../common/assets/styles/mixins' as mixins;
+@use '@main/common/assets/styles/mixins' as mixins;
 
 .chat {
   position: relative;

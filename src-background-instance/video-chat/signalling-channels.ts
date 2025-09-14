@@ -16,13 +16,16 @@
 */
 
 import { fstIsPolite } from '../utils/for-perfect-negotiation.ts';
-import type {
+import { sendSystemDeletableMessage } from '../utils/send-chat-msg.ts'
+import {
   ChatIdObj,
   ChatOutgoingMessage,
   ChatWebRTCMsgV1,
   WebRTCMsg,
+  WebRTCMsgBodySysMsgData,
   WebRTCOffBandMessage,
 } from '../../types/index.ts';
+import { generateChatMessageId } from '../../shared-libs/chat-ids.ts';
 
 export type WebRTCSignalListener = (signal: WebRTCMsg) => void;
 
@@ -135,7 +138,9 @@ export class WebRTCSignalingPeerChannel {
   }
 
   private handleDisconnectSignal(msg: WebRTCMsg): boolean {
-    if (this.id !== msg.id) {return false;}
+    if (this.id !== msg.id) {
+      return false;
+    }
 
     if (this.state === 'signalling') {
       this.passMsgToGUI(msg);
@@ -156,7 +161,9 @@ export class WebRTCSignalingPeerChannel {
     stage: 'signalling' | 'disconnect',
     data: WebRTCOffBandMessage,
   ): Promise<void> {
-    if (this.state === 'disconnected') {return;}
+    if (this.state === 'disconnected') {
+      return;
+    }
 
     if (stage === 'signalling' && this.state === 'not-started') {
       (stage as WebRTCMsg['stage']) = 'start';
@@ -167,7 +174,7 @@ export class WebRTCSignalingPeerChannel {
       this.addToSendingBuffer(stage, data);
     }
 
-    this.sendingProc = this.sendWebRTCMsg({ stage, data, id: this.id });
+    this.sendingProc = this.sendWebRTCMessage({ stage, data, id: this.id });
 
     if (stage === 'disconnect') {
       this.state = 'disconnected';
@@ -196,12 +203,12 @@ export class WebRTCSignalingPeerChannel {
     }
   }
 
-  private async sendWebRTCMsg(webrtcMsg: WebRTCMsg): Promise<void> {
-    await sendWebRTCMsg(this.chatId, this.peerAddr, webrtcMsg);
+  private async sendWebRTCMessage(webrtcMsg: WebRTCMsg): Promise<void> {
+    await sendWebRTCMsg(this.chatId, this.peerAddr, this.ownAddr, webrtcMsg);
     if (this.sendingBuffer) {
       const msg = this.sendingBuffer.pop();
       if (msg) {
-        return this.sendWebRTCMsg(msg);
+        return this.sendWebRTCMessage(msg);
       }
     }
     this.sendingProc = undefined;
@@ -223,9 +230,32 @@ function startStageFirst(a: WebRTCMsg, b: WebRTCMsg): -1 | 0 | 1 {
   }
 }
 
-async function sendWebRTCMsg(
+async function sendSystemMgsAboutDisconnectWebRTC(
+  { ownAddr, chatId, recipients }:
+  { ownAddr: string; chatId: ChatIdObj; recipients: string[] }
+) {
+  const chatSystemData: WebRTCMsgBodySysMsgData = {
+    event: 'webrtc-call',
+    value: {
+      sender: ownAddr,
+      subType: 'outgoing-call-cancelled',
+      chatId,
+    },
+  };
+
+  const { chatMessageId } = generateChatMessageId();
+  return sendSystemDeletableMessage({
+    chatId,
+    recipients,
+    chatMessageId,
+    chatSystemData,
+  });
+}
+
+export async function sendWebRTCMsg(
   chatId: ChatIdObj,
   peerAddr: string,
+  ownAddr: string,
   webrtcMsg: WebRTCMsg,
 ): Promise<void> {
   const jsonBody: ChatWebRTCMsgV1 = {
@@ -243,6 +273,9 @@ async function sendWebRTCMsg(
 
   try {
     await w3n.mail!.delivery.addMsg([peerAddr], msg, deliveryId);
+    if (webrtcMsg.stage === 'disconnect') {
+      await sendSystemMgsAboutDisconnectWebRTC({ ownAddr, chatId, recipients: [peerAddr] });
+    }
   } catch (err) {
     await w3n.log('error', `Fail to add webrtc signalling message to delivery`, err);
     return;
@@ -253,7 +286,9 @@ async function sendWebRTCMsg(
       let isDone = false;
       w3n.mail!.delivery.observeDelivery(deliveryId, {
         next: p => {
-          if (isDone) {return;}
+          if (isDone) {
+            return;
+          }
 
           if (p.allDone) {
             isDone = true;
