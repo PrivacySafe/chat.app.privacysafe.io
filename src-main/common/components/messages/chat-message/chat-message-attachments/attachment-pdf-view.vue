@@ -49,6 +49,7 @@ function renderPage(num = 1) {
     pdfDoc!.getPage(num)
       .then(page => {
         const viewport = page.getViewport({ scale: 1 });
+
         canvasRef.value!.height = viewport.height;
         canvasRef.value!.width = viewport.width;
         canvasStyle.value = {

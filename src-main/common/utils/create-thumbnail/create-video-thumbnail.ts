@@ -14,7 +14,11 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { createVideoThumbnail as makeVideoThumbnail, transformWeb3nFileToFile } from '@v1nt1248/3nclient-lib/utils';
+import {
+  createVideoThumbnail as makeVideoThumbnail,
+  schedulerYield,
+  transformWeb3nFileToFile,
+} from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { getFileByInfoFromMsg } from '@main/common/utils/files.helper';
 
@@ -22,19 +26,17 @@ export async function createVideoThumbnail(
   { fileId, incomingMsgId, targetSize = 200 }:
   { fileId: string; incomingMsgId?: string; targetSize?: number },
 ): Promise<Nullable<string>> {
-  return getFileByInfoFromMsg(fileId, incomingMsgId)
-    .then(file3n => {
-      if (!file3n) {
-        return null;
-      }
+  const file3n = await getFileByInfoFromMsg(fileId, incomingMsgId);
+  if (!file3n) {
+    return null;
+  }
+  await schedulerYield();
 
-      return transformWeb3nFileToFile(file3n);
-    })
-    .then(file => {
-      if (!file) {
-        return null;
-      }
+  const file = await transformWeb3nFileToFile(file3n);
+  if (!file) {
+    return null;
+  }
+  await schedulerYield();
 
-      return makeVideoThumbnail(file, targetSize, 5);
-    });
+  return makeVideoThumbnail(file, targetSize, 5);
 }

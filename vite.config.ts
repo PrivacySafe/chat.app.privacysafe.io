@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { defineConfig, UserConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export const makeConfig = ({ mode }: UserConfig) => {
   const isDev = mode === 'development';
@@ -13,7 +14,13 @@ export const makeConfig = ({ mode }: UserConfig) => {
   };
   const define = { 'process.env': {} };
 
-  const plugins = [vue(), vueDevTools()];
+  const plugins = [
+    vue(),
+    nodePolyfills({
+      include: ['timers', 'timers/promises'],
+    }),
+    vueDevTools(),
+  ];
 
   let optimizeDeps = {};
   if (isDev) {

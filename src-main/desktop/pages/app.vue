@@ -25,7 +25,7 @@ const { me, customLogoSrc, appVersion, connectivityStatusText, openDashboard, ap
 
 <template>
   <div
-    ref="app-element"
+    ref="appEl"
     :class="$style.app"
   >
     <div :class="$style.toolbar">

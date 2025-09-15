@@ -23,7 +23,7 @@ export interface AppWindowSize {
 }
 
 export function useAppSize() {
-  const appElement = useTemplateRef<HTMLElement>('app-element');
+  const appElement = useTemplateRef<HTMLDivElement>('appEl');
 
   const appWindowSize = ref<AppWindowSize>({
     width: 0,
@@ -43,7 +43,7 @@ export function useAppSize() {
       const { contentRect, target } = entry;
       const { className } = target;
       const { width, height } = contentRect;
-      if (className === appElement.value!.className) {
+      if (className === appElement.value?.className) {
         setAppWindowSize({ width, height });
         break;
       }

@@ -15,28 +15,28 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { I18nPlugin } from "@v1nt1248/3nclient-lib/plugins";
-import { b64ToBlob, uint8ToDataURL } from "@v1nt1248/3nclient-lib/utils";
+import { I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { b64ToBlob, uint8ToDataURL } from '@v1nt1248/3nclient-lib/utils';
 
 type ReadonlyFile = web3n.files.ReadonlyFile
 
-const IMG_FILE_EXTS = [ 'svg', 'jpeg', 'jpg', 'png', 'gif', 'webp' ];
+const IMG_FILE_EXTS = ['svg', 'jpeg', 'jpg', 'png', 'gif', 'webp'];
 
 export type ImageType = 'svg' | 'jpeg' | 'png' | 'gif' | 'webp';
 
 export async function selectImageFilesWithDialog(
-  title: string, btnLabel: string, multiSelections: boolean, $tr: I18nPlugin['$tr']
-): Promise<ReadonlyFile|ReadonlyFile[]|undefined> {
+  title: string, btnLabel: string, multiSelections: boolean, $tr: I18nPlugin['$tr'],
+): Promise<ReadonlyFile | ReadonlyFile[] | undefined> {
   const files = await w3n.shell!.fileDialogs!.openFileDialog!(
     title, btnLabel, multiSelections,
-    [ { extensions: IMG_FILE_EXTS, name: $tr('dialog.open-file.image-type') } ]
+    [{ extensions: IMG_FILE_EXTS, name: $tr('dialog.open-file.image-type') }],
   );
   return (files ? ((files.length > 1) ? files : files[0]) : undefined);
 }
 
 export async function selectOneImageFileWithDialog(
-  title: string, btnLabel: string, $tr: I18nPlugin['$tr']
-): Promise<ReadonlyFile|undefined> {
+  title: string, btnLabel: string, $tr: I18nPlugin['$tr'],
+): Promise<ReadonlyFile | undefined> {
   const file = await selectImageFilesWithDialog(title, btnLabel, false, $tr);
   return (file ? file as ReadonlyFile : undefined);
 }
@@ -55,18 +55,18 @@ export function mimeTypeOfImageFile(imgFile: ReadonlyFile): string {
   if (indOfDot < 0) {
     throw new Error(`File name has no extension to guess its type`);
   }
-  const fExt = fName.substring(indOfDot+1);
+  const fExt = fName.substring(indOfDot + 1);
   switch (fExt as (ImageType | 'jpg')) {
-    case "svg":
+    case 'svg':
       return `image/svg+xml`;
-    case "jpeg":
-    case "jpg":
+    case 'jpeg':
+    case 'jpg':
       return `image/jpeg`;
-    case "png":
+    case 'png':
       return `image/png`;
-    case "gif":
+    case 'gif':
       return `image/gif`;
-    case "webp":
+    case 'webp':
       return `image/webp`;
     default:
       throw new Error(`Can't connect file extension ${fExt} to known image mime type`);
@@ -79,7 +79,7 @@ export function blobFromDataURL(dataURL: string): Blob {
     throw new Error(`Fail to parse given string as data url`);
   }
   const mimeType = dataURL.substring(5, b64Start);
-  return b64ToBlob(dataURL.substring(b64Start+8), mimeType);
+  return b64ToBlob(dataURL.substring(b64Start + 8), mimeType);
 }
 
 export async function readImageFileIntoDataURL(imgFile: ReadonlyFile): Promise<string> {

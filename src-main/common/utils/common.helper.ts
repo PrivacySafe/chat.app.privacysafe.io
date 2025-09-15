@@ -14,14 +14,16 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+export function yield3() {
+  // @ts-ignore
+  if ('scheduler' in window && 'yield' in scheduler) {
+    // @ts-ignore
+    return scheduler.yield();
+  }
 
-import { readonly } from 'vue';
-
-export function toRO<T extends object>(r: T): T {
-  // eslint-disable-next-line
-  if ((window as any).isTestApp) {
-    return readonly(r) as T;
-  } else {
-    return r;
+  {
+    return new Promise((resolve => {
+      setTimeout(resolve, 0);
+    }));
   }
 }

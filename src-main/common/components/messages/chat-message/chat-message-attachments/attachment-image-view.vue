@@ -17,7 +17,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import { getFileExtension, mimeTypes, uint8ToDataURL } from '@v1nt1248/3nclient-lib/utils';
+import { transformWeb3nFileToFile } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
 import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
 import { getFileByInfoFromMsg } from '@main/common/utils/files.helper';
@@ -39,34 +39,24 @@ const imageViewStyle = computed(() => {
   return { backgroundImage: `url('${imageDataUrl.value}')` };
 });
 
-onMounted(() => {
+onMounted(async () => {
   isProcessing.value = true;
 
-  setTimeout(() => {
-    let fileName = '';
+  try {
+    const file3n = await getFileByInfoFromMsg(props.item.id!, props.incomingMsgId);
+    if (!file3n) {
+      return null;
+    }
 
-    getFileByInfoFromMsg(props.item.id!, props.incomingMsgId)
-      .then(file => {
-        if (!file) {
-          return;
-        }
+    const file = await transformWeb3nFileToFile(file3n);
+    if (!file) {
+      return null;
+    }
 
-        fileName = file.name;
-        return file.readBytes();
-      })
-      .then(byteArray => {
-        if (!byteArray) {
-          return;
-        }
-
-        const fileExt = getFileExtension(fileName);
-        const fileMimeType = mimeTypes[fileExt] || 'image/png';
-        imageDataUrl.value = uint8ToDataURL(byteArray, fileMimeType);
-      })
-      .finally(() => {
-        isProcessing.value = false;
-      });
-  }, 50);
+    imageDataUrl.value = URL.createObjectURL(file);
+  } finally {
+    isProcessing.value = false;
+  }
 });
 </script>
 
