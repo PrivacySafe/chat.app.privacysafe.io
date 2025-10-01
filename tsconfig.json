@@ -18,6 +18,7 @@
     "importHelpers": true,
     "sourceMap": true,
     "esModuleInterop": true,
+    "useUnknownInCatchVariables": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],

@@ -34,7 +34,6 @@ export function useAppView() {
     appVersion,
     user: me,
     connectivityStatus,
-    appElement,
     customLogoSrc,
   } = storeToRefs(appStore);
 
@@ -74,7 +73,6 @@ export function useAppView() {
     commonLoading,
     me,
     customLogoSrc,
-    appElement,
     appVersion,
     connectivityStatusText,
     openDashboard,

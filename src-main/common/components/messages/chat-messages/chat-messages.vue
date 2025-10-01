@@ -15,12 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { watch } from 'vue';
-import { Ui3nLongPress as vUi3nLongPress } from '@v1nt1248/3nclient-lib';
+import { type Nullable, Ui3nLongPress as vUi3nLongPress } from '@v1nt1248/3nclient-lib';
 import useChatMessages from './useChatMessages';
+import type { ChatListItemView, ChatMessageView, RegularMsgView } from '~/index';
 import ChatMessage from '../chat-message/chat-message.vue';
 import ChatMessageActions from '../chat-message/chat-message-actions.vue';
-import type { ChatListItemView, ChatMessageView, RegularMsgView } from '~/index';
+import ReactionsDialog from '@main/common/components/dialogs/reactions-dialog.vue';
 
 export interface ChatMessagesProps {
   chat: ChatListItemView;
@@ -28,33 +28,28 @@ export interface ChatMessagesProps {
 }
 
 export interface ChatMessagesEmits {
+  (event: 'init', value: Nullable<HTMLDivElement>): void;
   (event: 'reply', value: RegularMsgView): void;
+  (event: 'edit', value: RegularMsgView): void;
+  (event: 'show:info', value: RegularMsgView): void;
 }
 
 const props = defineProps<ChatMessagesProps>();
 const emits = defineEmits<ChatMessagesEmits>();
 
 const {
-  listElement,
+  selectedMessages,
   msgActionsMenuProps,
+  msgReactionsMenuProps,
+  recentReactions,
+  selectMessage,
   handleClickOnMessagesBlock,
   handleRightClickOnAttachmentElement,
   goToMessage,
   clearMessageMenu,
   handleAction,
+  handleSelectionReaction,
 } = useChatMessages(emits);
-
-watch(
-  () => props.chat.chatId,
-  async (value, oldValue) => {
-    if (value !== oldValue) {
-      setTimeout(() => {
-        listElement.value && (listElement.value.scrollTop = 1e9);
-      }, 100);
-    }
-  },
-  { immediate: true },
-);
 </script>
 
 <template>
@@ -70,8 +65,18 @@ watch(
       v-for="(item, index) in props.messages"
       :key="item.chatMessageId"
       :msg="item"
+      :selected-messages="selectedMessages"
       :prev-msg-sender="index === 0 ? '' : props.messages[index - 1].sender"
+      :prev-msg-info="
+        index === 0
+          ? null
+          : {
+            isIncomingMsg: props.messages[index - 1].isIncomingMsg,
+            status: props.messages[index - 1].status
+          }
+      "
       :related-message="(item as RegularMsgView).relatedMessage"
+      @select="selectMessage"
       @click:right="handleRightClickOnAttachmentElement"
     />
 
@@ -86,6 +91,20 @@ watch(
         :msg="msgActionsMenuProps.msg"
         @close="clearMessageMenu"
         @select:action="handleAction"
+      />
+    </teleport>
+
+    <teleport
+      v-if="msgReactionsMenuProps.msg"
+      :disabled="!msgReactionsMenuProps.open"
+      :to="`#msg-${msgReactionsMenuProps.msg.chatMessageId}`"
+    >
+      <reactions-dialog
+        :open="msgReactionsMenuProps.open"
+        :recent-reactions="recentReactions"
+        :msg="msgReactionsMenuProps.msg"
+        @close="clearMessageMenu"
+        @select:reaction="handleSelectionReaction"
       />
     </teleport>
   </div>

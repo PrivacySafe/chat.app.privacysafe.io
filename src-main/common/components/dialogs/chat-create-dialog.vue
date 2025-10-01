@@ -32,9 +32,7 @@ import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
 interface ChatCreateDialogEmits {
   (ev: 'select', val: ChatIdObj): void;
   (ev: 'close'): void;
-  // eslint-disable-next-line @typescript-eslint/unified-signatures
   (ev: 'confirm'): void;
-  // eslint-disable-next-line @typescript-eslint/unified-signatures
   (ev: 'cancel'): void;
 }
 

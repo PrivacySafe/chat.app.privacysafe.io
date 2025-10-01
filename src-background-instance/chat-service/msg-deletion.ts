@@ -50,12 +50,7 @@ export class MsgDeletion {
     }
 
     // change local data
-    await this.removeMsgBytes(
-      id,
-      msg.isIncomingMsg,
-      msg.incomingMsgId,
-      msg.attachments,
-    );
+    await this.removeMsgBytes(id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments);
     this.emit.message.removed(id);
 
     if (deleteForEveryone) {
@@ -67,6 +62,48 @@ export class MsgDeletion {
         chatSystemData: {
           event: 'delete:message',
           value: { oneMessage: id },
+        },
+      });
+    }
+  }
+
+  async deleteMessages(chatMsgIds: ChatMessageId[] = [], deleteForEveryone: boolean): Promise<void> {
+    const chatId = chatMsgIds.length > 0 ? chatMsgIds[0].chatId : null;
+    if (!chatId) {
+      throw makeDbRecordException({ chatNotFound: true });
+    }
+
+    const chat = this.data.findChat(chatId);
+    if (!chat) {
+      throw makeDbRecordException({ chatNotFound: true });
+    }
+
+    const removeMsgsPr: Promise<void>[] = [];
+    for (const chatMessageId of chatMsgIds) {
+      const msg = await this.data.getMessage(chatMessageId);
+      if (!msg) {
+        throw makeDbRecordException({ messageNotFound: true });
+      }
+
+      removeMsgsPr.push(
+        this.removeMsgBytes(chatMessageId, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments),
+      );
+    }
+    await Promise.all(removeMsgsPr);
+    this.emit.message.removedMultiple(chatMsgIds);
+
+    if (deleteForEveryone) {
+      const recipients = recipientsInChat(chat, this.ownAddr);
+      await sendSystemMessage({
+        chatId,
+        recipients,
+        chatSystemData: {
+          event: 'delete:message',
+          value: {
+            multipleMessages: {
+              chatMsgIds,
+            },
+          },
         },
       });
     }
@@ -121,26 +158,48 @@ export class MsgDeletion {
     chat: ChatDbEntry,
     value: DeleteMessageSysMsgData['value'],
   ): Promise<void> {
-    const { oneMessage  } = value;
-    const { chatMessageId } = oneMessage!;
-    const chatId = chatIdOfChat(chat);
-    const id = { chatId, chatMessageId };
-    const msg = await this.data.getMessage(id);
+    const { oneMessage, multipleMessages } = value;
 
-    if (!msg) {
+    if (oneMessage) {
+      const { chatMessageId } = oneMessage;
+      const chatId = chatIdOfChat(chat);
+      const id = { chatId, chatMessageId };
+      const msg = await this.data.getMessage(id);
+
+      if (!msg) {
+        return;
+      }
+
+      await this.removeMsgBytes(id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments);
+      this.emit.message.removed(id);
       return;
     }
 
-    await this.removeMsgBytes(
-      id,
-      msg.isIncomingMsg,
-      msg.incomingMsgId,
-      msg.attachments,
-    );
+    if (multipleMessages) {
+      const { chatMsgIds } = multipleMessages;
 
-    this.emit.message.removed(id);
+      const chatId = chatIdOfChat(chat);
+      const removeMsgsPr: Promise<void>[] = [];
+      for (const id of chatMsgIds) {
+        const { chatMessageId } = id;
+        const msg = await this.data.getMessage({ chatId, chatMessageId });
+
+        if (msg) {
+          removeMsgsPr.push(
+            this.removeMsgBytes({ chatId, chatMessageId }, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments),
+          );
+        }
+      }
+      await Promise.all(removeMsgsPr);
+      const deletedMsgs = chatMsgIds.map(id => ({
+        chatId,
+        chatMessageId: id.chatMessageId,
+      }))
+
+      this.emit.message.removedMultiple(deletedMsgs);
+      return;
+    }
   }
-
 }
 
 export async function removeMsgDataNotInDB(

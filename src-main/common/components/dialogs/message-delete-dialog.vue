@@ -16,11 +16,20 @@
 -->
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { computed, inject, ref } from 'vue';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nCheckbox } from '@v1nt1248/3nclient-lib';
 
+const props = defineProps<{
+  text?: string;
+}>();
 const emits = defineEmits(['select']);
+
+const { $tr } = inject(I18N_KEY)!;
+
 const deleteForEveryone = ref(false);
+
+const bodyText = computed(() => props.text || $tr('chat.message.delete.dialog.text'));
 
 function onFlagChange(val: boolean | string | number) {
   emits('select', val);
@@ -30,7 +39,7 @@ function onFlagChange(val: boolean | string | number) {
 <template>
   <div :class="$style.messageDeleteDialog">
     <div :class="$style.messageDeleteDialogText">
-      {{ $tr('chat.message.delete.dialog.text') }}
+      {{ bodyText }}
     </div>
 
     <ui3n-checkbox

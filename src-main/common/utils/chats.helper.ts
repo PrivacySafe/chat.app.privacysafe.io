@@ -150,17 +150,19 @@ export async function exportChatMessages(
 }
 
 function checkAction(
-  { messageType, status, hasAttachments, condition }: {
+  { messageType, status, hasAttachments, condition, timestamp }: {
     messageType: 'incoming' | 'outgoing';
     status: MessageStatus | undefined;
     hasAttachments: boolean;
     condition: string;
+    timestamp: number;
   }): boolean {
-  const [msgType, msgStatusAsString, areAttachmentsPresent] = condition.split(':') as ['incoming' | 'outgoing' | '', string, 'true' | 'false' | ''];
+  const [msgType, msgStatusAsString, areAttachmentsPresent, lifetime] = condition.split(':') as ['incoming' | 'outgoing' | '', string, 'true' | 'false' | '', string];
 
-  const typeMatches = messageType === msgType;
+  const typeMatches = msgType ? messageType === msgType : true;
   let statusMatches = false;
   let attachmentsMatches = false;
+  let timestampMatches = false;
 
   if (!msgStatusAsString || !status) {
     statusMatches = true;
@@ -176,14 +178,32 @@ function checkAction(
       || (!hasAttachments && areAttachmentsPresent === 'false');
   }
 
-  return typeMatches && statusMatches && attachmentsMatches;
+  if (
+    !lifetime
+    || (
+      lifetime
+      && (!lifetime.includes('>') && !lifetime.includes('<'))
+    )
+  ) {
+    timestampMatches = true;
+  } else {
+    const timestampCondition = lifetime[0] as '>' | '<';
+    const timestampValueAsString = lifetime.slice(1);
+    const timestampValue = isNaN(Number(timestampValueAsString)) ? Date.now() : Number(timestampValueAsString);
+    const timestampDiff = Date.now() - timestamp;
+    timestampMatches = timestampCondition === '>'
+      ? timestampDiff > timestampValue
+      : timestampDiff < timestampValue;
+  }
+
+  return typeMatches && statusMatches && attachmentsMatches && timestampMatches;
 }
 
 export function getMessageActions(
   msg: ChatMessageView,
   $tr: (txt: string) => string,
 ): Omit<ChatMessageAction, 'conditions'>[] {
-  const { isIncomingMsg, status } = msg;
+  const { isIncomingMsg, status, timestamp } = msg;
   const messageType = isIncomingMsg ? 'incoming' : 'outgoing';
   return messageActions
     .filter(action => {
@@ -200,7 +220,7 @@ export function getMessageActions(
       for (const condition of conditions) {
         const hasAttachments = (msg.chatMessageType === 'regular') && !!size(msg.attachments);
         isAllowedAction = isAllowedAction
-          || checkAction({ messageType, status, hasAttachments, condition });
+          || checkAction({ messageType, status, hasAttachments, condition, timestamp });
         if (isAllowedAction) {
           break;
         }

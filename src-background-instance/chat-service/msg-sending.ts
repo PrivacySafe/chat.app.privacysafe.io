@@ -16,11 +16,15 @@
 */
 
 import { ChatsData } from '../dataset/index.ts';
-import { ChatMessageAttachmentsInfo, LocalMetadataInDelivery } from '../../types/chat.types.ts';
-import { ChatIdObj, ChatMessageId } from '../../types/asmail-msgs.types.ts';
+import {
+  ChatMessageAttachmentsInfo,
+  ChatMessageHistory,
+  ChatMessageHistoryErrors,
+  LocalMetadataInDelivery,
+} from '../../types/chat.types.ts';
 import type { ChatService, SendingProgressInfo } from './index.ts';
 import { chatIdOfChat, makeMsgDbEntry, recipientsInChat } from './common-transforms.ts';
-import { ChatIncomingMessage, ChatRegularMsgV1, RelatedMessage } from '../../types/asmail-msgs.types.ts';
+import type { ChatIdObj, ChatMessageId, ChatIncomingMessage, ChatRegularMsgV1, RelatedMessage } from '../../types/asmail-msgs.types.ts';
 import { makeDbRecordException } from '../utils/exceptions.ts';
 import { sendRegularMessage, sendSystemMessage } from '../utils/send-chat-msg.ts';
 import { generateChatMessageId } from '../../shared-libs/chat-ids.ts';
@@ -42,38 +46,58 @@ export class MsgSending {
   }
 
   async sendRegularMessage(
-    chatId: ChatIdObj, text: string,
-    files: web3n.files.ReadonlyFile[] | undefined,
-    relatedMessage: RelatedMessage | undefined,
-  ): Promise<void> {
+    { chatId, chatMessageId, text, files, relatedMessage }: {
+      chatId: ChatIdObj,
+      chatMessageId?: string,
+      text: string,
+      files: web3n.files.ReadonlyFile[] | undefined,
+      relatedMessage: RelatedMessage | undefined,
+    }): Promise<void> {
     const chat = this.data.findChat(chatId);
     if (!chat) {
       throw makeDbRecordException({ chatNotFound: true });
     }
 
-    const { timestamp, chatMessageId } = generateChatMessageId();
-    const { attachments, attachmentContainer } = await this.prepOutgoingAttachments(files);
-    const msg = makeMsgDbEntry('regular', chatMessageId, {
-      groupChatId: chat.isGroupChat ? chat.chatId : null,
-      otoPeerCAddr: chat.isGroupChat ? null : chat.peerCAddr,
-      timestamp,
-      body: text,
-      attachments,
-      relatedMessage: relatedMessage ?? null,
-    });
-    await this.data.addMessage(msg);
+    const { timestamp, chatMessageId: newChatMessageId } = generateChatMessageId();
+    const msgId = chatMessageId || newChatMessageId;
 
-    const recipients = recipientsInChat(chat, this.ownAddr);
-    await sendRegularMessage(
-      chatId,
-      chatMessageId,
-      recipients,
-      text,
-      attachmentContainer,
-      relatedMessage,
-    );
+    if (chatMessageId) {
+      await this.data.updateMessageRecord({ chatId, chatMessageId }, { status: 'sending' });
 
-    this.emit.message.added(msg);
+      const { attachmentContainer } = await this.prepOutgoingAttachments(files);
+      const recipients = recipientsInChat(chat, this.ownAddr);
+      await sendRegularMessage(
+        chatId,
+        msgId,
+        recipients,
+        text,
+        attachmentContainer,
+        relatedMessage,
+      );
+    } else {
+      const { attachments, attachmentContainer } = await this.prepOutgoingAttachments(files);
+      const msg = makeMsgDbEntry('regular', msgId, {
+        groupChatId: chat.isGroupChat ? chat.chatId : null,
+        otoPeerCAddr: chat.isGroupChat ? null : chat.peerCAddr,
+        timestamp,
+        body: text,
+        attachments,
+        relatedMessage: relatedMessage ?? null,
+      });
+      await this.data.addMessage(msg);
+
+      const recipients = recipientsInChat(chat, this.ownAddr);
+      await sendRegularMessage(
+        chatId,
+        msgId,
+        recipients,
+        text,
+        attachmentContainer,
+        relatedMessage,
+      );
+
+      this.emit.message.added(msg);
+    }
   }
 
   private async prepOutgoingAttachments(files: web3n.files.ReadonlyFile[] | undefined): Promise<{
@@ -184,10 +208,36 @@ export class MsgSending {
       return;
     }
 
-    // eslint-disable-next-line prefer-const
+
     let { status, history } = msg;
     if (progress.allDone) {
-      status = 'sent';
+      status = progress.allDone === 'all-ok' ? 'sent' : 'error';
+
+      if (progress.allDone === 'with-errors') {
+        const errors = Object.keys(progress.recipients).reduce((res, address) => {
+          const { err } = progress.recipients[address];
+          if (err) {
+            res![address] = err;
+          }
+
+          return res;
+        }, {} as ChatMessageHistoryErrors);
+
+        if (Object.keys(errors).length > 0) {
+          if (!history) {
+            history = {
+              changes: [],
+            } as ChatMessageHistory;
+          }
+
+          history.changes?.push({
+            user: this.ownAddr,
+            timestamp: Date.now(),
+            type: 'error',
+            value: errors,
+          });
+        }
+      }
     } else {
       // TODO
       // XXX instead of return we can add more info depending on progress state,

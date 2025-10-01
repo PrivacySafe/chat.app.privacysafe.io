@@ -97,44 +97,69 @@ export const chatMenuItems: {
 * part1 (message type): 'incoming'|'outgoing' OR '' (if it does not matter)
 * part2 (message delivery status): lists the MessageStatus separated by commas OR '' (if it does not matter)
 * part3 (attachments):  true OR false OR '' (if it does not matter)
+* part4 (lifetime): '' if it does not matter OR a string like '>1000' or '<1000' ('>' or '<' is the comparison
+*  condition and then the value in ms
 * */
 export const messageActions: ChatMessageAction[] = [
+  {
+    id: 'reaction',
+    icon: { name: 'outline-heart-plus' },
+    title: 'chat.message.actions.menu.txt.reaction',
+    conditions: [':sent,read::'],
+  },
   {
     id: 'reply',
     icon: { name: 'outline-reply' },
     title: 'chat.message.actions.menu.txt.reply',
-    conditions: ['incoming:sent,read:']
+    conditions: ['incoming:sent,read::']
   },
   {
     id: 'copy',
     icon: { name: 'round-content-copy' },
     title: 'chat.message.actions.menu.txt.copy',
-    conditions: ['incoming::', 'outgoing:sent,read,error,canceled:'],
+    conditions: ['incoming:::', 'outgoing:sent,read,error,canceled::'],
   },
   {
     id: 'forward',
     icon: { name: 'outline-reply', horizontalFlip: true },
     title: 'chat.message.actions.menu.txt.forward',
-    conditions: ['incoming::', 'outgoing:sent,read,error,canceled:'],
+    conditions: ['incoming:::', 'outgoing:sent,read,error,canceled::'],
+  },
+  {
+    id: 'edit',
+    icon: { name: 'outline-edit' },
+    title: 'chat.message.actions.menu.txt.edit',
+    conditions: ['outgoing:sent,read,error,canceled::<86400000'],
   },
   {
     id: 'download',
     icon: { name: 'outline-download-for-offline' },
     title: 'chat.message.actions.menu.txt.download',
-    conditions: ['incoming::true', 'outgoing:sent,read,error,canceled:true'],
+    conditions: ['incoming::true:', 'outgoing:sent,read,error,canceled:true:'],
   },
   {
     id: 'resend',
-    disabled: true,
     icon: { name: 'round-refresh' },
     title: 'chat.message.actions.menu.txt.resend',
-    conditions: ['outgoing:error:']
+    conditions: ['outgoing:error::']
+  },
+  {
+    id: 'select',
+    icon: { name: 'round-check-circle-outline' },
+    title: 'chat.message.actions.menu.txt.select',
+    conditions: [':::'],
+  },
+  {
+    id: 'info',
+    icon: { name: 'outline-info', rotateIcon: 2 },
+    title: 'chat.message.actions.menu.txt.info',
+    conditions: [':::'],
   },
   {
     id: 'delete_message',
     icon: { name: 'outline-delete' },
     title: 'chat.message.actions.menu.txt.delete_message',
-    conditions: ['incoming::', 'outgoing:sent,read,error,canceled:'],
+    conditions: ['incoming:::', 'outgoing:sent,read,error,canceled::'],
     blockStart: true,
     accent: 'var(--warning-content-default)',
   },
@@ -143,7 +168,7 @@ export const messageActions: ChatMessageAction[] = [
     disabled: true,
     icon: { name: 'outline-delete' },
     title: 'chat.message.actions.menu.txt.cancel_sending',
-    conditions: ['outgoing:sending:'],
+    conditions: ['outgoing:sending::'],
     blockStart: true,
     accent: 'var(--warning-content-default)',
   },

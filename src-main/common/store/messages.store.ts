@@ -17,12 +17,16 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import keyBy from 'lodash/keyBy';
+import cloneDeep from 'lodash/cloneDeep';
+import has from 'lodash/has';
+import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { chatService, fileLinkStoreSrv } from '@main/common/services/external-services';
+import { useAppStore } from '@main/common/store/app.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
 import { useUiOutgoingStore } from '@main/common/store/ui.outgoing.store';
 import { areChatIdsEqual } from '@shared/chat-ids';
-import {
+import type {
   ChatIdObj,
   ChatMessageAttachmentsInfo,
   ChatMessageEvent,
@@ -30,22 +34,26 @@ import {
   ChatMessageSendingProgressEvent,
   ChatMessageView,
   ReadonlyFile,
+  RegularMsgView,
 } from '~/index';
-import type { DbRecordException } from '@bg/utils/exceptions.ts';
+import type { DbRecordException } from '@bg/utils/exceptions';
 
 export const useMessagesStore = defineStore('messages', () => {
+  const appStore = useAppStore();
   const chatsStore = useChatsStore();
   const chatStore = useChatStore();
   const uiOutgoingStore = useUiOutgoingStore();
 
   const objOfCurrentChatMessages = ref<Record<string, ChatMessageView>>({});
 
+  const selectedMessages = ref<string[]>([]);
+
   const currentChatMessages = computed(() =>
     Object.values(objOfCurrentChatMessages.value)
       .sort((a, b) => a.timestamp - b.timestamp),
   );
 
-  function setCurrentChatMessages(messages: ChatMessageView[]) {
+  function setCurrentChatMessages(messages: ChatMessageView[] = []) {
     objOfCurrentChatMessages.value = keyBy(messages, 'chatMessageId');
   }
 
@@ -63,6 +71,19 @@ export const useMessagesStore = defineStore('messages', () => {
       return;
     }
     return objOfCurrentChatMessages.value[chatMsgId];
+  }
+
+  function selectMessage(chatMessageId: string) {
+    const msgIndex = selectedMessages.value.indexOf(chatMessageId);
+    if (msgIndex === -1) {
+      selectedMessages.value.push(chatMessageId);
+    } else {
+      selectedMessages.value.splice(msgIndex, 1);
+    }
+  }
+
+  function clearSelectedMessages(): void {
+    selectedMessages.value = [];
   }
 
   function upsertMessageInCurrentChat(chatMsgId: string, data: Partial<ChatMessageView>) {
@@ -88,6 +109,45 @@ export const useMessagesStore = defineStore('messages', () => {
     try {
       const { chatId, chatMessageId } = message;
       await chatService.deleteMessage({ chatId, chatMessageId }, !!deleteForEveryone);
+      await chatsStore.refreshChatViewData(chatId);
+    } catch (err) {
+      if ((err as DbRecordException).chatNotFound) {
+        await chatsStore.refreshChatList();
+      } else {
+        await fetchMessages();
+      }
+    }
+  }
+
+  async function deleteMessagesInChat(chatMsgsIds: string[], deleteForEveryone?: boolean): Promise<void> {
+    let chatId: ChatIdObj | null = null;
+
+    for (const chatMsgId of chatMsgsIds) {
+      const message = getMessageInCurrentChat(chatMsgId);
+      if (!message) {
+        console.error(`You are trying to delete a message (${chatMsgId}) that is not in the current chat.`)
+        throw Error('Unable to delete a message');
+      }
+      if (!chatId) {
+        chatId = message.chatId;
+      }
+
+      if (!areChatIdsEqual(chatId, message.chatId)) {
+        console.error('You are trying to delete messages from different chats.')
+        throw Error('Unable to delete a message');
+      }
+    }
+
+    if (!chatId) {
+      throw Error('Unable to delete a message');
+    }
+
+    try {
+      const msgsToDelete = chatMsgsIds.map(id => ({
+        chatId,
+        chatMessageId: id,
+      }));
+      await chatService.deleteMessages(msgsToDelete, !!deleteForEveryone);
       await chatsStore.refreshChatViewData(chatId);
     } catch (err) {
       if ((err as DbRecordException).chatNotFound) {
@@ -142,10 +202,38 @@ export const useMessagesStore = defineStore('messages', () => {
     return files;
   }
 
+  async function changeMessageReaction(
+    { msg, reaction }:
+    { msg: ChatMessageView; reaction: Nullable<{ id: string; value: string }> },
+  ): Promise<void> {
+    const msgReactions = cloneDeep((msg as RegularMsgView).reactions || {});
+    const isThereReactionFromUser = has(msgReactions, appStore.user);
+    if (isThereReactionFromUser && reaction === null) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete msgReactions[appStore.user];
+    } else {
+      reaction && (msgReactions[appStore.user] = {
+        type: 'emoji',
+        name: reaction.id,
+      });
+    }
+
+    const updatedMsg = await chatService.changeMessageReaction({
+      chatId: msg.chatId,
+      chatMessageId: msg.chatMessageId,
+      updatedReactions: msgReactions,
+    });
+
+    if (updatedMsg) {
+      upsertMessageInCurrentChat(updatedMsg.chatMessageId, updatedMsg);
+    }
+  }
+
   async function handleAddedMsg(msg: ChatMessageView): Promise<void> {
     if (areChatIdsEqual(chatStore.currentChatId, msg.chatId)) {
       if (!objOfCurrentChatMessages.value[msg.chatMessageId]) {
         upsertMessageInCurrentChat(msg.chatMessageId, msg);
+        chatStore.$emitter.emit('message:added', { chatId: msg.chatId });
       }
     }
     await chatsStore.refreshChatViewData(msg.chatId);
@@ -166,6 +254,21 @@ export const useMessagesStore = defineStore('messages', () => {
     await chatsStore.refreshChatViewData(msg.chatId);
   }
 
+  async function handleRemovedMsgs(chatMsgIds: ChatMessageId[] = []): Promise<void> {
+    if (chatMsgIds.length === 0) {
+      return;
+    }
+
+    const { chatId } = chatMsgIds[0];
+    if (areChatIdsEqual(chatStore.currentChatId, chatId)) {
+      for (const id of chatMsgIds) {
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+        delete objOfCurrentChatMessages.value[id.chatMessageId];
+      }
+    }
+    await chatsStore.refreshChatViewData(chatId);
+  }
+
   async function handleBackgroundMessageEvents(event: ChatMessageEvent) {
     switch (event.event) {
       case 'added':
@@ -174,6 +277,8 @@ export const useMessagesStore = defineStore('messages', () => {
         return handleUpdatedMsg(event.msg);
       case 'removed':
         return handleRemovedMsg(event.msgId);
+      case 'removed-multiple':
+        return handleRemovedMsgs(event.chatMsgIds);
       case 'sending-progress':
         uiOutgoingStore.updateSendingProgressesList(event as ChatMessageSendingProgressEvent);
         break;
@@ -186,15 +291,20 @@ export const useMessagesStore = defineStore('messages', () => {
   return {
     objOfCurrentChatMessages,
     currentChatMessages,
+    selectedMessages,
     fetchMessages,
     setCurrentChatMessages,
     upsertMessageInCurrentChat,
     getMessageInCurrentChat,
     deleteMessageInChat,
+    deleteMessagesInChat,
     deleteAllMessagesInChat,
     markMessageAsRead,
     getChatMessage,
     getMessageAttachments,
+    changeMessageReaction,
+    selectMessage,
+    clearSelectedMessages,
     handleBackgroundMessageEvents,
     handleAddedMsg,
     handleUpdatedMsg,

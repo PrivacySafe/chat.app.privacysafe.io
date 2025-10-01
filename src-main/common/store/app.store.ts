@@ -20,7 +20,7 @@ import { defineStore } from 'pinia';
 import { AvailableColorTheme, AvailableLanguage } from '~/app.types';
 import { useSystemLevelAppConfig } from './app/system-level-app-config';
 import { useConnectivityStatus } from './app/connectivity';
-import { useAppSize } from './app/app-size';
+import { type Ui3nResizeCbArg } from '@v1nt1248/3nclient-lib';
 
 export interface AppStoreState {
   commonLoading: boolean;
@@ -44,8 +44,10 @@ export interface AppWindowSize {
 export const useAppStore = defineStore('app', () => {
   const commonLoading = ref(false);
   const isMobileMode = ref<boolean>(false);
-  const appSize = useAppSize();
-  const { appElement, appWindowSize } = appSize;
+  const appWindowSize = ref<{ width: number; height: number }>({
+    width: 0,
+    height: 0,
+  });
 
   const connectivity = useConnectivityStatus();
   const { connectivityStatus } = connectivity;
@@ -57,6 +59,13 @@ export const useAppStore = defineStore('app', () => {
     isMobileMode.value = value;
   }
 
+  function setAppWindowSize(value: Ui3nResizeCbArg) {
+    appWindowSize.value = {
+      width: value.width,
+      height: value.contentHeight,
+    };
+  }
+
   async function initialize() {
     await Promise.all([
       connectivity.initialize(),
@@ -65,7 +74,6 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function stopWatching() {
-    appSize.stopWatching();
     connectivity.stopConnectivityCheck();
     commonAppConfs.stopWatching();
   }
@@ -74,14 +82,14 @@ export const useAppStore = defineStore('app', () => {
     commonLoading,
     isMobileMode,
     appVersion,
+    appWindowSize,
     user,
     lang,
     colorTheme,
     customLogoSrc,
     connectivityStatus,
-    appElement,
-    appWindowSize,
     setMobileMode,
+    setAppWindowSize,
     initialize,
     stopWatching,
   };

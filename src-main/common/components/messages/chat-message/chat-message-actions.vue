@@ -14,7 +14,6 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
-
 <script lang="ts" setup>
 import { computed, onBeforeMount, ref, watch } from 'vue';
 import { Ui3nClickOutside, Ui3nIcon } from '@v1nt1248/3nclient-lib';
@@ -32,7 +31,6 @@ const props = defineProps<{
     maxHeight?: number | string;
   };
 }>();
-// const emit = defineEmits(['close', 'select:action']);
 const emits = defineEmits<{
   (event: 'close'): void;
   (event: 'select:action', value: { action: ChatMessageActionType, chatMessageId: string }): void;
@@ -49,6 +47,7 @@ const menuStyle = computed(() => {
     'max-height': maxHeight === 'auto' ? maxHeight : `${maxHeight}px`,
   };
 });
+const chatMsgActionElementHeightCss = computed(() => `${chatMsgActionElementHeight}px`);
 
 onBeforeMount(() => {
   const calculatedMenuHeight = props.actions.length * chatMsgActionElementHeight + 12;
@@ -60,20 +59,6 @@ onBeforeMount(() => {
     ? ((top - wrapTop) + height + calculatedMenuHeight) > wrapHeight
     : false;
 });
-
-watch(
-  () => props.open,
-  (val, oldVal) => {
-    visible.value = val;
-    if (val && val !== oldVal) {
-      setTimeout(() => {
-        canClose.value = true;
-      }, 500);
-    }
-  }, {
-    immediate: true,
-  },
-);
 
 function closeMenu() {
   if (!canClose.value) {
@@ -89,6 +74,20 @@ async function handleAction(action: ChatMessageActionType) {
   emits('select:action', { action, chatMessageId: props.msg.chatMessageId });
   closeMenu();
 }
+
+watch(
+  () => props.open,
+  (val, oldVal) => {
+    visible.value = val;
+    if (val && val !== oldVal) {
+      setTimeout(() => {
+        canClose.value = true;
+      }, 500);
+    }
+  }, {
+    immediate: true,
+  },
+);
 </script>
 
 <template>
@@ -113,13 +112,16 @@ async function handleAction(action: ChatMessageActionType) {
       ]"
       @click="handleAction(action.id)"
     >
-      <ui3n-icon
-        :icon="action.icon.name"
-        width="12"
-        height="12"
-        :horizontal-flip="!!action.icon.horizontalFlip"
-        :color="action.accent ? 'var(--warning-content-default)' : 'var(--color-icon-control-primary-default)'"
-      />
+      <div :class="$style.itemIcon">
+        <ui3n-icon
+          :icon="action.icon.name"
+          width="14"
+          height="14"
+          :horizontal-flip="!!action.icon.horizontalFlip"
+          :color="action.accent ? 'var(--warning-content-default)' : 'var(--color-icon-control-primary-default)'"
+        />
+      </div>
+
       <span :class="$style.itemName">{{ action.title }}</span>
     </div>
   </div>
@@ -128,7 +130,15 @@ async function handleAction(action: ChatMessageActionType) {
 <style lang="scss" module>
 @use '@main/common/assets/styles/mixins' as mixins;
 
+@keyframes scale {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.75); }
+  100% { transform: scale(1); }
+}
+
 .chatMessageActions {
+  --action-item-height: v-bind(chatMsgActionElementHeightCss);
+
   position: absolute;
   padding: var(--spacing-xs);
   background-color: var(--color-bg-control-secondary-default);
@@ -137,12 +147,12 @@ async function handleAction(action: ChatMessageActionType) {
   font-weight: 400;
   overflow-y: auto;
   z-index: 100;
-  top: calc(100% - var(--spacing-xs));
+  top: calc(100% - var(--spacing-s));
   @include mixins.block-shadow();
 
   &.up {
     top: auto;
-    bottom: calc(100% - var(--spacing-s));
+    bottom: var(--spacing-s);
   }
 
   &.left {
@@ -157,7 +167,7 @@ async function handleAction(action: ChatMessageActionType) {
 .item {
   position: relative;
   width: 100%;
-  height: var(--spacing-ml);
+  height: var(--action-item-height);
   display: flex;
   justify-content: flex-start;
   align-items: center;
@@ -165,12 +175,16 @@ async function handleAction(action: ChatMessageActionType) {
 
   :global(.ui3n-icon) {
     margin-right: var(--spacing-xs);
-    min-width: 12px;
+    min-width: 14px;
   }
 
   &:hover {
     cursor: pointer;
     background-color: var(--color-bg-control-primary-hover);
+
+    .itemIcon {
+      animation: scale 0.4s ease-in-out;
+    }
 
     :global(.ui3n-icon) {
       color: var(--color-icon-control-accent-hover);
@@ -190,6 +204,10 @@ async function handleAction(action: ChatMessageActionType) {
   &.withMargin {
     margin-top: var(--spacing-xs);
   }
+}
+
+.itemIcon {
+  position: relative;
 }
 
 .itemName {

@@ -23,9 +23,8 @@ import {
   SQLiteOn3NStorage,
 } from '../../../../shared-libs/sqlite-on-3nstorage/index.js';
 import { ParamsObject } from '../../../../shared-libs/sqlite-on-3nstorage/sqljs.js';
-import type { ChatMessageAttachmentsInfo, MessageStatus } from '../../../../types/chat.types.ts';
-import { ChatIdObj, ChatMessageId } from '../../../../types/asmail-msgs.types.ts';
-import type { RelatedMessage } from '../../../../types/asmail-msgs.types.ts';
+import type { ChatMessageHistory, ChatMessageReaction, ChatMessageAttachmentsInfo, MessageStatus } from '../../../../types/chat.types.ts';
+import type { RelatedMessage, ChatIdObj, ChatMessageId } from '../../../../types/asmail-msgs.types.ts';
 import { GroupChatDbEntry, OTOChatDbEntry } from './chats-db.ts';
 import {
   TransformDefinition,
@@ -52,8 +51,8 @@ export interface MsgDbEntry {
   relatedMessage: RelatedMessage | null;
   status: MessageStatus | null;
   timestamp: number;
-  history: unknown | null;
-  reactions: unknown | null;
+  history: ChatMessageHistory | null;
+  reactions: Record<string, ChatMessageReaction> | null;
 }
 
 export interface RefsToMsgsDataNoInDB {

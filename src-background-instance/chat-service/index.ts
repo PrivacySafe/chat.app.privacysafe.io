@@ -19,7 +19,7 @@
 import { ObserversSet } from '../../shared-libs/observer-utils.ts';
 import { includesAddress, toCanonicalAddress } from '../../shared-libs/address-utils.ts';
 import { MultiConnectionIPCWrap } from '../../shared-libs/ipc/ipc-service.js';
-import type {
+import {
   ChatView,
   ChatMessageView,
   ChatListItemView,
@@ -40,6 +40,8 @@ import type {
   WebRTCMsgBodySysMsgData,
   ChatOutgoingMessage,
   RegularMsgView,
+  UpdatedMsgBodySysMsgData,
+  ChatMessageReaction, UpdatedMsgReactionSysMsgData,
 } from '../../types/index.ts';
 import type {
   AddressCheckResult,
@@ -97,12 +99,15 @@ function exposeServiceOnIPC(chats: ChatService): () => void {
     'updateGroupAdmins',
     'deleteMessagesInChat',
     'deleteMessage',
+    'deleteMessages',
     'getMessage',
     'getMessagesByChat',
     'sendRegularMessage',
     'markMessageAsReadNotifyingSender',
     'checkAddressExistenceForASMail',
     'getIncomingMessage',
+    'updateEarlySentMessage',
+    'changeMessageReaction',
     'sendSystemDeletableMessage',
     'makeAndSaveMsgToDb',
   ]);
@@ -199,8 +204,8 @@ export class ChatService implements ChatServiceIPC {
   private readonly msgSending: MsgSending;
   private readonly msgDeletion: MsgDeletion;
   private readonly msgStatusUpdating: MsgStatusUpdating;
-  private readonly msgReactions: MsgReactions;
   private readonly msgEditing: MsgEditing;
+  private readonly msgReactions: MsgReactions;
 
   private constructor(
     private readonly data: ChatsData,
@@ -435,23 +440,27 @@ export class ChatService implements ChatServiceIPC {
             },
           });
 
-        // case 'update:reaction':
-        //   return await this.msgReactions.handleReactionToMessage(
-        //     msg.sender,
-        //     chatId,
-        //     chatMessageId!,
-        //     msg.deliveryTS,
-        //     sysData.value,
-        //   );
+        case 'update:body':
+          return await this.msgEditing.handleUpdateOfMessageBody({
+            user: msg.sender,
+            chatId: chat.isGroupChat
+              ? { isGroupChat: true, chatId: chat.chatId }
+              : { isGroupChat: false, chatId: chat.peerCAddr },
+            chatMessageId: (sysData as UpdatedMsgBodySysMsgData).value.chatMessageId,
+            timestamp: msg.deliveryTS,
+            body: (sysData as UpdatedMsgBodySysMsgData).value.body,
+          });
 
-        // case 'update:body':
-        //   return await this.msgEditing.handleUpdateOfMessageBody(
-        //     msg.sender,
-        //     chatId,
-        //     chatMessageId!,
-        //     msg.deliveryTS,
-        //     sysData.value,
-        //   );
+        case 'update:reactions':
+          return await this.msgReactions.handleChangeOfReactions({
+            user: msg.sender,
+            chatId: chat.isGroupChat
+              ? { isGroupChat: true, chatId: chat.chatId }
+              : { isGroupChat: false, chatId: chat.peerCAddr },
+            chatMessageId: (sysData as UpdatedMsgReactionSysMsgData).value.chatMessageId,
+            timestamp: msg.deliveryTS,
+            reactions: (sysData as UpdatedMsgReactionSysMsgData).value.reactions,
+          });
 
         default:
           await w3n.log(
@@ -533,6 +542,12 @@ export class ChatService implements ChatServiceIPC {
         updatedEntityType: 'message',
         event: 'removed',
         msgId,
+      }),
+
+      removedMultiple: (chatMsgIds: ChatMessageId[]) => this.emitChatEvent({
+        updatedEntityType: 'message',
+        event: 'removed-multiple',
+        chatMsgIds,
       }),
 
       updated: async (msg: MsgDbEntry | undefined) => (msg ?
@@ -625,12 +640,14 @@ export class ChatService implements ChatServiceIPC {
   }
 
   sendRegularMessage(
+    { chatId, chatMessageId, text, files, relatedMessage }: {
     chatId: ChatIdObj,
+    chatMessageId?: string,
     text: string,
     files: web3n.files.ReadonlyFile[] | undefined,
     relatedMessage: RelatedMessage | undefined,
-  ): Promise<void> {
-    return this.msgSending.sendRegularMessage(chatId, text, files, relatedMessage);
+  }): Promise<void> {
+    return this.msgSending.sendRegularMessage({ chatId, chatMessageId, text, files, relatedMessage });
   }
 
   deleteChat(chatId: ChatIdObj): Promise<void> {
@@ -734,6 +751,10 @@ export class ChatService implements ChatServiceIPC {
     return this.msgDeletion.deleteMessage(id, deleteForEveryone);
   }
 
+  async deleteMessages(chatMsgIds: ChatMessageId[], deleteForEveryone: boolean): Promise<void> {
+    return this.msgDeletion.deleteMessages(chatMsgIds, deleteForEveryone);
+  }
+
   async getMessage(id: ChatMessageId): Promise<ChatMessageView | undefined> {
     const found = await this.data.getMessage(id);
     if (found) {
@@ -770,6 +791,70 @@ export class ChatService implements ChatServiceIPC {
     } catch (e) {
       await w3n.log('error', `Error getting the message ${msgId}.`, e);
     }
+  }
+
+  async updateEarlySentMessage(
+    { chatId, chatMessageId, updatedBody }:
+    { chatId: ChatIdObj; chatMessageId: string; updatedBody: string },
+  ): Promise<ChatMessageView | undefined> {
+    const updatedMessage = await this.msgEditing.editMessage({ chatId, chatMessageId, updatedBody });
+    if (!updatedMessage) {
+      return undefined;
+    }
+
+    const chat = await this.getChat(chatId);
+    const recipients = chat!.isGroupChat
+      ? Object.keys(chat!.members).filter(addr => addr !== this.ownAddr)
+      : [chat!.peerAddr];
+
+    this.sendSystemDeletableMessage({
+      chatId,
+      recipients,
+      chatMessageId,
+      chatSystemData: {
+        event: 'update:body',
+        value: {
+          chatMessageId,
+          body: updatedBody,
+        },
+      } as UpdatedMsgBodySysMsgData,
+    });
+
+    return msgViewFromDbEntry(updatedMessage, updatedMessage.relatedMessage as RegularMsgView['relatedMessage'], this.ownAddr);
+  }
+
+  async changeMessageReaction(
+    { chatId, chatMessageId, updatedReactions }:
+    { chatId: ChatIdObj; chatMessageId: string; updatedReactions: Record<string, ChatMessageReaction> },
+  ): Promise<ChatMessageView | undefined> {
+    const updatedMessage = await this.msgReactions.changeMessageReactions({
+      chatId,
+      chatMessageId,
+      updatedReactions,
+    });
+    if (!updatedMessage) {
+      return undefined;
+    }
+
+    const chat = await this.getChat(chatId);
+    const recipients = chat!.isGroupChat
+      ? Object.keys(chat!.members).filter(addr => addr !== this.ownAddr)
+      : [chat!.peerAddr];
+
+    this.sendSystemDeletableMessage({
+      chatId,
+      recipients,
+      chatMessageId,
+      chatSystemData: {
+        event: 'update:reactions',
+        value: {
+          chatMessageId,
+          reactions: updatedReactions,
+        },
+      } as UpdatedMsgReactionSysMsgData,
+    });
+
+    return msgViewFromDbEntry(updatedMessage, updatedMessage.relatedMessage as RegularMsgView['relatedMessage'], this.ownAddr);
   }
 
   async sendSystemDeletableMessage(

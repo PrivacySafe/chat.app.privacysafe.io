@@ -17,22 +17,28 @@
 
 <script lang="ts" setup>
 import { computed, onMounted, useTemplateRef } from 'vue';
-import type { Nullable } from '@v1nt1248/3nclient-lib';
+import size from 'lodash/size';
+import { type Nullable, Ui3nIcon, Ui3nRadio } from '@v1nt1248/3nclient-lib';
+import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
-import type { ChatInvitationMsgView, ChatMessageView, RegularMsgView } from '~/index';
+import { ChatInvitationMsgView, ChatMessageView, MessageStatus, RegularMsgView } from '~/index';
 import ChatMessageSystem from './chat-message-system.vue';
 import ChatMessageInvitationRequest from './chat-message-invitation-request.vue';
 import ChatMessageRegular from './chat-message-regular.vue';
 
 const props = defineProps<{
   msg: ChatMessageView;
+  selectedMessages: string[];
   relatedMessage?: RegularMsgView['relatedMessage'];
   prevMsgSender: string | undefined;
+  prevMsgInfo: Nullable<{ isIncomingMsg?: boolean, status: MessageStatus | undefined }>;
 }>();
 const emits = defineEmits<{
   (event: 'click:right', value: MouseEvent): void;
+  (event: 'select', value: string): void;
 }>();
 
+const chatStore = useChatStore();
 const messagesStore = useMessagesStore();
 const { markMessageAsRead } = messagesStore;
 
@@ -46,6 +52,14 @@ const isMsgSystem = computed(() => (props.msg.chatMessageType === 'system')
 const isInvitationRequest = computed(() => props.msg.chatMessageType === 'invitation' && isIncomingMsg.value);
 
 const currentMsgSender = computed<string>(() => props.msg.sender);
+
+const isMsgFirstUnred = computed(() => props.msg.isIncomingMsg
+  && props.msg.status === 'unread'
+  && props.prevMsgInfo
+  && (!props.prevMsgInfo.isIncomingMsg || (props.prevMsgInfo.isIncomingMsg && props.prevMsgInfo.status !== 'unread')),
+);
+
+const isSelectionMode = computed(() => size(props.selectedMessages) > 0);
 
 function intersectHandler(
   entries: IntersectionObserverEntry[],
@@ -73,7 +87,7 @@ onMounted(() => {
   const observer = new IntersectionObserver(intersectHandler, {
     root: document.getElementById('chatMessages'),
     rootMargin: '0px',
-    threshold: 0.5,
+    threshold: 1,
   });
   if (chatMsgElement.value) {
     observer.observe(chatMsgElement.value as Element);
@@ -89,10 +103,49 @@ onMounted(() => {
     class="chat-message"
     :class="[
       $style.chatMessage,
+      isSelectionMode && msg.chatMessageType === 'regular' && $style.selectionMode,
       currentMsgSender !== prevMsgSender && !isMsgSystem && $style.withOffset,
       !isMsgSystem && isIncomingMsg ? $style.chatMessageIncoming : $style.chatMessageOutgoing,
+      isMsgFirstUnred && $style.withDblOffset,
     ]"
   >
+    <div
+      v-if="isSelectionMode && msg.chatMessageType === 'regular'"
+      :class="$style.check"
+    >
+      <ui3n-radio
+        :model-value="selectedMessages.includes(msg.chatMessageId)"
+        size="32"
+        @change="emits('select', msg.chatMessageId)"
+      >
+        <template #checkedIcon>
+          <ui3n-icon
+            icon="round-check-circle"
+            color="var(--color-icon-block-accent-default)"
+            size="32"
+          />
+        </template>
+
+        <template #uncheckedIcon>
+          <ui3n-icon
+            icon="outline-circle"
+            color="var(--color-icon-block-accent-default)"
+            size="32"
+          />
+        </template>
+      </ui3n-radio>
+    </div>
+
+    <div
+      v-if="isMsgFirstUnred"
+      :class="$style.unredInfo"
+    >
+      <hr :class="$style.unredInfoLine">
+      <span :class="$style.unredInfoText">
+        {{ $tr('chat.message.unread.text', { messages: `${chatStore.currentChat?.unread || ''}` }) }}
+      </span>
+    </div>
+
     <chat-message-system
       v-if="isMsgSystem && !isInvitationRequest"
       :msg="msg"
@@ -125,6 +178,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: var(--spacing-xs) var(--spacing-s);
+  scroll-margin-bottom: 24px;
 
   &.chatMessageOutgoing {
     justify-content: flex-end;
@@ -133,9 +187,60 @@ onMounted(() => {
   &.chatMessageIncoming {
     justify-content: flex-start;
   }
+
+  &.selectionMode {
+    padding-left: var(--spacing-xl);
+  }
+}
+
+.check {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  left: 4px;
+  width: 32px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.unredInfo {
+  position: absolute;
+  top: -20px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.unredInfoLine {
+  position: absolute;
+  left: 5%;
+  width: 90%;
+  top: 7px;
+  height: 1px;
+  margin: 0;
+  border: none;
+  background-color: var(--color-text-chat-bubble-other-default);
+}
+
+.unredInfoText {
+  display: inline-block;
+  padding: 0 var(--spacing-s);
+  font-size: var(--font-12);
+  font-weight: 600;
+  font-style: italic;
+  color: var(--color-text-chat-bubble-other-default);
+  background-color: var(--color-bg-chat-bubble-general-bg);
+  z-index: 1;
 }
 
 .withOffset {
   margin-top: var(--spacing-s);
+}
+
+.withDblOffset {
+  margin-top: var(--spacing-ml);
 }
 </style>

@@ -168,6 +168,8 @@ export function msgViewFromDbEntry(
     otoPeerCAddr,
     status,
     timestamp,
+    history,
+    reactions,
   } = msgDbEntry;
 
   const chatId: ChatIdObj = {
@@ -192,6 +194,8 @@ export function msgViewFromDbEntry(
         attachments: attachments ?? undefined,
         relatedMessage,
         status: status!,
+        history: history ?? undefined,
+        reactions: reactions ?? undefined,
       };
 
     case 'system': {

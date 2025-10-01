@@ -28,6 +28,8 @@ import { useMessagesStore } from '@main/common/store/messages.store';
 import { useUiOutgoingStore } from '@main/common/store/ui.outgoing.store';
 import ChatMessageStatus from './chat-message-status.vue';
 import ChatMessageAttachments from './chat-message-attachments/chat-message-attachments.vue';
+import ChatMessageReactions from './chat-message-reactions/chat-message-reactions.vue';
+import size from 'lodash/size';
 
 const props = defineProps<{
   msg: RegularMsgView;
@@ -81,6 +83,14 @@ const replyMessageText = computed(() => {
 });
 
 const forwardMessageSender = computed(() => props.relatedMessage && props.relatedMessage?.forwardFrom && props.relatedMessage?.forwardFrom?.sender);
+
+const isMsgChanged = computed(() => {
+  const { history = {} } = props.msg;
+  const { changes = [] } = history;
+  const bodyChanges = changes.filter(i => i.type === 'body');
+  return bodyChanges.length > 0;
+});
+const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
 </script>
 
 <template>
@@ -136,23 +146,38 @@ const forwardMessageSender = computed(() => props.relatedMessage && props.relate
           @click:right="emits('click:right', $event)"
         />
 
+        <div :class="$style.footer">
+          <chat-message-reactions
+            :reactions="msg.reactions"
+            :is-incoming-msg="isIncomingMsg"
+          />
+
+          <div :class="[$style.info, hasMsgReactions && $style.infoWithReactions]">
+            <b
+              v-if="isMsgChanged"
+              :class="$style.infoText"
+            >
+              {{ $tr('chat.message.changed.label') }}
+            </b>
+
+            <div :class="$style.infoText">
+              {{ prepareDateAsSting(msg.timestamp) }}
+            </div>
+
+            <chat-message-status
+              v-if="!isIncomingMsg"
+              :value="outgoingMsgStatus"
+              icon-size="12"
+            />
+          </div>
+        </div>
+
         <div
           v-if="msgsSendingProgress[chatMsgInfo]"
           :class="$style.progress"
         >
           {{ msgsSendingProgress[chatMsgInfo] }}%
         </div>
-
-        <div :class="$style.time">
-          {{ prepareDateAsSting(msg.timestamp) }}
-        </div>
-
-        <chat-message-status
-          v-if="!isIncomingMsg"
-          :class="$style.status"
-          :value="outgoingMsgStatus"
-          icon-size="12"
-        />
       </div>
     </div>
   </div>
@@ -182,10 +207,6 @@ const forwardMessageSender = computed(() => props.relatedMessage && props.relate
       max-width: calc(var(--message-max-width) - 120px);
       background-color: var(--color-bg-chat-bubble-user-default);
     }
-
-    .time {
-      right: var(--spacing-ml);
-    }
   }
 
   &.incoming {
@@ -202,9 +223,8 @@ const forwardMessageSender = computed(() => props.relatedMessage && props.relate
   position: relative;
   min-width: var(--message-min-width);
   border-radius: var(--spacing-s);
-  padding: var(--spacing-s) var(--spacing-sm) var(--spacing-sm) var(--spacing-sm);
+  padding: var(--spacing-s) var(--spacing-sm) var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-14);
-  line-height: var(--font-20);
   color: var(--color-text-chat-bubble-other-default);
   cursor: pointer;
 }
@@ -262,19 +282,31 @@ const forwardMessageSender = computed(() => props.relatedMessage && props.relate
   z-index: 1;
 }
 
-.time {
-  position: absolute;
+.footer {
+  display: flex;
+  width: calc(100% + 4px);
+  margin-right: -4px;
+  justify-content: space-between;
+  align-items: flex-start;
+  column-gap: var(--spacing-s);
+  padding-top: var(--spacing-xs);
+}
+
+.info {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  column-gap: var(--spacing-xs);
+
+  &.infoWithReactions {
+    height: 24px;
+  }
+}
+
+.infoText {
   font-size: var(--font-10);
   line-height: var(--font-12);
   font-weight: 500;
   color: var(--color-text-chat-bubble-other-sub);
-  right: var(--spacing-s);
-  bottom: calc(var(--spacing-xs) / 2);
-}
-
-.status {
-  position: absolute;
-  right: var(--spacing-s);
-  bottom: calc(var(--spacing-xs) / 2);
 }
 </style>

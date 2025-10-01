@@ -26,8 +26,8 @@ import { setupMainApp } from './app-setup';
 import App from '@main/desktop/pages/app.vue';
 
 initializeServices()
-.then(async () => {
-  const app = createApp(App);
-  setupMainApp(app, router);
-  app.mount('#main');
-});
+  .then(async () => {
+    const app = createApp(App);
+    setupMainApp(app, router);
+    app.mount('#main');
+  });

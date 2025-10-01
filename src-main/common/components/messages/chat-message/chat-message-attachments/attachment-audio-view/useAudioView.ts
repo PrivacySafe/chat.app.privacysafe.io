@@ -205,7 +205,6 @@ export function useAudioView({ item, incomingMsgId }: { item: AttachmentViewInfo
     setTimeout(() => {
       getFileByInfoFromMsg(item.id!, incomingMsgId)
         .then(file3n => {
-          console.log('file3n => ', file3n);
           if (!file3n) {
             isProcessing.value = false;
             $createNotice({

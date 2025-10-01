@@ -17,17 +17,81 @@
 
 import { ChatsData } from '../dataset/index.ts';
 import type { ChatService } from './index.ts';
+import type { ChatIdObj } from '~/asmail-msgs.types.ts';
+import type { ChatMessageHistory, ChatMessageReaction } from '~/chat.types.ts';
 
 export class MsgReactions {
 
   constructor(
     private readonly data: ChatsData,
     private readonly emit: ChatService['emit'],
-    private readonly ownAddr: string
-  ) {}
+    private readonly ownAddr: string,
+  ) {
+  }
 
-  // handleReactionToMessage(
-  //   sender: string, chatId: ChatId, chatMessageId: string, timestamp: number,
-  //   {}: UpdatedMsgReactionSysMsgData['value']
-  // ): Promise<void> {}
+  private async getNecessaryMsgData(
+    { chatId, chatMessageId }: { chatId: ChatIdObj; chatMessageId: string },
+  ): Promise<{ history: ChatMessageHistory; reactions: Record<string, ChatMessageReaction> }> {
+    const msg = await this.data.getMessage({ chatId, chatMessageId });
+    if (!msg) {
+      throw Error(`The message with id ${JSON.stringify({ chatId, chatMessageId })} is not found`);
+    }
+
+    let { history, reactions } = msg;
+    if (!history) {
+      history = {
+        changes: [],
+      };
+    }
+
+    if (!reactions) {
+      reactions = {};
+    }
+
+    return { history, reactions };
+  }
+
+  async changeMessageReactions(
+    { chatId, chatMessageId, updatedReactions }:
+    { chatId: ChatIdObj; chatMessageId: string; updatedReactions: Record<string, ChatMessageReaction> },
+  ) {
+    const { history, reactions } = await this.getNecessaryMsgData({ chatId, chatMessageId });
+    history.changes!.push({
+      timestamp: Date.now(),
+      user: this.ownAddr,
+      type: 'reaction',
+      value: reactions,
+    });
+
+    return this.data.updateMessageRecord(
+      { chatId, chatMessageId },
+      { history, reactions: updatedReactions },
+    );
+  }
+
+  async handleChangeOfReactions(
+    { user, chatId, chatMessageId, timestamp, reactions }:
+    {
+      user: string;
+      chatId: ChatIdObj;
+      chatMessageId: string;
+      timestamp: number;
+      reactions: Record<string, ChatMessageReaction>,
+    },
+  ): Promise<void> {
+    const { reactions: oldReactions, history } = await this.getNecessaryMsgData({ chatId, chatMessageId });
+    history.changes!.push({
+      timestamp,
+      user,
+      type: 'reaction',
+      value: oldReactions,
+    });
+
+    const updatedMsg = await this.data.updateMessageRecord(
+      { chatId, chatMessageId },
+      { history, reactions },
+    );
+
+    await this.emit.message.updated(updatedMsg);
+  }
 }

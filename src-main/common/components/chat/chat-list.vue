@@ -48,5 +48,6 @@ const { chatListSortedByTime } = storeToRefs(chatsStore);
   overflow-y: auto;
   padding: 0 var(--spacing-xs);
   background-color: var(--color-bg-block-primary-default);
+  user-select: none;
 }
 </style>

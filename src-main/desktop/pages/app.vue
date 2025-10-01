@@ -15,17 +15,19 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { Ui3nMenu, Ui3nRipple as vUi3nRipple } from '@v1nt1248/3nclient-lib';
+import { Ui3nMenu, Ui3nRipple as vUi3nRipple, Ui3nResize as vUi3nResize } from '@v1nt1248/3nclient-lib';
 import prLogo from '@main/common/assets/images/privacysafe-logo.svg';
 import { useAppView } from '@main/common/composables/useAppView';
+import { useAppStore } from '@main/common/store/app.store';
 import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
 
 const { me, customLogoSrc, appVersion, connectivityStatusText, openDashboard, appExit } = useAppView();
+const appStore = useAppStore();
 </script>
 
 <template>
   <div
-    ref="appEl"
+    v-ui3n-resize="appStore.setAppWindowSize"
     :class="$style.app"
   >
     <div :class="$style.toolbar">

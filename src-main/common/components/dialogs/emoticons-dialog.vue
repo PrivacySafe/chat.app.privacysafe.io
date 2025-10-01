@@ -15,41 +15,24 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { emoticons } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nClickOutside, Ui3nEmoji } from '@v1nt1248/3nclient-lib';
+import { useEmoticons } from '@main/common/composables/useEmoticons';
 
 const vOnClickOutside = Ui3nClickOutside;
 
 defineProps<{
   open: boolean;
 }>();
-const emit = defineEmits(['close', 'select']);
+const emits = defineEmits(['close', 'select']);
 
-const emoticonsByGroups = Object.keys(emoticons).reduce(
-  (res, id) => {
-    const { group, value } = emoticons[id];
-    if (!res[group]) {
-      res[group] = [];
-    }
-    res[group].push({ id, value });
-
-    return res;
-  },
-  {} as Record<string, { id: string, value: string }[]>,
-);
-const groups = Object.keys(emoticonsByGroups);
-const peopleGrInd = groups.findIndex(g => (g.toLowerCase() == 'people'));
-if (peopleGrInd > 0) {
-  const peopleGr = groups.splice(peopleGrInd, 1)[0];
-  groups.unshift(peopleGr);
-}
+const { emoticonsByGroups, groups } = useEmoticons();
 
 function closeDialog() {
-  emit('close');
+  emits('close');
 }
 
 function selectEmoticon({ id, value }: { id: string, value: string }) {
-  emit('select', { id, value });
+  emits('select', { id, value });
   closeDialog();
 }
 </script>
@@ -77,6 +60,7 @@ function selectEmoticon({ id, value }: { id: string, value: string }) {
             :key="emoticon.id"
             :emoji="emoticon.id"
             :size="28"
+            :class="$style.emoji"
             @click="selectEmoticon({ id: emoticon.id, value: emoticon.value })"
           />
         </div>
@@ -87,6 +71,12 @@ function selectEmoticon({ id, value }: { id: string, value: string }) {
 
 <style lang="scss" module>
 @use '@main/common/assets/styles/_mixins.scss' as mixins;
+
+@keyframes scale {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.75); }
+  100% { transform: scale(1); }
+}
 
 .emoticonsDialog {
   --emoticons-dialog-padding: calc(var(--spacing-s) * 1.5);
@@ -145,5 +135,13 @@ function selectEmoticon({ id, value }: { id: string, value: string }) {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   row-gap: var(--spacing-s);
+}
+
+.emoji {
+  position: relative;
+
+  &:hover {
+    animation: scale 0.4s ease-in-out;
+  }
 }
 </style>

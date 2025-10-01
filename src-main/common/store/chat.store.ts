@@ -24,8 +24,8 @@ import { prepareCheckAddrErrorText } from '@main/common/utils/chats.helper';
 import { useAppStore } from '@main/common/store/app.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
-import type { ChatListItemView, GroupChatView } from '~/chat.types';
-import type { ChatIdObj, RelatedMessage  } from '~/index';
+import type { ChatListItemView, GroupChatView, RegularMsgView } from '~/chat.types';
+import type { ChatIdObj, RelatedMessage } from '~/index';
 
 export const useChatStore = defineStore('chat', () => {
   const appStore = useAppStore();
@@ -80,7 +80,7 @@ export const useChatStore = defineStore('chat', () => {
 
   async function ensureAllAddressesExist(members: string[]): Promise<boolean> {
     const checks = await Promise.all(members.map(async addr => {
-      const { check, exc }= await chatService.checkAddressExistenceForASMail(addr)
+      const { check, exc } = await chatService.checkAddressExistenceForASMail(addr)
         .then(
           check => ({ check, exc: undefined }),
           exc => ({ check: undefined, exc }),
@@ -92,7 +92,7 @@ export const useChatStore = defineStore('chat', () => {
 
     if (failedAddresses.length > 0) {
       // throw makeChatException({ failedAddresses });
-      let errorText = `${appStore.$i18n.tr('chat.members.update.error')}.`
+      let errorText = `${appStore.$i18n.tr('chat.members.update.error')}.`;
       for (const item of failedAddresses) {
         const { addr, check } = item;
         const text = prepareCheckAddrErrorText(addr, check!, appStore.$i18n.tr);
@@ -110,8 +110,9 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function sendMessageInChat(
-    { chatId, text, files, relatedMessage, withoutCurrentChatCheck }: {
+    { chatId, chatMessageId, text, files, relatedMessage, withoutCurrentChatCheck }: {
       chatId: ChatIdObj,
+      chatMessageId?: string,
       text: string,
       files: web3n.files.ReadonlyFile[] | undefined,
       relatedMessage: RelatedMessage | undefined,
@@ -119,8 +120,31 @@ export const useChatStore = defineStore('chat', () => {
     }) {
     !withoutCurrentChatCheck && ensureCurrentChatIsSet(chatId);
 
-    await chatService.sendRegularMessage(chatId, text, files ?? [], relatedMessage);
-    appStore.$emitter.emit('send:message', { chatId });
+    await chatService.sendRegularMessage({ chatId, chatMessageId, text, files: files ?? [], relatedMessage });
+    appStore.$emitter.emit('message:sent', { chatId });
+  }
+
+  async function updateEarlySentMessage(
+    { chatId, chatMessageId, updatedBody }:
+    { chatId: ChatIdObj; chatMessageId: string; updatedBody: string },
+  ) {
+    const chat = chatsStore.getChatView(chatId);
+    if (!chat) {
+      console.error(`The chat with id ${JSON.stringify(chatId)} is not found`);
+      return;
+    }
+
+    const updatedMessage = await chatService.updateEarlySentMessage({
+      chatId, chatMessageId, updatedBody,
+    }) as RegularMsgView;
+
+    if (areChatIdsEqual(currentChatId.value, chatId) && updatedMessage) {
+      const messagesStore = useMessagesStore();
+      messagesStore.upsertMessageInCurrentChat(
+        chatMessageId,
+        { body: updatedBody, history: updatedMessage.history },
+      );
+    }
   }
 
   async function renameChat(
@@ -241,6 +265,7 @@ export const useChatStore = defineStore('chat', () => {
     setChatAndFetchMessages,
     resetCurrentChat,
     sendMessageInChat,
+    updateEarlySentMessage,
     renameChat,
     deleteChat,
     updateGroupMembers,

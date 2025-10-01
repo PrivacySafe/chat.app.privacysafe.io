@@ -26,8 +26,8 @@ import { storeToRefs } from 'pinia';
 import get from 'lodash/get';
 import size from 'lodash/size';
 import isEmpty from 'lodash/isEmpty';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
-import { transformFileToWeb3NFile } from '@v1nt1248/3nclient-lib/utils';
+import { DIALOGS_KEY, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { capitalize, transformFileToWeb3NFile } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import type {
   ChatIdObj,
@@ -47,6 +47,7 @@ import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
 import { areChatIdsEqual } from '@shared/chat-ids';
 import { getAttachmentFilesInfo } from '@main/common/utils/chats.helper';
+import MessageDeleteDialog from '@main/common/components/dialogs/message-delete-dialog.vue';
 
 function packRelatedMessageToSend(msg: ChatMessageView, relationType: 'reply' | 'forward'): RelatedMessage {
   switch (relationType) {
@@ -79,6 +80,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   provide('task-runner', { addTask });
 
   const { $tr } = inject(I18N_KEY)!;
+  const dialog = inject(DIALOGS_KEY)!;
 
   const {
     route,
@@ -88,18 +90,18 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     getIncomingCallParamsFromRoute,
   } = navigationUtils();
 
-  const { user } = storeToRefs(useAppStore());
+  const { user, appWindowSize, isMobileMode } = storeToRefs(useAppStore());
 
   const chatsStore = useChatsStore();
   const { updateChatItemInList } = chatsStore;
 
   const chatStore = useChatStore();
   const { currentChat, currentChatId } = storeToRefs(chatStore);
-  const { setChatAndFetchMessages, sendMessageInChat } = chatStore;
+  const { setChatAndFetchMessages, sendMessageInChat, updateEarlySentMessage } = chatStore;
 
   const messagesStore = useMessagesStore();
-  const { currentChatMessages } = storeToRefs(messagesStore);
-  const { getChatMessage } = messagesStore;
+  const { currentChatMessages, selectedMessages } = storeToRefs(messagesStore);
+  const { getChatMessage, clearSelectedMessages, deleteMessagesInChat } = messagesStore;
 
   let files: web3n.files.ReadonlyFile[] | undefined;
 
@@ -109,7 +111,14 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   const attachmentsInfo = ref<ChatMessageAttachmentsInfo[] | undefined>(undefined);
   const initialMessage = ref<Nullable<RegularMsgView>>(null);
   const initialMessageType = ref<'reply' | 'forward'>('reply');
+  const editableMessage = ref<Nullable<RegularMsgView>>(null);
   const isEmoticonsDialogOpen = ref(false);
+
+  const msgInfoDisplayed = ref<Nullable<RegularMsgView>>(null);
+
+  const messageListElement = ref<Nullable<HTMLDivElement>>(null);
+  const messageListElementRect = ref<DOMRect | undefined>(undefined);
+  const whetherShowButtonDown = ref(false);
 
   const readonly = computed(() => {
     return !currentChat.value
@@ -122,16 +131,71 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     return !(msgText.value.trim() || attachmentsInfo.value) || disabled.value || readonly.value;
   });
 
-  const textOfInitialMessage = computed(() => {
-    if (!initialMessage.value) {
+
+  function setMessageListElementRect(el: Nullable<HTMLDivElement>) {
+    messageListElementRect.value = el
+      ? el.getBoundingClientRect()
+      : undefined;
+  }
+
+  function onMessageListElementInit(value: Nullable<HTMLDivElement>) {
+    messageListElement.value = value;
+    setMessageListElementRect(value);
+    messageListElement.value!.addEventListener('scroll', onMessageListScroll);
+  }
+
+  function onMessageListScroll() {
+    whetherShowButtonDown.value = (messageListElement.value!.scrollHeight - 64)
+      > (messageListElementRect.value!.height + messageListElement.value!.scrollTop);
+  }
+
+  function scrollMessageListToEnd() {
+    messageListElement.value && (messageListElement.value.scrollTop = 1e12);
+  }
+
+  function setMsgForWhichInfoIsDisplayed(value: Nullable<RegularMsgView>) {
+    msgInfoDisplayed.value = value;
+  }
+
+  function deleteMessages() {
+    if (!selectedMessages.value.length) {
+      return;
+    }
+
+    dialog.$openDialog<typeof MessageDeleteDialog>({
+      component: MessageDeleteDialog,
+      componentProps: {
+        text: $tr('chat.messages.bulk.delete'),
+      },
+      dialogProps: {
+        title: $tr('chat.messages.bulk.delete'),
+        ...(isMobileMode.value && { width: 300 }),
+        confirmButtonText: capitalize($tr('btn.text.delete')),
+        confirmButtonColor: 'var(--color-text-button-secondary-default)',
+        confirmButtonBackground: 'var(--color-bg-button-secondary-default)',
+        cancelButtonColor: 'var(--color-text-button-primary-default)',
+        cancelButtonBackground: 'var(--color-bg-button-primary-default)',
+        onConfirm: deleteForEveryone => {
+          if (!currentChatId.value) {
+            return;
+          }
+
+          deleteMessagesInChat(selectedMessages.value, !!deleteForEveryone);
+          clearSelectedMessages();
+        },
+      },
+    });
+  }
+
+  function getTextOfEditableOrInitialMsg(msg: Nullable<RegularMsgView>) {
+    if (!msg) {
       return '';
     }
 
-    const body = initialMessage.value?.body;
-    const attachments = (initialMessage.value as RegularMsgView)?.attachments;
+    const { body, attachments } = msg;
     const attachmentsText = (attachments || []).map(a => a.name).join(', ');
     return body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`;
-  });
+  }
 
   function onEmoticonSelect(emoticon: { id: string, value: string }) {
     msgText.value += emoticon.value;
@@ -184,9 +248,20 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     initialMessage.value = null;
   }
 
+  function finishEditMsgMode() {
+    editableMessage.value = null;
+    msgText.value = '';
+  }
+
   function prepareReplyMessage(msg: RegularMsgView) {
     initialMessageType.value = 'reply';
     initialMessage.value = msg;
+    inputEl.value!.focus();
+  }
+
+  function startEditMsgMode(msg: RegularMsgView) {
+    editableMessage.value = msg;
+    msgText.value = msg.body;
     inputEl.value!.focus();
   }
 
@@ -197,9 +272,28 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
 
     const { shiftKey } = ev ?? { shiftKey: false };
 
-    if (!force && shiftKey) {
-      msgText.value += '\n';
-    } else if (force || (!force && !shiftKey)) {
+    if (force || (!force && !shiftKey)) {
+      if (editableMessage.value && JSON.stringify(editableMessage.value!.body) !== JSON.stringify(msgText.value)) {
+        disabled.value = true;
+
+        updateEarlySentMessage({
+          chatId: currentChatId.value!,
+          chatMessageId: editableMessage.value!.chatMessageId,
+          updatedBody: msgText.value,
+        });
+
+        setTimeout(() => {
+          msgText.value = '';
+          files = undefined;
+          attachmentsInfo.value = undefined;
+          initialMessage.value = null;
+          editableMessage.value = null;
+          disabled.value = false;
+        }, 400);
+
+        return;
+      }
+
       const relatedMessage = initialMessage.value
         ? packRelatedMessageToSend(initialMessage.value, initialMessageType.value)
         : undefined;
@@ -211,18 +305,13 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
         files,
         relatedMessage,
       });
-      setTimeout(() => {
-        const messagesElement = document.getElementById('chat-messages');
-        messagesElement && messagesElement.scrollTo({
-          top: 1e12,
-          left: 0,
-          behavior: 'smooth',
-        });
 
+      setTimeout(() => {
         msgText.value = '';
         files = undefined;
         attachmentsInfo.value = undefined;
         initialMessage.value = null;
+        editableMessage.value = null;
         disabled.value = false;
       }, 400);
     }
@@ -251,17 +340,58 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     { immediate: true },
   );
 
-  async function doBeforeMount() {
+  function scrollToFirstUnreadMessage() {
+    const unread = currentChat.value?.unread || 0;
+    if (unread === 0) {
+      const chatMessageListElement = document.getElementById('chat-messages');
+      chatMessageListElement && (chatMessageListElement.scrollTop = 1e12);
+      return;
+    }
+
+    const incomingMessages = currentChatMessages.value
+      .filter(msg => msg.isIncomingMsg && msg.chatMessageType === 'regular')
+      .sort((aMsg, bMsg) => bMsg.timestamp - aMsg.timestamp);
+
+    const unreadMessages = incomingMessages.slice(0, unread);
+    const firstUnreadMessage = unreadMessages[unread - 1];
+    if (!firstUnreadMessage) {
+      return;
+    }
+
+    const firstUnreadMessageEl = document.getElementById(`msg-${firstUnreadMessage.chatMessageId}`);
+    if (!firstUnreadMessageEl) {
+      return;
+    }
+
+    nextTick(() => {
+      firstUnreadMessageEl.scrollIntoView(false);
+    });
+  }
+
+  watch(
+    () => appWindowSize.value.height,
+    (val, oldVal) => {
+      if (val && val !== oldVal) {
+        setMessageListElementRect(messageListElement.value);
+        onMessageListScroll();
+      }
+    },
+  );
+
+  async function doAfterMount() {
     const chatId = getChatIdFromRoute();
 
     if (chatId) {
       await setChatAndFetchMessages(chatId);
       await setStateFollowingRouteQuery();
     }
+
+    scrollToFirstUnreadMessage();
   }
 
   function doBeforeUnMount() {
     routeQueryWatching.stop();
+    messageListElement.value!.removeEventListener('scroll', onMessageListScroll);
   }
 
   async function doBeforeRouteUpdate(
@@ -274,16 +404,26 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
 
     if (chatIdTo && !areChatIdsEqual(chatIdFrom, chatIdTo)) {
       cancelTasks();
+      clearSelectedMessages();
       await setChatAndFetchMessages(chatIdTo);
       await setStateFollowingRouteQuery(to.query as ChatWithFwdMsgRef['query']);
       msgText.value = '';
+
+      scrollToFirstUnreadMessage();
+      onMessageListScroll();
+      setMsgForWhichInfoIsDisplayed(null);
     }
+
     next();
   }
 
   return {
     currentChat,
     currentChatMessages,
+    selectedMessages,
+    messageListElement,
+    whetherShowButtonDown,
+    msgInfoDisplayed,
     disabled,
     readonly,
     isEmoticonsDialogOpen,
@@ -291,20 +431,29 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     inputEl,
     initialMessage,
     initialMessageType,
-    textOfInitialMessage,
+    editableMessage,
     attachmentsInfo,
     sendBtnDisabled,
+
+    clearSelectedMessages,
+    deleteMessages,
+    onMessageListElementInit,
+    scrollMessageListToEnd,
+    setMsgForWhichInfoIsDisplayed,
+    getTextOfEditableOrInitialMsg,
     addFilesViaDnD,
     addFiles,
     prepareReplyMessage,
+    startEditMsgMode,
     onEmoticonSelect,
     clearInitialInfo,
     clearAttachments,
+    finishEditMsgMode,
     deleteAttachment,
     sendMessage,
 
+    doAfterMount,
     doBeforeRouteUpdate,
-    doBeforeMount,
     doBeforeUnMount,
   };
 }

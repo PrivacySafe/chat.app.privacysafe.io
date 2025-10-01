@@ -16,30 +16,72 @@
 */
 
 import { ChatsData } from '../dataset/index.ts';
-import { ChatIdObj, ChatMessageId } from "../../types/asmail-msgs.types.ts";
+import type { ChatIdObj } from '../../types/asmail-msgs.types.ts';
 import type { ChatService } from './index.ts';
-import { chatIdOfOTOChat, chatViewForGroupChat, chatViewForOTOChat, msgDbEntryForIncomingSysMsg } from './common-transforms.ts';
-import { GroupChatDbEntry, OTOChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
-import { includesAddress } from '../../shared-libs/address-utils.ts';
-import { UpdatedMsgBodySysMsgData } from '../../types/asmail-msgs.types.ts';
+import type { ChatMessageHistory } from '~/chat.types.ts';
 
 export class MsgEditing {
-
   constructor(
     private readonly data: ChatsData,
     private readonly emit: ChatService['emit'],
-    private readonly ownAddr: string
-  ) {}
+    private readonly ownAddr: string,
+  ) {
+  }
 
-  // handleUpdateOfMessageBody(
-  //   sender: string, chatId: ChatId, chatMessageId: string, timestamp: number,
-  //   {}: UpdatedMsgBodySysMsgData['value']
-  // ): Promise<void> {
-  
-  //   // XXX
-  
-  //   throw new Error(`not implemented`);
-  
-  // }
+  private async getNecessaryMsgData(
+    { chatId, chatMessageId }: { chatId: ChatIdObj; chatMessageId: string },
+  ): Promise<{ body: string | null; history: ChatMessageHistory }> {
+    const msg = await this.data.getMessage({ chatId, chatMessageId });
+    if (!msg) {
+      throw Error(`The message with id ${JSON.stringify({ chatId, chatMessageId })} is not found`);
+    }
 
+    let { history } = msg;
+    if (!history) {
+      history = {
+        changes: [],
+      };
+    }
+
+    return { body: msg.body, history };
+  }
+
+  async editMessage(
+    { chatId, chatMessageId, updatedBody }:
+    { chatId: ChatIdObj; chatMessageId: string; updatedBody: string },
+  ) {
+    const { body, history } = await this.getNecessaryMsgData({ chatId, chatMessageId });
+    history.changes!.push({
+      timestamp: Date.now(),
+      user: this.ownAddr,
+      type: 'body',
+      value: body || '',
+    });
+
+    return this.data.updateMessageRecord(
+      { chatId, chatMessageId },
+      { body: updatedBody, history },
+    );
+  }
+
+
+  async handleUpdateOfMessageBody(
+    { user, chatId, chatMessageId, timestamp, body }:
+    { user: string; chatId: ChatIdObj; chatMessageId: string; timestamp: number; body: string },
+  ): Promise<void> {
+    const { body: oldBody, history } = await this.getNecessaryMsgData({ chatId, chatMessageId });
+    history.changes!.push({
+      timestamp,
+      user,
+      type: 'body',
+      value: oldBody || '',
+    });
+
+    const updatedMsg = await this.data.updateMessageRecord(
+      { chatId, chatMessageId },
+      { body, history },
+    );
+
+    await this.emit.message.updated(updatedMsg);
+  }
 }
