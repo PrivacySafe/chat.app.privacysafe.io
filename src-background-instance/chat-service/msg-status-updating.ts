@@ -108,5 +108,4 @@ export class MsgStatusUpdating {
     }
     this.emit.message.updated(updatedMsg);
   }
-
 }

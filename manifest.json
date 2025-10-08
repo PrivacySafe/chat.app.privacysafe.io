@@ -1,7 +1,7 @@
 {
   "name": "Chat",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.10.10",
+  "version": "0.10.11",
   "icon": "logo.png",
   "description": "Send secure text messages, share files or start a video meeting.",
 
@@ -20,6 +20,7 @@
         },
         "shell": {
           "fileDialog": "all",
+          "deviceFiles": "all",
           "userNotifications": true,
           "fsResource": {
             "otherApps": {
@@ -29,7 +30,8 @@
           "openDashboard": true
         },
         "storage": {
-          "appFS": "default"
+          "appFS": "default",
+          "sysFS": "all"
         },
         "appRPC": [
           "AppChatsInternal",
@@ -79,6 +81,7 @@
         },
         "shell": {
           "fileDialog": "all",
+          "deviceFiles": "all",
           "userNotifications": true,
           "fsResource": {
             "otherApps": {
@@ -88,7 +91,8 @@
           "openDashboard": true
         },
         "storage": {
-          "appFS": "default"
+          "appFS": "default",
+          "sysFS": "all"
         },
         "appRPC": [
           "AppChatsInternal",

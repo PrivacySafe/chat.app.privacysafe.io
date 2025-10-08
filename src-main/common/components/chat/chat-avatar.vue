@@ -20,13 +20,24 @@ import { computed } from 'vue';
 import isEmpty from 'lodash/isEmpty';
 import { getElementColor } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
+import type { ChatSettings } from '@bg/dataset/versions/v2/chats-db';
 
 const props = defineProps<{
   name: string;
   size?: number | string;
   shape?: 'circle' | 'box' | 'octagon' | 'decagon' | 'dodecagon' | undefined;
   callInProgress?: boolean;
+  settings?: ChatSettings;
 }>();
+
+const isAutoDeleteMessagesInChat = computed(() => {
+  if (!props.settings) {
+    return false;
+  }
+
+  const autoDeleteMessagesId = props.settings?.autoDeleteMessages || '0';
+  return autoDeleteMessagesId !== '0';
+});
 
 const shapes = {
   circle: 'circle(50% at 50% 50%)',
@@ -39,7 +50,7 @@ const shapes = {
 const avatarSize = computed(() => {
   const size = Number(props.size || 36);
   return `${size}px`;
-})
+});
 
 const clipPathValue = computed(() => {
   if (!props.shape) {
@@ -80,13 +91,24 @@ const mainStyle = computed<Record<string, string>>(() => {
     </div>
 
     <div
+      v-if="isAutoDeleteMessagesInChat"
+      :class="$style.autoDeleteIcon"
+    >
+      <ui3n-icon
+        :size="Number(props.size || 36) / 2 - 4"
+        icon="spinner-clock-15"
+        horizontal-flip
+        color="var(--color-icon-control-accent-default)"
+      />
+    </div>
+
+    <div
       v-if="callInProgress"
       :class="$style.icon"
     >
       <ui3n-icon
         icon="round-phone-in-talk"
-        :width="10"
-        :height="10"
+        :size="10"
         color="var(--color-icon-button-primary-default)"
       />
     </div>
@@ -136,6 +158,20 @@ const mainStyle = computed<Record<string, string>>(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.autoDeleteIcon {
+  position: absolute;
+  width: calc(var(--chat-avatar-size) / 2);
+  height: calc(var(--chat-avatar-size) / 2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  background-color: var(--color-bg-block-primary-default);
+  bottom: -3px;
+  right: -3px;
+  z-index: 1;
 }
 
 .icon {

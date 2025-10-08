@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import type { ChatMessageAction, MessageDeliveryStatusUI, OutgoingMessageStatus } from '~/index.ts';
+import type { ChatMenuItem, ChatMessageAction, MessageDeliveryStatusUI, OutgoingMessageStatus } from '~/index';
 
 export const chatMsgActionElementHeight = 24;
 
@@ -42,20 +42,50 @@ export const messageDeliveryStatuses: Record<OutgoingMessageStatus, MessageDeliv
   },
 };
 
-export const chatMenuItems: {
-  icon: string;
-  action: string; // XXX this can be typed, can't it?
-  text: string;
-  chatTypes: ('single' | 'group' | 'group&admin')[];
-  disabled?: boolean;
-  isAccent?: boolean;
-  margin?: boolean;
-}[] = [
+export const chatMenuItems: ChatMenuItem[] = [
   {
     icon: 'outline-info',
     action: 'chat:info',
     text: 'chat.action.menu.txt.info',
     chatTypes: ['single', 'group'],
+  },
+  {
+    icon: 'outline-timer',
+    action: 'chat:timer',
+    text: 'chat.action.menu.txt.timer',
+    chatTypes: ['single', 'group'],
+    subMenu: [
+      {
+        icon: '',
+        action: 'chat:timer:0',
+        text: 'chat.action.menu.txt.timer.0',
+        chatTypes: ['single', 'group'],
+      },
+      {
+        icon: '',
+        action: 'chat:timer:1',
+        text: 'chat.action.menu.txt.timer.1',
+        chatTypes: ['single', 'group'],
+      },
+      {
+        icon: '',
+        action: 'chat:timer:2',
+        text: 'chat.action.menu.txt.timer.2',
+        chatTypes: ['single', 'group'],
+      },
+      {
+        icon: '',
+        action: 'chat:timer:3',
+        text: 'chat.action.menu.txt.timer.3',
+        chatTypes: ['single', 'group'],
+      },
+      {
+        icon: '',
+        action: 'chat:timer:4',
+        text: 'chat.action.menu.txt.timer.4',
+        chatTypes: ['single', 'group'],
+      },
+    ],
   },
   {
     icon: 'outline-edit',
@@ -80,7 +110,6 @@ export const chatMenuItems: {
     action: 'chat:close',
     text: 'chat.action.menu.txt.close',
     chatTypes: ['single', 'group'],
-    margin: true,
   },
   {
     icon: 'outline-delete',

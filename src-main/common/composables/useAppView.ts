@@ -20,6 +20,7 @@ import { useCommandHandler } from '@main/common/composables/useCommandHandler';
 import { useAppStore } from '@main/common/store/app.store';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { useInitialize } from '@main/common/composables/useInitialize';
+import { chatService } from '@main/common/services/external-services.ts';
 
 export type AppViewInstance = ReturnType<typeof useAppView>;
 
@@ -51,12 +52,20 @@ export function useAppView() {
     w3n.closeSelf!();
   }
 
+  async function deleteExpiredMessages() {
+    return chatService.deleteExpiredMessages(Date.now());
+  }
+
+  let deleteExpiredMessagesTimerId: ReturnType<typeof setInterval> | null = null;
+
   onBeforeMount(async () => {
     try {
       await appStore.initialize();
       await contactsStore.initialize();
       await initialize();
       await startHandlingCommands();
+
+      deleteExpiredMessagesTimerId = setInterval(() => deleteExpiredMessages(), 60000);
     } catch (e) {
       console.error('Error while the app component mounting. ', e);
       throw e;
@@ -67,6 +76,7 @@ export function useAppView() {
     stopMessagesProcessing.value && stopMessagesProcessing.value();
     stopVideoCallsWatching.value && stopVideoCallsWatching.value();
     appStore.stopWatching();
+    deleteExpiredMessagesTimerId && clearInterval(deleteExpiredMessagesTimerId);
   });
 
   return {

@@ -15,19 +15,49 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+
+import {
+  dialogs,
+  i18n,
+  I18nOptions,
+  notifications,
+  storeVueBus,
+  storeI18n,
+  storeNotifications,
+  vueBus,
+} from '@v1nt1248/3nclient-lib/plugins';
+
 import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
 import '@main/common/assets/styles/main.css';
 
 import { router } from './router';
 import { initializeServices } from '@main/common/services/external-services';
-import { setupMainApp } from './app-setup';
 
 import App from '@main/desktop/pages/app.vue';
+import en from '@main/common/data/i18/en.json';
 
 initializeServices()
   .then(async () => {
+    const pinia = createPinia();
+    pinia.use(storeVueBus);
+    pinia.use(storeI18n);
+    pinia.use(storeNotifications);
+
     const app = createApp(App);
-    setupMainApp(app, router);
-    app.mount('#main');
+
+    app.config.globalProperties.$router = router;
+    app.config.compilerOptions.isCustomElement = tag => {
+      return tag.startsWith('ui3n-');
+    };
+
+    app
+      .use(pinia)
+      .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
+      .use(vueBus)
+      .use(dialogs)
+      .use(notifications)
+      .use(router)
+      .mount('#main');
   });

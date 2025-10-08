@@ -43,6 +43,7 @@ export class ChatMemberRemoval {
     if (chat.isGroupChat) {
       const user = await w3n.mail?.getUserId();
       const updatedMembers = { ...(chat as GroupChatDbEntry).members };
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       !!updatedMembers[sender] && delete updatedMembers[sender];
       const isUserOnlyMember = Object.keys(updatedMembers).length === 1
         && Object.keys(updatedMembers)[0] === user!;
@@ -78,6 +79,7 @@ export class ChatMemberRemoval {
       relatedMessage: null,
       status: null,
       timestamp,
+      removeAfter: 0,
       history: null,
       reactions: null,
     };

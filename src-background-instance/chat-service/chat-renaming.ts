@@ -27,7 +27,6 @@ import { generateChatMessageId } from '../../shared-libs/chat-ids.ts';
 import { sendSystemMessage } from '../utils/send-chat-msg.ts';
 
 export default class ChatRenaming {
-
   constructor(
     private readonly data: ChatsData,
     private readonly emit: ChatService['emit'],

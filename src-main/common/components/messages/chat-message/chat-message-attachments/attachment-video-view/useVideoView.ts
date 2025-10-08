@@ -14,17 +14,17 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { computed, inject, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
 import { transformWeb3nFileToFile } from '@v1nt1248/3nclient-lib/utils';
-import { NOTIFICATIONS_KEY, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
 import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
 import { getFileByInfoFromMsg } from '@main/common/utils/files.helper';
+import type { AttachmentVideoViewEmits } from './attachment-video-view.vue';
 
-export function useVideoView({ item, incomingMsgId }: { item: AttachmentViewInfo; incomingMsgId?: string }) {
-  const { $createNotice } = inject(NOTIFICATIONS_KEY)!;
-  const { $tr } = inject(I18N_KEY)!;
-
+export function useVideoView(
+  { item, incomingMsgId, emits }:
+  { item: AttachmentViewInfo; incomingMsgId?: string; emits: AttachmentVideoViewEmits }
+) {
   const videoPlayerRef = useTemplateRef<HTMLVideoElement>('videoEl');
   const isProcessing = ref(true);
   const isPlaying = ref(false);
@@ -87,10 +87,7 @@ export function useVideoView({ item, incomingMsgId }: { item: AttachmentViewInfo
         .then(file3n => {
           if (!file3n) {
             isProcessing.value = false;
-            $createNotice({
-              type: 'error',
-              content: $tr('chat.view.load.file.error'),
-            });
+            emits('error');
             return;
           }
 

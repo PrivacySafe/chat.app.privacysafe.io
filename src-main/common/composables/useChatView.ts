@@ -27,7 +27,7 @@ import get from 'lodash/get';
 import size from 'lodash/size';
 import isEmpty from 'lodash/isEmpty';
 import { DIALOGS_KEY, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
-import { capitalize, transformFileToWeb3NFile } from '@v1nt1248/3nclient-lib/utils';
+import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import type {
   ChatIdObj,
@@ -214,6 +214,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     files = await w3n.shell?.fileDialogs?.openFileDialog!('Select file(s)', '', true);
     if (!isEmpty(files)) {
       attachmentsInfo.value = await getAttachmentFilesInfo({ files });
+      inputEl.value && inputEl.value.focus();
     }
   }
 
@@ -221,12 +222,13 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     files = [];
     // @ts-ignore
     for (const f of [...fileList]) {
-      const file = await transformFileToWeb3NFile(f);
+      const file = await w3n.shell!.deviceFiles?.standardFileToDeviceFile!(f);
       if (file) {
         files.push(file);
       }
       if (!isEmpty(files)) {
         attachmentsInfo.value = await getAttachmentFilesInfo({ files });
+        inputEl.value && inputEl.value.focus();
       }
     }
   }

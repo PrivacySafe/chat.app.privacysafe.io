@@ -91,7 +91,7 @@ async function initChatDbFromFile(ownAddr: string): Promise<{ chats: ChatsDB; ms
       await msgsFolder.writableFile(msgDbFNameFor(0)),
     );
 
-    await turnV1jsonFieldValueToV2InChatDb(chats)
+    await turnV1jsonFieldValueToV2InChatDb(chats);
     info.datasetVersion = 2.1;
     await chatsFile.updateXAttrs({ set: { [DATASET_META_ATTR]: info } });
 
@@ -104,6 +104,37 @@ async function initChatDbFromFile(ownAddr: string): Promise<{ chats: ChatsDB; ms
     const msgs = await existingDbIn(
       await msgsFolder.writableFile(msgDbFNameFor(0)),
     );
+
+    const [sqlValue] = chats.db.exec(`PRAGMA table_info(group_chats)`);
+    const isThereSettingsField = sqlValue.values.some(item => item.includes('settings'));
+    if (!isThereSettingsField) {
+      chats.db.exec(
+        `--sql
+        ALTER TABLE group_chats
+        ADD COLUMN settings TEXT
+        DEFAULT '{"autoDeleteMessages":"0"}'`,
+      );
+      chats.db.exec(
+        `--sql
+        ALTER TABLE oto_chats
+        ADD COLUMN settings TEXT
+        DEFAULT '{"autoDeleteMessages":"0"}'`,
+      );
+      await chats.saveToFile({ skipUpload: true });
+      msgs.db.exec(
+        `--sql
+        ALTER TABLE messages
+        ADD COLUMN settings TEXT
+        DEFAULT '{}'`,
+      );
+      msgs.db.exec(
+        `--sql
+        ALTER TABLE messages
+        ADD COLUMN removeAfter INTEGER
+        DEFAULT 0`,
+      );
+      await msgs.saveToFile({ skipUpload: true });
+    }
 
     return {
       chats: new ChatsDB(chats),
@@ -196,7 +227,7 @@ export class ChatsData {
     return chatId;
   }
 
-  async addOneToOneChat(params: Pick<OTOChatDbEntry, 'peerAddr' | 'name' | 'status'>): Promise<OTOChatDbEntry> {
+  async addOneToOneChat(params: Omit<OTOChatDbEntry, 'createdAt' | 'lastUpdatedAt' | 'peerCAddr'>): Promise<OTOChatDbEntry> {
     const chat = this.chats.addOneToOneChat(params);
     await this.chats.saveLocally();
     return chat;
@@ -291,6 +322,10 @@ export class ChatsData {
 
   getMessage(chatMessageId: ChatMessageId) {
     return this.msgs.getMessage(chatMessageId);
+  }
+
+  getExpiredMessages(now: number): Promise<MsgDbEntry[]> {
+    return this.msgs.getExpiredMessages(now);
   }
 
   async deleteMessage(chatMessageId: ChatMessageId): Promise<void> {

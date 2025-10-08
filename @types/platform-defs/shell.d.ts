@@ -20,12 +20,40 @@ declare namespace web3n.shell {
 
 	interface ShellCAPs {
 		fileDialogs?: files.Dialogs;
+		deviceFiles?: files.DeviceFiles;
 		userNotifications?: notifications.UserNotifications;
 		startAppWithParams?: commands.StartAppWithParams;
 		getStartedCmd?: commands.GetStartedCmd;
 		watchStartCmds?: commands.WatchStartCmds;
 		getFSResource?: GetFSResource;
+
+		/**
+		 * Opens or focuses opened dashboard app window.
+		 */
 		openDashboard?: OpenDashboard;
+
+		/**
+		 * Opens, or attempts to open given file with apps present in the system.
+		 */
+		openFile?: OpenFile;
+
+		/**
+		 * Opens folder in file explorer.
+		 */
+		openFolder?: OpenFolder;
+
+		/**
+		 * Opens URL, or attempts to open given URL with apps/browsers present in the system.
+		 */
+		openURL?: OpenURL;
+
+		/**
+		 * Clipboard of the device.
+		 * Copy/paste works at least on some linuxies on electron-based implementation
+		 * without this capability, but mac is stricter. This capability should be
+		 * used for predictable results.
+		 */
+		clipboard?: Partial<shell.clipboard.Clipboard>;
 	}
 
 	type GetFSResource = (
@@ -33,6 +61,12 @@ declare namespace web3n.shell {
 	) => Promise<web3n.files.ReadonlyFS|web3n.files.ReadonlyFile>;
 
 	type OpenDashboard = () => Promise<void>;
+
+	type OpenFile = (file: web3n.files.File) => Promise<void>;
+
+	type OpenFolder = (fs: web3n.files.FS) => Promise<void>;
+
+	type OpenURL = (url: string) => Promise<void>;
 
 	interface FSResourceException extends RuntimeException {
 		type: 'fs-resource';

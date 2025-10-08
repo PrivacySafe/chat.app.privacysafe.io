@@ -28,6 +28,9 @@ const props = defineProps<{
   incomingMsgId?: string;
   isMobileMode?: boolean;
 }>();
+const emits = defineEmits<{
+  (event: 'error'): void;
+}>();
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
@@ -93,6 +96,8 @@ onMounted(() => {
   getFileByInfoFromMsg(props.item.id!, props.incomingMsgId)
     .then(file => {
       if (!file) {
+        isProcessing.value = false;
+        emits('error');
         return;
       }
 

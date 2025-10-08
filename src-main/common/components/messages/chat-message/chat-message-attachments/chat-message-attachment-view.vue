@@ -46,7 +46,18 @@ async function downloadFile() {
   $createNotice({
     type: res ? 'success' : 'error',
     content: res ? $tr('chat.message.file.download.success') : $tr('chat.message.file.download.error'),
+    duration: 3000,
   });
+}
+
+function showError() {
+  $createNotice({
+    type: 'error',
+    content: $tr('The file may have been deleted or moved'),
+    duration: 3000,
+  });
+
+  emits('close');
 }
 </script>
 
@@ -89,6 +100,7 @@ async function downloadFile() {
       :item="item"
       :incoming-msg-id="incomingMsgId"
       :is-mobile-mode="isMobileMode"
+      @error="showError"
     />
 
     <pdf-view
@@ -96,6 +108,7 @@ async function downloadFile() {
       :item="item"
       :incoming-msg-id="incomingMsgId"
       :is-mobile-mode="isMobileMode"
+      @error="showError"
     />
 
     <video-view
@@ -103,6 +116,7 @@ async function downloadFile() {
       :item="item"
       :incoming-msg-id="incomingMsgId"
       :is-mobile-mode="isMobileMode"
+      @error="showError"
     />
 
     <audio-view
@@ -110,6 +124,7 @@ async function downloadFile() {
       :item="item"
       :incoming-msg-id="incomingMsgId"
       :is-mobile-mode="isMobileMode"
+      @error="showError"
     />
   </div>
 </template>

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2021 - 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2021 - 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -100,5 +100,10 @@ declare namespace web3n.shell.files {
 		title: string, btnLabel: string, multiSelections: boolean,
 		filters?: FileTypeFilter[]
 	) => Promise<web3n.files.WritableFS[] | undefined>;
+
+	interface DeviceFiles {
+		standardFileToDeviceFile?: (stdFile: File) => Promise<web3n.files.ReadonlyFile>;
+		standardFileToDeviceFolder?: (stdFile: File) => Promise<web3n.files.ReadonlyFS>;
+	}
 
 }

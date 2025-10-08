@@ -26,6 +26,7 @@ import { makeDbRecordException } from '../utils/exceptions.ts';
 import { sendSystemMessage } from '../utils/send-chat-msg.ts';
 import { RefsToMsgsDataNoInDB } from '../dataset/versions/v2/msgs-db.ts';
 import { ChatMessageAttachmentsInfo } from '../../types/chat.types.ts';
+import { AUTO_DELETE_MESSAGES_BY_ID } from '../../shared-libs/constants.ts';
 
 export class MsgDeletion {
 
@@ -67,7 +68,7 @@ export class MsgDeletion {
     }
   }
 
-  async deleteMessages(chatMsgIds: ChatMessageId[] = [], deleteForEveryone: boolean): Promise<void> {
+  async deleteMessages(chatMsgIds: ChatMessageId[] = [], deleteForEveryone?: boolean): Promise<void> {
     const chatId = chatMsgIds.length > 0 ? chatMsgIds[0].chatId : null;
     if (!chatId) {
       throw makeDbRecordException({ chatNotFound: true });
@@ -107,6 +108,29 @@ export class MsgDeletion {
         },
       });
     }
+  }
+
+  async deleteExpiredMessages(now: number): Promise<void> {
+    const expiredMessages = await this.data.getExpiredMessages(now);
+    const messagesToDelete = expiredMessages.filter(msg => {
+      const { timestamp = 0 } = msg;
+      const removeAfter = msg.removeAfter !== 0
+        ? msg.removeAfter
+        : timestamp + AUTO_DELETE_MESSAGES_BY_ID[0].value;
+      return removeAfter < now;
+    }).map(msg => {
+      const { chatMessageId, groupChatId, otoPeerCAddr } = msg;
+      const chatId = groupChatId
+        ? { isGroupChat: true, chatId: groupChatId! }
+        : { isGroupChat: false, chatId: otoPeerCAddr! };
+
+      return {
+        chatId,
+        chatMessageId,
+      };
+    });
+
+    messagesToDelete.length > 0 && await this.deleteMessages(messagesToDelete);
   }
 
   private async removeMsgBytes(

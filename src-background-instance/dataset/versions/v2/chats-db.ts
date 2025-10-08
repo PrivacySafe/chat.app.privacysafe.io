@@ -33,6 +33,11 @@ import {
   setExprFor,
 } from '../../../utils/for-sqlite.ts';
 
+export interface ChatSettings {
+  autoDeleteMessages?: string;
+  [key: string]: unknown;
+}
+
 export interface GroupChatDbEntry extends GroupChatTableFields, FieldsFromMsgsDb {}
 
 export interface GroupChatTableFields {
@@ -43,6 +48,7 @@ export interface GroupChatTableFields {
   createdAt: number;
   lastUpdatedAt: number;
   status: GroupChatStatus;
+  settings: ChatSettings | null;
 }
 
 export interface FieldsFromMsgsDb {
@@ -64,6 +70,7 @@ export interface OTOChatTableFields {
   createdAt: number;
   lastUpdatedAt: number;
   status: SingleChatStatus;
+  settings: ChatSettings | null;
 }
 
 export type ChatDbEntry = (GroupChatDbEntry & { isGroupChat: true }) | (OTOChatDbEntry & { isGroupChat: false });
@@ -77,7 +84,8 @@ const queryToCreateChatsDbV2 = [
       admins TEXT NOT NULL,
       status TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
-      lastUpdatedAt INTEGER NOT NULL
+      lastUpdatedAt INTEGER NOT NULL,
+      settings TEXT
     ) STRICT
   `,
   `--sql
@@ -87,7 +95,8 @@ const queryToCreateChatsDbV2 = [
       name TEXT NOT NULL,
       status TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
-      lastUpdatedAt INTEGER NOT NULL
+      lastUpdatedAt INTEGER NOT NULL,
+      settings TEXT
     ) STRICT
   `,
   `--sql
@@ -154,6 +163,10 @@ const groupChatTabFields: TransformDefinition<GroupChatTableFields> = {
       return JSON.parse(sv as string);
     },
   },
+  settings: {
+    toSQLValue: (v: object | null): string | null => (v ? JSON.stringify(v): null),
+    fromSQLValue: (sv: SqlValue): object | null => (sv ? JSON.parse(sv as string) : null),
+  },
 };
 
 const otoChatTabFields: TransformDefinition<OTOChatTableFields> = {
@@ -163,6 +176,10 @@ const otoChatTabFields: TransformDefinition<OTOChatTableFields> = {
   status: 'as-is',
   createdAt: 'as-is',
   lastUpdatedAt: 'as-is',
+  settings: {
+    toSQLValue: (v: object | null): string | null => (v ? JSON.stringify(v): null),
+    fromSQLValue: (sv: SqlValue): object | null => (sv ? JSON.parse(sv as string) : null),
+  },
 };
 
 export function initializeV2chats(db: Database): void {

@@ -26,11 +26,16 @@ import type { AttachmentViewInfo } from '@main/common/components/messages/chat-m
 import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
 import { useVideoView } from './useVideoView';
 
+export interface AttachmentVideoViewEmits {
+  (event: 'error'): void;
+}
+
 const props = defineProps<{
   item: AttachmentViewInfo;
   incomingMsgId?: string;
   isMobileMode?: boolean;
 }>();
+const emits = defineEmits<AttachmentVideoViewEmits>();
 
 const {
   isProcessing,
@@ -45,7 +50,7 @@ const {
   updateCurrentTime,
   play,
   pause,
-} = useVideoView({ item: props.item, incomingMsgId: props.incomingMsgId });
+} = useVideoView({ item: props.item, incomingMsgId: props.incomingMsgId, emits });
 </script>
 
 <template>

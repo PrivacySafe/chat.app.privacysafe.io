@@ -4,6 +4,10 @@ import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
+function _resolve(dir: string) {
+  return resolve(__dirname, dir);
+}
+
 export const makeConfig = ({ mode }: UserConfig) => {
   const isDev = mode === 'development';
   // const isProd = mode === 'production';
@@ -48,10 +52,10 @@ export const makeConfig = ({ mode }: UserConfig) => {
       // reference: https://rollupjs.org/configuration-options/
       rollupOptions: {
         input: {
-          main: resolve(__dirname, './index.html'),
-          'main-mobile': resolve(__dirname, './index-mobile.html'),
-          videoChat: resolve(__dirname, './video-chat.html'),
-          'videoChat-mobile': resolve(__dirname, './video-chat-mobile.html'),
+          main: _resolve('./index.html'),
+          'main-mobile': _resolve('./index-mobile.html'),
+          videoChat: _resolve('./video-chat.html'),
+          'videoChat-mobile': _resolve('./video-chat-mobile.html'),
         },
         output: [
           {
@@ -79,11 +83,11 @@ export const makeConfig = ({ mode }: UserConfig) => {
     resolve: {
       alias: {
         'vue': 'vue/dist/vue.esm-bundler.js',
-        '@main': resolve(__dirname, './src-main'),
-        '@video': resolve(__dirname, './src-video'),
-        '@shared': resolve(__dirname, './shared-libs'),
-        '@bg': resolve(__dirname, './src-background-instance'),
-        '~': resolve(__dirname, './types'),
+        '@main': _resolve('./src-main'),
+        '@video': _resolve('./src-video'),
+        '@shared': _resolve('./shared-libs'),
+        '@bg': _resolve('./src-background-instance'),
+        '~': _resolve('./types'),
       },
     },
   };

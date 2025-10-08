@@ -15,8 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import get from 'lodash/get';
-import { useContactsStore } from '@main/common/store/contacts.store.ts';
-import { useAppStore } from '@main/common/store/app.store.ts';
+import { useContactsStore } from '@main/common/store/contacts.store';
+import { useAppStore } from '@main/common/store/app.store';
+import { AUTO_DELETE_MESSAGES_BY_ID } from '@shared/constants';
 import {
   ChatListItemView,
   ChatSysMsgView,
@@ -26,7 +27,8 @@ import {
   GroupChatStatus,
   CallMsgBodySysMsgData,
   WebRTCMsgBodySysMsgData,
-} from '~/index.ts';
+  UpdatedChatSettingsSysMsgData,
+} from '~/index';
 
 export function getChatName(chat: ChatListItemView): string {
   const { name, isGroupChat } = chat;
@@ -58,6 +60,27 @@ export function getTextForChatSystemMessage(
       const text = appStore.$i18n.tr('rename.chat.system.message');
       const msgSender = isIncomingMsg ? sender : appStore.user!;
       return `${text} ${getContactName(msgSender)}`;
+    }
+
+    case 'update:settings': {
+      const { settings = {} } = (systemData as UpdatedChatSettingsSysMsgData).value;
+      const autoDeleteMessageId = (settings?.autoDeleteMessages || '0') as '0' | '1' | '2' | '3' | '4';
+      const timerValueText: string = appStore.$i18n.tr(AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessageId].label);
+
+      switch (autoDeleteMessageId) {
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+          return !sender || sender === ownAddr
+            ? appStore.$i18n.tr('auto.delete.messages.set.you', { value: timerValueText })
+            : appStore.$i18n.tr('auto.delete.messages.set.user', { user: sender, value: timerValueText });
+        default:
+          return !sender || sender === ownAddr
+            ? appStore.$i18n.tr('auto.delete.messages.unset.you')
+            : appStore.$i18n.tr('auto.delete.messages.unset.user', { user: sender });
+      }
     }
 
     case 'member-left': {

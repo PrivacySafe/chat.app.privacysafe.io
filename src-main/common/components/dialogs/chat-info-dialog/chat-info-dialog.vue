@@ -35,6 +35,7 @@ const {
   memberSearch,
   editMembersMode,
   listItemMenuProps,
+  autoDeleteMessageInfo,
   members,
   filteredMembers,
   allContacts,
@@ -93,6 +94,7 @@ const {
             :name="getChatName(props.chat)"
             size="64"
             :shape="chat.isGroupChat ? 'decagon' : 'circle'"
+            :settings="chat.settings"
           />
 
           <div :class="$style.chatInfoDialogHeaderText">
@@ -100,11 +102,15 @@ const {
               {{ getChatName(props.chat) }}
             </span>
 
+            <span :class="$style.chatInfoDialogAutoDeleting">
+              <i>{{ $tr('chat.info.dialog.auto.delete', { period: $tr(autoDeleteMessageInfo.label) }) }}</i>
+            </span>
+
             <span
               v-if="chat.isGroupChat"
               :class="$style.chatInfoDialogHeaderUser"
             >
-              {{ members.length }} {{ $tr('chat.info.dialog.users') }}
+              <b>{{ members.length }} {{ $tr('chat.info.dialog.users') }}</b>
             </span>
           </div>
         </div>
@@ -261,19 +267,32 @@ const {
 .chatInfoDialogHeaderText {
   position: relative;
   flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  row-gap: var(--spacing-s);
 }
 
 .chatInfoDialogHeaderName {
   display: block;
   font-size: var(--font-14);
   line-height: var(--font-24);
+  font-weight: 600;
+  color: var(--color-text-control-primary-default);
+}
+
+.chatInfoDialogAutoDeleting {
+  display: block;
+  font-size: var(--font-12);
+  line-height: var(--font-14);
   font-weight: 500;
   color: var(--color-text-control-primary-default);
 }
 
 .chatInfoDialogHeaderUser {
   display: block;
-  font-size: var(--font-11);
+  font-size: var(--font-12);
   line-height: var(--font-16);
   font-weight: 500;
   color: var(--color-text-control-secondary-default);

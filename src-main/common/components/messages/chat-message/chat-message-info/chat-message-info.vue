@@ -15,12 +15,19 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { type Nullable, Ui3nButton, Ui3nTabs, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+import { useAppStore } from '@main/common/store/app.store';
 import type { ChatMessageHistoryChange, RegularMsgView } from '~/index';
 import ChatMessageInfoText from './chat-message-info-text.vue';
 import ChatMessageInfoReactions from './chat-message-info-reactions.vue';
 import ChatMessageInfoErrors from './chat-message-info-errors.vue';
+import { ONE_HOUR, ONE_DAY, ONE_MONTH } from '@shared/constants.ts';
+
+dayjs.extend(relativeTime);
 
 const props = defineProps<{
   msg: Nullable<RegularMsgView>
@@ -29,7 +36,14 @@ const emits = defineEmits<{
   (event: 'close'): void;
 }>();
 
+const { $tr } = inject(I18N_KEY)!;
+const appStore = useAppStore();
+
+let remainingMessageLifespanTimerId: ReturnType<typeof setInterval> | null = null;
+
 const currentTab = ref(0);
+const remainingMessageLifespan = ref(0);
+const remainingMessageLifespanAsText = ref('');
 
 const currentMsgText = computed(() => props.msg?.body || '');
 const currentReactions = computed(() => props.msg?.reactions ?? {});
@@ -40,6 +54,58 @@ function exitMsgInfo() {
   currentTab.value = 0;
   emits('close');
 }
+
+function getRemainingMessageLifespanAsString() {
+  if (!props.msg || (props.msg.removeAfter === 0)) {
+    remainingMessageLifespanAsText.value = '';
+    return;
+  }
+
+  const now = Date.now();
+  const diffMs = props.msg.removeAfter - now;
+  const dateStart = dayjs(now);
+  const dateEnd = dayjs(props.msg.removeAfter);
+  if (diffMs < ONE_HOUR) {
+    const minutes = dateEnd.diff(dateStart, 'minutes');
+    const seconds = dateEnd.diff(dateStart, 'seconds') % 60;
+    remainingMessageLifespanAsText.value = `${minutes} ${$tr('chat.minutes')} ${seconds} ${$tr('chat.seconds')}`;
+  } else if (diffMs < ONE_DAY) {
+    const hours = dateEnd.diff(dateStart, 'hours');
+    const minutes = dateEnd.diff(dateStart, 'minutes') % 60;
+    remainingMessageLifespanAsText.value = `${hours} ${$tr('chat.hours')} ${minutes} ${$tr('chat.minutes')}`;
+  } else if (diffMs < ONE_MONTH) {
+    const days = dateEnd.diff(dateStart, 'days');
+    const hours = dateEnd.diff(dateStart, 'hours') % 24;
+    const minutes = dateEnd.diff(dateStart, 'minutes') % 60;
+    remainingMessageLifespanAsText.value = `${days} ${$tr('chat.days')} ${hours} ${$tr('chat.hours')} ${minutes} ${$tr('chat.minutes')}`;
+  } else {
+    const months = dateEnd.diff(dateStart, 'months');
+    const days = dateEnd.diff(dateStart, 'days') % 30;
+    const hours = dateEnd.diff(dateStart, 'hours') % 24;
+    const minutes = dateEnd.diff(dateStart, 'minutes') % 60;
+    remainingMessageLifespanAsText.value = `${months} ${$tr('chat.months')} ${days} ${$tr('chat.days')} ${hours} ${$tr('chat.hours')} ${minutes} ${$tr('chat.minutes')}`;
+  }
+}
+
+watch(
+  () => props.msg?.chatMessageId,
+  (val, oldVal) => {
+    if (val && val !== oldVal) {
+      remainingMessageLifespanTimerId && clearInterval(remainingMessageLifespanTimerId);
+
+      remainingMessageLifespanTimerId = setInterval(() => {
+        remainingMessageLifespan.value = props.msg ? props.msg.removeAfter - Date.now() : 0;
+        getRemainingMessageLifespanAsString();
+      }, 1000);
+    }
+  }, {
+    immediate: true,
+  },
+);
+
+onBeforeUnmount(() => {
+  remainingMessageLifespanTimerId && clearInterval(remainingMessageLifespanTimerId);
+});
 </script>
 
 <template>
@@ -62,6 +128,11 @@ function exitMsgInfo() {
           @click.stop.prevent="exitMsgInfo"
         />
       </ui3n-tooltip>
+
+      <span v-if="appStore.isMobileMode">
+        {{ $tr('chat.info.dialog.mobile.auto.delete', { period: remainingMessageLifespanAsText }) }}
+      </span>
+      <span v-else>{{ $tr('chat.message.info.removeAfter', { period: remainingMessageLifespanAsText }) }}</span>
     </div>
 
     <div :class="$style.body">
@@ -119,8 +190,12 @@ function exitMsgInfo() {
   width: 100%;
   height: var(--msg-info-toolbar-height);
   padding: 0 var(--spacing-s);
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
+  column-gap: var(--spacing-m);
+  font-size: var(--font-16);
+  font-weight: 500;
+  color: var(--color-text-block-primary-default);
 }
 
 .body {

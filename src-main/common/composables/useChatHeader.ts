@@ -30,6 +30,7 @@ import type { ChatListItemView, ChatMessageView } from '~/chat.types';
 import ConfirmationDialog from '@main/common/components/dialogs/confirmation-dialog.vue';
 import ChatRenameDialog from '@main/common/components/dialogs/chat-rename-dialog.vue';
 import ChatInfoDialog from '@main/common/components/dialogs/chat-info-dialog/chat-info-dialog.vue';
+import { chatService } from '@main/common/services/external-services.ts';
 
 interface ChatActionHandlers {
   history: {
@@ -41,6 +42,7 @@ interface ChatActionHandlers {
     rename: () => Promise<void> | void;
     close: () => Promise<void>;
     delete: () => Promise<void> | void;
+    timer: (id: string) => void;
     leave: () => Promise<void> | void;
   };
 }
@@ -64,7 +66,7 @@ export function useChatHeader(
   const { refreshChatList } = useChatsStore();
 
   const chatStore = useChatStore();
-  const { currentChatId } = storeToRefs(chatStore);
+  const { currentChatId, currentChat } = storeToRefs(chatStore);
   const { resetCurrentChat, renameChat, deleteChat } = chatStore;
 
   const messagesStore = useMessagesStore();
@@ -192,6 +194,20 @@ export function useChatHeader(
     });
   }
 
+  async function setMessagesAutoDelete(autoDeleteMessageId: string) {
+    if (!autoDeleteMessageId) {
+      return;
+    }
+
+    const { settings } = currentChat.value!;
+    const currentAutoDeleteMessagesId = settings?.autoDeleteMessages || '0';
+    if (currentAutoDeleteMessagesId !== autoDeleteMessageId) {
+      await chatService.chatSetUp(currentChatId.value!, {
+        autoDeleteMessages: autoDeleteMessageId,
+      });
+    }
+  }
+
   const actionsHandlers: ChatActionHandlers = {
     history: {
       export: runChatHistoryExporting,
@@ -202,16 +218,17 @@ export function useChatHeader(
       rename: runChatRenaming,
       close: closeChat,
       delete: runChatDeleting,
+      timer: setMessagesAutoDelete,
       leave: runChatDeleting,
     },
   };
 
   async function selectAction(compositeAction: string) {
-    const [entity, action] = compositeAction.split(':');
+    const [entity, action, value] = compositeAction.split(':');
     // @ts-expect-error
-    const handler: () => Promise<void> | void = actionsHandlers[entity]?.[action];
+    const handler: (value?: string) => Promise<void> | void = actionsHandlers[entity]?.[action];
     if (handler) {
-      await handler();
+      await handler(value);
     } else {
       throw new Error(`No handler found for action ${action} on entity ${entity}`);
     }

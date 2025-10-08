@@ -27,6 +27,9 @@ const props = defineProps<{
   incomingMsgId?: string;
   isMobileMode?: boolean;
 }>();
+const emits = defineEmits<{
+  (event: 'error'): void;
+}>();
 
 const isProcessing = ref(true);
 const imageDataUrl = ref<Nullable<string>>(null);
@@ -45,6 +48,8 @@ onMounted(async () => {
   try {
     const file3n = await getFileByInfoFromMsg(props.item.id!, props.incomingMsgId);
     if (!file3n) {
+      isProcessing.value = false;
+      emits('error');
       return null;
     }
 

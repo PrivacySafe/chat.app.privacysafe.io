@@ -65,6 +65,7 @@ const {
       :name="getChatName(props.chat)"
       :shape="isGroupChat ? 'decagon' : 'circle'"
       :call-in-progress="chatWithCall"
+      :settings="chat.settings"
     />
 
     <div :class="$style.chatHeaderContent">
@@ -138,6 +139,7 @@ const {
     />
 
     <chat-header-actions
+      :chat="chat"
       :disabled="isIncomingCall || chatWithCall"
       @select:action="selectAction"
     />

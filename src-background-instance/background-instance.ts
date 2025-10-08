@@ -29,6 +29,8 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { chats, stopChatsService } = await ChatService.setupAndStartServing(ownAddr);
 
+  chats.deleteExpiredMessages(Date.now());
+
   const { webrtcMsgsHandler } = setupAndStartVideoGUIOpener(
     ownAddr,
     chats.findChatEntry.bind(chats),

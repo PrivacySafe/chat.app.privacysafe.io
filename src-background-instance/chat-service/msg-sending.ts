@@ -30,6 +30,7 @@ import { sendRegularMessage, sendSystemMessage } from '../utils/send-chat-msg.ts
 import { generateChatMessageId } from '../../shared-libs/chat-ids.ts';
 import { ChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
 import { addFileTo } from '../../shared-libs/attachments-container.ts';
+import { AUTO_DELETE_MESSAGES_BY_ID, ONE_YEAR } from '../../shared-libs/constants.ts';
 
 type AttachmentsContainer = web3n.asmail.AttachmentsContainer;
 type ReadonlyFS = web3n.files.ReadonlyFS;
@@ -75,15 +76,23 @@ export class MsgSending {
         relatedMessage,
       );
     } else {
+      const { settings } = chat;
+      const autoDeleteMessages = settings?.autoDeleteMessages as '0' | '1' | '2' | '3' | '4';
+      const autoDeleteTSValue = AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessages].value || ONE_YEAR;
+
       const { attachments, attachmentContainer } = await this.prepOutgoingAttachments(files);
+
       const msg = makeMsgDbEntry('regular', msgId, {
         groupChatId: chat.isGroupChat ? chat.chatId : null,
         otoPeerCAddr: chat.isGroupChat ? null : chat.peerCAddr,
         timestamp,
+        removeAfter: timestamp + autoDeleteTSValue,
         body: text,
         attachments,
         relatedMessage: relatedMessage ?? null,
+        settings: {},
       });
+
       await this.data.addMessage(msg);
 
       const recipients = recipientsInChat(chat, this.ownAddr);
@@ -163,6 +172,11 @@ export class MsgSending {
     const { chatMessageId, relatedMessage } = chatMsgBody;
     const attachments = await this.infoOfIncomingAttachments(attachmentsFS);
     const removeFromInbox = !incomingMsg.attachments;
+
+    const { settings } = chat;
+    const autoDeleteMessages = settings?.autoDeleteMessages as '0' | '1' | '2' | '3' | '4';
+    const autoDeleteTSValue = AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessages].value || ONE_YEAR;
+
     const msg = makeMsgDbEntry('regular', chatMessageId, {
       isIncomingMsg: true,
       incomingMsgId: removeFromInbox ? null : msgId,
@@ -173,7 +187,9 @@ export class MsgSending {
       attachments,
       relatedMessage: relatedMessage ?? null,
       timestamp: deliveryTS,
+      removeAfter: deliveryTS + autoDeleteTSValue,
     });
+
     await this.data.addMessage(msg);
 
     this.emit.message.added(msg);

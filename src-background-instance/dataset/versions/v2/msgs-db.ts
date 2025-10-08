@@ -53,6 +53,8 @@ export interface MsgDbEntry {
   timestamp: number;
   history: ChatMessageHistory | null;
   reactions: Record<string, ChatMessageReaction> | null;
+  settings?: Record<string, unknown> | null;
+  removeAfter: number;
 }
 
 export interface RefsToMsgsDataNoInDB {
@@ -78,8 +80,10 @@ const queryToCreateMsgsDbV2 = [
       relatedMessage TEXT,
       status TEXT,
       timestamp INTEGER NOT NULL,
+      removeAfter INTEGER NOT NULL,
       history TEXT,
       reactions TEXT,
+      settings TEXT,
       PRIMARY KEY (chatMessageId, groupChatId, otoPeerCAddr)
     ) STRICT
   `,
@@ -92,6 +96,11 @@ const queryToCreateMsgsDbV2 = [
     )
   `,
   `--sql
+    CREATE INDEX grchat_id_msg_ts_lifetime ON messages (
+      groupChatId, timestamp, removeAfter	ASC
+    )
+  `,
+  `--sql
     CREATE INDEX grchat_msg_statuses ON messages (
       groupChatId, status, isIncomingMsg, chatMessageType
     )
@@ -99,6 +108,11 @@ const queryToCreateMsgsDbV2 = [
   `--sql
     CREATE INDEX oto_peer_msg_ts ON messages (
       otoPeerCAddr, timestamp	ASC
+    )
+  `,
+  `--sql
+    CREATE INDEX oto_peer_msg_ts_lifetime ON messages (
+      otoPeerCAddr, timestamp, removeAfter	ASC
     )
   `,
   `--sql
@@ -113,7 +127,7 @@ const queryToCreateMsgsDbV2 = [
   `,
 ].join(';\n');
 
-const msgsTabFields: TransformDefinition<MsgDbEntry> = {
+export const msgsTabFields: TransformDefinition<MsgDbEntry> = {
   // note that fields in primary key are forced to be non-null
   groupChatId: optStringAsEmptyTransform,
   otoPeerCAddr: optStringAsEmptyTransform,
@@ -127,8 +141,10 @@ const msgsTabFields: TransformDefinition<MsgDbEntry> = {
   relatedMessage: optJsonTransform,
   status: 'as-is',
   timestamp: 'as-is',
+  removeAfter: 'as-is',
   history: optJsonTransform,
   reactions: optJsonTransform,
+  settings: optJsonTransform,
 };
 
 export function initializeV2msgs(db: Database): void {
@@ -180,6 +196,16 @@ export class MsgsDBs {
       this.addMessage(msg);
     }
     await this.saveLocally();
+  }
+
+  async getExpiredMessages(now: number): Promise<MsgDbEntry[]> {
+    const query = `--sql
+      SELECT *
+      FROM messages
+      WHERE chatMessageType='regular' AND (removeAfter=0 OR removeAfter<$now)
+    `;
+    const [sqlValue] = this.latestDB.db.exec(query, { $now: now });
+    return sqlValue ? fromQueryResult(sqlValue, msgsTabFields) : [];
   }
 
   async getMessage(id: ChatMessageId): Promise<MsgDbEntry | undefined> {
@@ -445,9 +471,10 @@ export class MsgsDBs {
 
   getLatestIncomingMsgTimestamp(): number | undefined {
     const [sqlValue] = this.latestDB.db.exec(
-      `SELECT max(timestamp) as maxTS
-       FROM messages
-       WHERE isIncomingMsg = 1`,
+      `--sql
+      SELECT max(timestamp) as maxTS
+      FROM messages
+      WHERE isIncomingMsg = 1`,
     );
     if (!sqlValue) {
       return;

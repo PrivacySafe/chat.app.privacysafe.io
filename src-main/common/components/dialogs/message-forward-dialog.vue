@@ -74,6 +74,7 @@ function selectItem(
             :name="chat.displayName"
             :shape="chat.isGroupChat ? 'decagon' : 'circle'"
             :size="28"
+            :settings="chat.settings"
           />
           <div :class="$style.messageForwardDialogItemName">
             {{ chat.displayName }}

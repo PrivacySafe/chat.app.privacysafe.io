@@ -14,16 +14,20 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { computed, ComputedRef } from 'vue';
+import { computed, type ComputedRef, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '@main/common/store/chat.store';
 import { chatMenuItems } from '@main/common/constants';
+import { type ChatListItemView, ChatMenuItem } from '~/chat.types.ts';
 
 export function useChatHeaderActions(
-  props: ComputedRef<{ disabled?: boolean }>,
+  props: ComputedRef<{ chat: ChatListItemView; disabled?: boolean }>,
   emits: { (event: 'select:action', value: string): void },
 ) {
   const { currentChat, isAdminOfGroupChat } = storeToRefs(useChatStore());
+
+  const isMenuOpen = ref(false);
+  const subMenusState = ref<Record<string, boolean>>({});
 
   const canLeaveAndDeleteChat = computed(() => {
     if (!currentChat.value?.isGroupChat) {
@@ -39,7 +43,7 @@ export function useChatHeaderActions(
       return true;
     }
 
-    return Object.keys(members).length === 1
+    return Object.keys(members).length === 1;
   });
 
   const availableMenuItems = computed(() => chatMenuItems
@@ -58,19 +62,66 @@ export function useChatHeaderActions(
 
       return i.chatTypes.includes('single');
     })
-    .filter(i => i.action !== 'chat:delete' || (i.action === 'chat:delete' && canLeaveAndDeleteChat.value)),
-  );
+    .filter(i => i.action !== 'chat:delete' || (i.action === 'chat:delete' && canLeaveAndDeleteChat.value))
+    .map(i => ({
+      ...i,
+      id: i.action.replaceAll(':', ''),
+    })),
+  ) as ComputedRef<(ChatMenuItem & { id: string })[]>;
 
-  function selectAction(compositeAction: string) {
+  function selectAction(item: ChatMenuItem) {
+    if (item.subMenu) {
+      subMenusState.value[item.action] = !subMenusState.value[item.action];
+      return;
+    }
+
+    isMenuOpen.value = false;
+
     if (props.value.disabled) {
       return;
     }
 
-    emits('select:action', compositeAction);
+    emits('select:action', item.action);
   }
 
+  function isSubItemSelected(subItem: ChatMenuItem): boolean {
+    const [, action, value] = subItem.action.split(':');
+
+    if (action === 'timer') {
+      const { settings = {} } = props.value.chat;
+      const autoDeleteMessages = settings?.autoDeleteMessages || '0';
+      return value === autoDeleteMessages;
+    }
+
+    return false;
+  }
+
+  function initialSubMenusState(): Record<string, boolean> {
+    return (availableMenuItems.value || []).reduce((res, item) => {
+      if (item.subMenu) {
+        res[item.action] = false;
+      }
+      return res;
+    }, {} as Record<string, boolean>);
+  }
+
+  subMenusState.value = initialSubMenusState();
+
+  watch(
+    isMenuOpen,
+    (val, oVal) => {
+      if (val !== oVal && !val) {
+        subMenusState.value = initialSubMenusState();
+      }
+    },
+  );
+
   return {
+    isMenuOpen,
+    subMenusState,
     availableMenuItems,
+    initialSubMenusState,
     selectAction,
+    isSubItemSelected,
   };
 }

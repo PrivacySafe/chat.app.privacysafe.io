@@ -56,7 +56,12 @@ export class ChatCreation {
   ): Promise<ChatIdObj> {
     // create chat db record
     const chat = await this.data.addOneToOneChat({
-      peerAddr, name, status: 'initiated',
+      peerAddr,
+      name,
+      settings: {
+        autoDeleteMessages: '0',
+      },
+      status: 'initiated',
     });
     this.emit.chat.added(chat);
 
@@ -93,7 +98,14 @@ export class ChatCreation {
 
     // create chat db record
     const chat = await this.data.addGroupChat({
-      chatId: groupChatId, name, members, admins, status: 'initiated',
+      chatId: groupChatId,
+      name,
+      members,
+      admins,
+      settings: {
+        autoDeleteMessages: '0',
+      },
+      status: 'initiated',
     });
     this.emit.chat.added(chat);
     const chatId = chatIdOfGroupChat(chat);
@@ -199,6 +211,9 @@ export class ChatCreation {
     const chat = await this.data.addOneToOneChat({
       peerAddr: sender,
       name: inviteParams.name,
+      settings: {
+        autoDeleteMessages: '0',
+      },
       status: 'invited',
     });
     this.emit.chat.added(chat);
@@ -234,6 +249,9 @@ export class ChatCreation {
       name: inviteParams.name,
       members: inviteParams.members,
       admins: inviteParams.admins,
+      settings: {
+        autoDeleteMessages: '0',
+      },
       status: 'invited',
     });
 
@@ -319,6 +337,8 @@ export class ChatCreation {
       timestamp,
       history: null,
       reactions: null,
+      settings: null,
+      removeAfter: 0,
     };
 
     await this.data.addMessage(msg);

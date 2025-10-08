@@ -30,11 +30,16 @@ import type { AttachmentViewInfo } from '@main/common/components/messages/chat-m
 import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
 import { useAudioView } from './useAudioView';
 
+export interface AttachmentAudioViewEmits {
+  (event: 'error'): void;
+}
+
 const props = defineProps<{
   item: AttachmentViewInfo;
   incomingMsgId?: string;
   isMobileMode?: boolean;
 }>();
+const emits = defineEmits<AttachmentAudioViewEmits>();
 
 const { appWindowSize } = storeToRefs(useAppStore());
 
@@ -53,7 +58,7 @@ const {
   updateCurrentTime,
   play,
   pause,
-} = useAudioView({ item: props.item, incomingMsgId: props.incomingMsgId });
+} = useAudioView({ item: props.item, incomingMsgId: props.incomingMsgId, emits });
 
 watch(
   appWindowSize,

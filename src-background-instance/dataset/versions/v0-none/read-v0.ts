@@ -61,6 +61,9 @@ function chatDbEntryFrom(rec: ChatV0Record, ownAddr: string): {
         createdAt,
         lastUpdatedAt: createdAt,
         admins,
+        settings: {
+          autoDeleteMessages: '0',
+        },
         members,
       },
     };
@@ -75,6 +78,9 @@ function chatDbEntryFrom(rec: ChatV0Record, ownAddr: string): {
         status: 'on',
         peerAddr,
         peerCAddr: toCanonicalAddress(peerAddr),
+        settings: {
+          autoDeleteMessages: '0',
+        },
       },
     };
   }

@@ -118,6 +118,7 @@ watch(
       :name="data.displayName"
       :shape="isGroupChat ? 'decagon' : 'circle'"
       :call-in-progress="chatWithCall"
+      :settings="data.settings"
     />
 
     <div :class="$style.chatListItemBody">

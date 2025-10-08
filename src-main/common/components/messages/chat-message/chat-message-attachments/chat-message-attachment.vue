@@ -80,6 +80,8 @@ async function makeThumbnailTask() {
         incomingMsgId: props.incomingMsgId,
       });
     }
+  } catch (e) {
+    console.error('# T => ', e);
   } finally {
     isThumbnailCreationProcessGoingOn.value = false;
   }
@@ -115,6 +117,12 @@ makeThumbnail();
           v-if="isThumbnailCreationProcessGoingOn"
           indeterminate
           :size="attachmentsItemPreviewSize / 4 * 3"
+        />
+
+        <ui3n-icon
+          v-if="!thumbnail"
+          icon="file-remove-outline"
+          :size="attachmentsItemPreviewSize / 5 * 4"
         />
       </div>
     </div>

@@ -171,7 +171,7 @@ declare namespace web3n.system.apps {
 		 * @param observer of unzipping process
 		 */
 		addPackFromBundledApps(
-			id: string, observer: Observer<BundleUnpackProgress>
+			id: string, observer: Observer<AppUnpackProgress>
 		): () => void;
 
 		/**
@@ -180,7 +180,7 @@ declare namespace web3n.system.apps {
 		 * @param observer 
 		 */
 		addAppPackFromFolder(
-			appPackFS: files.ReadonlyFS, observer: Observer<BundleUnpackProgress>
+			appPackFS: files.ReadonlyFS, observer: Observer<AppUnpackProgress>
 		): () => void;
 
 		/**
@@ -189,7 +189,7 @@ declare namespace web3n.system.apps {
 		 * @param observer 
 		 */
 		addAppPackFromZipFile(
-			appPackFile: files.ReadonlyFile, observer: Observer<BundleUnpackProgress>
+			appPackFile: files.ReadonlyFile, observer: Observer<AppUnpackProgress>
 		): () => void;
 
 		/**
@@ -259,7 +259,7 @@ declare namespace web3n.system.apps {
 
 	type PostInstallState = 'all-done' | 'need-restart' | 'need-restart-many';
 
-	interface BundleUnpackProgress {
+	interface AppUnpackProgress {
 		numOfFiles: number;
 		numOfProcessed: number;
 		fileInProgress?: string;

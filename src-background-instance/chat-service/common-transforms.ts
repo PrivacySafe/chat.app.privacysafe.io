@@ -75,6 +75,9 @@ export function chatViewFromOTOChatDbEntry(
     status,
     lastMsg,
     unread = 0,
+    settings = {
+      autoDeleteMessages: '0',
+    },
   } = otoChatDbEntry;
 
   return {
@@ -87,6 +90,7 @@ export function chatViewFromOTOChatDbEntry(
     status,
     unread,
     lastMsg: lastMsg ? msgDbEntryToChatMessageView(lastMsg) : null,
+    settings: settings!,
   };
 }
 
@@ -104,6 +108,9 @@ export function chatViewFromGroupChatDbEntry(
     status,
     lastMsg,
     unread = 0,
+    settings = {
+      autoDeleteMessages: '0',
+    },
   } = groupChatDbEntry;
 
   return {
@@ -117,6 +124,7 @@ export function chatViewFromGroupChatDbEntry(
     status,
     unread,
     lastMsg: lastMsg ? msgDbEntryToChatMessageView(lastMsg) : null,
+    settings: settings!,
   };
 }
 
@@ -142,11 +150,13 @@ export function msgDbEntryForIncomingSysMsg(
     status: null,
     groupSender: (chatId.isGroupChat ? sender : null),
     timestamp,
+    removeAfter: 0,
     body: JSON.stringify(chatSystemData),
     attachments: null,
     history: null,
     incomingMsgId: null,
     reactions: null,
+    settings: null,
     relatedMessage: null,
   };
 }
@@ -168,8 +178,10 @@ export function msgViewFromDbEntry(
     otoPeerCAddr,
     status,
     timestamp,
+    removeAfter,
     history,
     reactions,
+    settings,
   } = msgDbEntry;
 
   const chatId: ChatIdObj = {
@@ -189,6 +201,7 @@ export function msgViewFromDbEntry(
         incomingMsgId: incomingMsgId ?? undefined,
         chatMessageType,
         timestamp,
+        removeAfter,
         sender,
         body: body ?? '',
         attachments: attachments ?? undefined,
@@ -196,7 +209,8 @@ export function msgViewFromDbEntry(
         status: status!,
         history: history ?? undefined,
         reactions: reactions ?? undefined,
-      };
+        settings: (settings ?? {}) as RegularMsgView['settings'],
+      } as RegularMsgView;
 
     case 'system': {
       let systemData: ChatSystemMessageData;
@@ -308,6 +322,8 @@ export function makeMsgDbEntry(
         (params.isIncomingMsg ? 'unread' : 'sending') :
         null
     ),
+    settings: null,
+    removeAfter: 0,
     timestamp: 0,
     ...params,
     chatMessageType,

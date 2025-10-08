@@ -145,7 +145,7 @@ onBeforeUnmount(doBeforeUnMount);
                 icon="round-attach-file"
                 icon-size="20"
                 icon-color="var(--color-icon-block-secondary-default)"
-                :disabled="disabled || readonly"
+                :disabled="disabled || readonly || (attachmentsInfo && attachmentsInfo.length > 0)"
                 @click="addFiles"
               />
 

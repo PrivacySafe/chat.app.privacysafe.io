@@ -14,18 +14,18 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { inject, onMounted, shallowRef, ref, useTemplateRef, computed, onBeforeUnmount } from 'vue';
+import { onMounted, shallowRef, ref, useTemplateRef, computed, onBeforeUnmount } from 'vue';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import { NOTIFICATIONS_KEY, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { transformWeb3nFileToFile } from '@v1nt1248/3nclient-lib/utils';
 import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
 import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
 import { getFileByInfoFromMsg } from '@main/common/utils/files.helper';
+import type { AttachmentAudioViewEmits } from './attachment-audio-view.vue';
 
-export function useAudioView({ item, incomingMsgId }: { item: AttachmentViewInfo; incomingMsgId?: string }) {
-  const { $createNotice } = inject(NOTIFICATIONS_KEY)!;
-  const { $tr } = inject(I18N_KEY)!;
-
+export function useAudioView(
+  { item, incomingMsgId, emits }:
+  { item: AttachmentViewInfo; incomingMsgId?: string; emits: AttachmentAudioViewEmits},
+) {
   const canvasRef = useTemplateRef<HTMLCanvasElement>('canvasEl');
   const ctx = ref<Nullable<CanvasRenderingContext2D>>(null);
 
@@ -207,10 +207,7 @@ export function useAudioView({ item, incomingMsgId }: { item: AttachmentViewInfo
         .then(file3n => {
           if (!file3n) {
             isProcessing.value = false;
-            $createNotice({
-              type: 'error',
-              content: $tr('chat.view.load.file.error'),
-            });
+            emits('error');
             return;
           }
 

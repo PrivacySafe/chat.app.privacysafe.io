@@ -19,8 +19,10 @@
 import { computed } from 'vue';
 import { Ui3nButton, Ui3nMenu, Ui3nIcon } from '@v1nt1248/3nclient-lib';
 import { useChatHeaderActions } from '@main/common/composables/useChatHeaderActions';
+import type { ChatListItemView } from '~/chat.types.ts';
 
 const props = defineProps<{
+  chat: ChatListItemView;
   disabled?: boolean;
 }>();
 const emits = defineEmits<{
@@ -29,13 +31,16 @@ const emits = defineEmits<{
 
 const propsValue = computed(() => props);
 
-const { availableMenuItems, selectAction } = useChatHeaderActions(propsValue, emits);
+const { isMenuOpen, availableMenuItems, selectAction, isSubItemSelected } = useChatHeaderActions(propsValue, emits);
 </script>
 
 <template>
   <ui3n-menu
+    v-model="isMenuOpen"
     :offset-y="4"
+    :close-on-click="false"
     :disabled="disabled"
+    :class="$style.menu"
   >
     <ui3n-button
       type="custom"
@@ -59,17 +64,47 @@ const { availableMenuItems, selectAction } = useChatHeaderActions(propsValue, em
             $style.chatHeaderActionsMenuItem,
             item.margin && $style.margin,
             item.isAccent && $style.chatHeaderActionsMenuItemAccent,
+            item.subMenu && $style.withSubMenu,
             (disabled || item.disabled) && $style.disabled,
           ]"
-          v-on="item.disabled ? {} : { click: () => selectAction(item.action) }"
+          v-on="(item.disabled || item.subMenu) ? {} : { click: () => selectAction(item) }"
         >
           <ui3n-icon
             :icon="item.icon"
-            width="12"
-            height="12"
+            size="14"
             :color="item.isAccent ? 'var(--warning-content-default)': 'var(--color-icon-control-primary-default)'"
+            :class="$style.icon"
           />
+
           {{ $tr(item.text) }}
+
+          <ui3n-icon
+            v-if="item.subMenu"
+            icon="round-keyboard-arrow-right"
+            size="14"
+            color="var(--color-icon-control-primary-default)"
+            :class="$style.icon"
+          />
+
+          <div
+            v-if="item.subMenu"
+            :class="$style.subMenu"
+          >
+            <div
+              v-for="subItem in item.subMenu"
+              :key="subItem.action"
+              :class="[
+                $style.chatHeaderActionsMenuItem,
+                subItem.margin && $style.margin,
+                subItem.isAccent && $style.chatHeaderActionsMenuItemAccent,
+                isSubItemSelected(subItem) && $style.isSelected,
+                (disabled || subItem.disabled) && $style.disabled,
+              ]"
+              v-on="(subItem.disabled || subItem.subMenu) ? {} : { click: () => selectAction(subItem) }"
+            >
+              {{ $tr(subItem.text) }}
+            </div>
+          </div>
         </div>
       </div>
     </template>
@@ -77,8 +112,29 @@ const { availableMenuItems, selectAction } = useChatHeaderActions(propsValue, em
 </template>
 
 <style lang="scss" module>
+@keyframes scale {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(0.75);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.menu {
+  div:last-child {
+    overflow: visible !important;
+  }
+}
+
 .chatHeaderActionsMenu {
-  --chat-header-menu-width: 172px;
+  --chat-header-menu-width: 192px;
+  --chat-header-menu-item-height: var(--spacing-ml);
 
   position: relative;
   width: var(--chat-header-menu-width);
@@ -94,7 +150,7 @@ const { availableMenuItems, selectAction } = useChatHeaderActions(propsValue, em
   align-items: center;
   column-gap: var(--spacing-s);
   padding: 0 var(--spacing-xs);
-  height: var(--spacing-ml);
+  height: var(--chat-header-menu-item-height);
   font-size: 13px;
   font-weight: 400;
   color: var(--color-text-control-primary-default);
@@ -104,6 +160,20 @@ const { availableMenuItems, selectAction } = useChatHeaderActions(propsValue, em
   &:hover {
     background-color: var(--color-bg-control-primary-hover);
     color: var(--color-text-control-accent-default);
+
+    .icon {
+      animation: scale 0.4s ease-in-out;
+    }
+
+    :global(.ui3n-icon) {
+      color: var(--color-icon-control-accent-hover);
+    }
+  }
+
+  &.withSubMenu:hover {
+    .subMenu {
+      display: block;
+    }
   }
 }
 
@@ -113,7 +183,15 @@ const { availableMenuItems, selectAction } = useChatHeaderActions(propsValue, em
   &:hover {
     background-color: var(--warning-fill-hover);
     color: var(--warning-content-default);
+
+    :global(.ui3n-icon) {
+      color: var(--warning-content-default);
+    }
   }
+}
+
+.isSelected {
+  background-color: var(--color-bg-control-primary-hover);
 }
 
 .margin {
@@ -124,5 +202,22 @@ const { availableMenuItems, selectAction } = useChatHeaderActions(propsValue, em
   pointer-events: none;
   opacity: 0.5;
   cursor: default;
+}
+
+.subMenu {
+  display: none;
+  position: absolute;
+  padding: var(--spacing-xs);
+  background-color: var(--color-bg-control-secondary-default);
+  border-radius: var(--spacing-xs);
+  width: 90px;
+  top: 0;
+  left: -90px;
+  min-height: calc(var(--chat-header-menu-item-height) + var(--spacing-xs) * 2);
+  box-shadow: 0 0 2px 0 var(--shadow-key-1), 0 2px 5px 0 var(--shadow-key-2);
+
+  &:hover {
+    display: block;
+  }
 }
 </style>

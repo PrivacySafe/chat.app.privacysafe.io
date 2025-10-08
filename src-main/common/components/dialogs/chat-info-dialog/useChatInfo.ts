@@ -21,6 +21,7 @@ import isEqual from 'lodash/isEqual';
 import { NOTIFICATIONS_KEY } from '@v1nt1248/3nclient-lib/plugins'
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { includesAddress } from '@shared/address-utils';
+import { AUTO_DELETE_MESSAGES_BY_ID } from '@shared/constants';
 import type { GroupChatView, PersonView } from '~/index';
 import type { ChatInfoDialogProps, ChatInfoDialogEmits } from './types';
 import { useAppStore } from '@main/common/store/app.store';
@@ -55,6 +56,12 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
   });
 
   const dialogWidth = computed(() => props.isMobileMode ? '300px' : '380px');
+
+  const autoDeleteMessageInfo = computed(() => {
+    const { settings } = props.chat;
+    const autoDeleteMessagesSetting = (settings?.autoDeleteMessages || '0') as '0' | '1' | '2' | '3' | '4';
+    return AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessagesSetting];
+  });
 
   const allContacts = computed(() => {
     const value = cloneDeep(contactList.value);
@@ -284,6 +291,7 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
     memberSearch,
     editMembersMode,
     listItemMenuProps,
+    autoDeleteMessageInfo,
     members,
     filteredMembers,
     allContacts,

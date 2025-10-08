@@ -97,7 +97,7 @@ declare namespace web3n.caps {
 	 * desktop and mobile devices without expecting each component to be
 	 * cross-platform and cross-form-factor (has this ever existed?).
 	 */
-	interface Launcher {
+	interface Launcher extends FormFactorSetting {
 		/**
 		 * name that will be displayed with icon.
 		 * When app has several user-launchable components, different names with
@@ -123,6 +123,9 @@ declare namespace web3n.caps {
 		 * description is a place to tell user what this app/launcher does.
 		 */
 		description: string;
+	}
+
+	interface FormFactorSetting {
 		/**
 		 * formFactor is a form factor filter. When present, component can be
 		 * started only in enumerated user interface form factors. When filter is
@@ -134,7 +137,7 @@ declare namespace web3n.caps {
 	/**
 	 * Pointer to location with dynamically created launchers.
 	 */
-	interface DynamicLaunchers {
+	interface DynamicLaunchers extends FormFactorSetting {
 		/**
 		 * appStorage tells in which app storage file system is located.
 		 */
@@ -215,7 +218,7 @@ declare namespace web3n.caps {
 		sharedLibs?: SharedLibInfo[];
 	}
 
-	interface CommonGUIComponentSetting extends CommonComponentSetting {
+	interface CommonGUIComponentSetting extends CommonComponentSetting, FormFactorSetting {
 		runtime: GUIRuntime;
 		/**
 		 * icon is a path to icon file within app folder to use for opened window.
@@ -259,14 +262,21 @@ declare namespace web3n.caps {
 
 	interface ShellCAPsSetting {
 		fileDialog?: FileDialogsCAPSettings;
+		deviceFiles?: DeviceFilesCAPSettings;
 		mountFS?: DeviceMountFSCAPSetting;
 		userNotifications?: true;
 		openDashboard?: true;
-		startAppCmds?: ResourcesRequest;
+		startAppCmds?: StartCmdDef;
 		fsResource?: ResourcesRequest;
+		openFile?: OpenFileCAPSetting;
+		openFolder?: OpenFolderCAPSetting;
+		openURL?: OpenURLWhitelistEntry[];
+		clipboard?: ClipboardCAPSetting;
 	}
 
 	type FileDialogsCAPSettings = 'all' | 'readonly';
+
+	type DeviceFilesCAPSettings = 'all';
 
 	type DeviceMountFSCAPSetting = 'all';
 
@@ -276,6 +286,21 @@ declare namespace web3n.caps {
 		thisApp?: string|string[];
 		otherApps?: { [ appDomain: string ]: string|string[]; };
 	}
+
+	type OpenFileCAPSetting = 'all';
+
+	type OpenFolderCAPSetting = 'all';
+
+	type OpenURLWhitelistEntry = {
+		schema: 'https';
+		anyDomain?: true;
+		domain?: string;
+		subdomains?: string[];
+	};
+
+	type ClipboardCAPSetting = 'all' | 'readonly' | 'writeonly';
+
+	interface StartCmdDef extends ResourcesRequest, FormFactorSetting {}
 
 	interface MediaDevicesCAPSetting {
 		cameras?: 'all'|'select'|'use';

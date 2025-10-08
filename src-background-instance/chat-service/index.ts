@@ -19,7 +19,7 @@
 import { ObserversSet } from '../../shared-libs/observer-utils.ts';
 import { includesAddress, toCanonicalAddress } from '../../shared-libs/address-utils.ts';
 import { MultiConnectionIPCWrap } from '../../shared-libs/ipc/ipc-service.js';
-import {
+import type {
   ChatView,
   ChatMessageView,
   ChatListItemView,
@@ -41,7 +41,8 @@ import {
   ChatOutgoingMessage,
   RegularMsgView,
   UpdatedMsgBodySysMsgData,
-  ChatMessageReaction, UpdatedMsgReactionSysMsgData,
+  ChatMessageReaction,
+  UpdatedMsgReactionSysMsgData,
 } from '../../types/index.ts';
 import type {
   AddressCheckResult,
@@ -59,6 +60,7 @@ import {
   msgViewFromDbEntry,
 } from './common-transforms.ts';
 import ChatRenaming from './chat-renaming.ts';
+import ChatSettingUp from './chat-setting-up.ts';
 import { ChatDeletion } from './chat-deletion.ts';
 import { ChatMemberRemoval } from './chat-member-removal.ts';
 import { MsgDeletion } from './msg-deletion.ts';
@@ -68,7 +70,7 @@ import { MsgSending } from './msg-sending.ts';
 import { MsgStatusUpdating } from './msg-status-updating.ts';
 import { MsgReactions } from './msg-reaction.ts';
 import { MsgEditing } from './msg-editing.ts';
-import type { ChatDbEntry, GroupChatDbEntry, OTOChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
+import type { ChatDbEntry, ChatSettings, GroupChatDbEntry, OTOChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
 import type { MsgDbEntry } from '../dataset/versions/v2/msgs-db.ts';
 import { makeOutgoingFileLinkStore } from '../dataset/versions/v0-none/attachments.ts';
 import { makeDbRecordException } from '../utils/exceptions.ts';
@@ -94,12 +96,14 @@ function exposeServiceOnIPC(chats: ChatService): () => void {
     'getChatList',
     'getChat',
     'renameChat',
+    'chatSetUp',
     'deleteChat',
     'updateGroupMembers',
     'updateGroupAdmins',
     'deleteMessagesInChat',
     'deleteMessage',
     'deleteMessages',
+    'deleteExpiredMessages',
     'getMessage',
     'getMessagesByChat',
     'sendRegularMessage',
@@ -197,6 +201,7 @@ export class ChatService implements ChatServiceIPC {
   private updateEventsObservers = new ObserversSet<UpdateEvent>();
   private readonly chatCreation: ChatCreation;
   private readonly chatRenaming: ChatRenaming;
+  private readonly chatSettingUp: ChatSettingUp;
   private readonly chatDeletion: ChatDeletion;
   private readonly chatMemberRemoval: ChatMemberRemoval;
   private readonly chatMembersUpdating: ChatMembersUpdating;
@@ -217,6 +222,8 @@ export class ChatService implements ChatServiceIPC {
     this.chatCreation = new ChatCreation(this.data, this.emit, this.ownAddr, removeMessageFromInbox);
 
     this.chatRenaming = new ChatRenaming(this.data, this.emit, this.ownAddr);
+
+    this.chatSettingUp = new ChatSettingUp(this.data, this.emit, this.ownAddr);
 
     this.chatDeletion = new ChatDeletion(
       this.data,
@@ -428,6 +435,15 @@ export class ChatService implements ChatServiceIPC {
             sysData,
           );
 
+        case 'update:settings':
+          return await this.chatSettingUp.handleUpdateSettings(
+            msg.sender,
+            chat,
+            chatMessageId!,
+            msg.deliveryTS,
+            sysData,
+          );
+
         case 'member-removed':
           return await this.chatMemberRemoval.handleMemberRemovedChat(msg.sender, chat, sysData.chatDeleted);
 
@@ -620,6 +636,10 @@ export class ChatService implements ChatServiceIPC {
     return this.chatRenaming.renameChat(chatId, newName);
   }
 
+  chatSetUp(chatId: ChatIdObj, data: Partial<ChatSettings>): Promise<void> {
+    return this.chatSettingUp.setUp(chatId, data);
+  }
+
   updateGroupMembers(chatId: ChatIdObj, changes: UpdateMembersSysMsgData['value']): Promise<void> {
     return this.chatMembersUpdating.updateGroupMembers(chatId, changes);
   }
@@ -702,6 +722,7 @@ export class ChatService implements ChatServiceIPC {
         relatedMessage: null,
         status: null,
         timestamp,
+        removeAfter: 0,
         history: null,
         reactions: null,
       };
@@ -753,6 +774,10 @@ export class ChatService implements ChatServiceIPC {
 
   async deleteMessages(chatMsgIds: ChatMessageId[], deleteForEveryone: boolean): Promise<void> {
     return this.msgDeletion.deleteMessages(chatMsgIds, deleteForEveryone);
+  }
+
+  async deleteExpiredMessages(now: number): Promise<void> {
+    return this.msgDeletion.deleteExpiredMessages(now);
   }
 
   async getMessage(id: ChatMessageId): Promise<ChatMessageView | undefined> {
@@ -891,6 +916,7 @@ export class ChatService implements ChatServiceIPC {
         ? msgData.isIncomingMsg ? 'unread' : 'sending'
         : null,
       timestamp: 0,
+      removeAfter: 0,
       ...msgData,
       chatMessageType,
       chatMessageId,
