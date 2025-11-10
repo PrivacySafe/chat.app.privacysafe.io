@@ -61,6 +61,7 @@ const contactListByLetters = computed<Record<string, (PersonView & { displayName
       return res;
     }, {} as Record<string, (PersonView & { displayName: string })[]>);
 });
+const contactLetters = computed(() => Object.keys(contactListByLetters.value).sort());
 
 const isMailValid = computed<boolean>(() => mailReg.test(props.searchText || ''));
 
@@ -94,7 +95,7 @@ function addNewContact(ev: Event) {
       :class="$style.contactListContent"
     >
       <div
-        v-for="letter in Object.keys(contactListByLetters)"
+        v-for="letter in contactLetters"
         :key="letter"
         :class="$style.contactSubList"
       >

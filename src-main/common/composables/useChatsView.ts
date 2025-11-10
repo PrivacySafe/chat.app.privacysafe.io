@@ -15,7 +15,7 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { inject, watch } from 'vue';
-import { DIALOGS_KEY, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { DIALOGS_KEY, DialogsPlugin, I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { useRouting } from '@main/desktop/composables/useRouting';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { useChatStore } from '@main/common/store/chat.store';
@@ -23,8 +23,8 @@ import type { ChatIdObj } from '~/asmail-msgs.types';
 import ChatCreateDialog from '@main/common/components/dialogs/chat-create-dialog.vue';
 
 export function useChatsView() {
-  const { $tr } = inject(I18N_KEY)!;
-  const dialog = inject(DIALOGS_KEY)!;
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
 
   const { route, goToChatRoute, goToChatsRoute, hasCreateNewChatFlagInRoute } = useRouting();
 

@@ -20,11 +20,11 @@
 import { MsgDbEntry } from '../dataset/versions/v2/msgs-db.ts';
 import { areAddressesEqual } from '../../shared-libs/address-utils.ts';
 import type { ChatListItemView, ChatMessageView, RegularMsgView } from '../../types/chat.types.ts';
-import type {
+import {
   ChatIdObj,
   ChatSystemMessageData,
   InvitationProcessMsgData,
-  StoredInvitationParams,
+  StoredInvitationParams, UpdatedMembersInvitationData,
 } from '../../types/asmail-msgs.types.ts';
 import type { ChatDbEntry, GroupChatDbEntry, OTOChatDbEntry } from '@bg/dataset/versions/v2/chats-db.ts';
 import { ChatsData } from '@bg/dataset/index.ts';
@@ -235,7 +235,7 @@ export function msgViewFromDbEntry(
     }
 
     default: {
-      let inviteData: InvitationProcessMsgData;
+      let inviteData: Exclude<InvitationProcessMsgData, UpdatedMembersInvitationData>;
       try {
         inviteData = JSON.parse(body!);
 

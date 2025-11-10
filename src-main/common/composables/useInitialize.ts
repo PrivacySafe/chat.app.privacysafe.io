@@ -30,7 +30,7 @@ export function useInitialize() {
     refreshChatList,
     updateChatItemInList,
   } = chatsStore;
-  const { handleBackgroundMessageEvents } = messagesStore;
+  const { fetchRecentReactions, handleBackgroundMessageEvents } = messagesStore;
 
   const updatesQueue: UpdateEvent[] = [];
   const updatesProc = new SingleProc();
@@ -52,13 +52,14 @@ export function useInitialize() {
             break;
         }
       } catch (err) {
-        console.error(err);
+        w3n.log('error', JSON.stringify(err), err);
       }
     }
   }
 
   async function initialize() {
     await refreshChatList();
+    await fetchRecentReactions();
 
     stopMessagesProcessing.value = chatService.watch({
       next: updateEvent => {
@@ -67,8 +68,8 @@ export function useInitialize() {
           updatesProc.start(processQueuedUpdateEvents);
         }
       },
-      complete: () => console.log(`Observation of updates events from ChatService completed.`),
-      error: err => console.error(`Error occurred in observation of updates events from ChatService: `, err),
+      complete: () => console.info(`Observation of updates events from ChatService completed.`),
+      error: err => w3n.log('error', `Error occurred in observation of updates events from ChatService. `, err),
     });
 
     stopVideoCallsWatching.value = videoOpenerSrv.watchVideoChats({
@@ -89,8 +90,8 @@ export function useInitialize() {
             break;
         }
       },
-      complete: () => console.log('Observation of video call events from VideoOpenerService completed.'),
-      error: err => console.error('Error occurred in observation of video call events from VideoOpenerService:', err),
+      complete: () => console.info('Observation of video call events from VideoOpenerService completed.'),
+      error: err => w3n.log('error', 'Error occurred in observation of video call events from VideoOpenerService. ', err),
     });
   }
 

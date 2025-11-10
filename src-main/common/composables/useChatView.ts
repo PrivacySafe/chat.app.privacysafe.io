@@ -26,27 +26,29 @@ import { storeToRefs } from 'pinia';
 import get from 'lodash/get';
 import size from 'lodash/size';
 import isEmpty from 'lodash/isEmpty';
-import { DIALOGS_KEY, I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { DIALOGS_KEY, DialogsPlugin, I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import type {
   ChatIdObj,
   ChatMessageAttachmentsInfo,
   ChatMessageId,
-  ChatMessageView,
+  ChatMessageView, GroupChatView,
   RegularMsgView,
   RelatedMessage,
   Ui3nTextEnterEvent,
 } from '~/index';
 import type { ChatRoute, ChatRouteType, ChatWithFwdMsgRef, ChatWithIncomingCall } from '@main/desktop/router';
 import type { RouteChat } from '@main/mobile/types';
+import { fileLinkStoreSrv } from '@main/common/services/external-services';
 import { useTaskRunner } from '@main/common/composables/useTaskRunner';
 import { useAppStore } from '@main/common/store/app.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
 import { areChatIdsEqual } from '@shared/chat-ids';
-import { getAttachmentFilesInfo } from '@main/common/utils/chats.helper';
+import { toCanonicalAddress } from '@shared/address-utils';
+import { prepareAttachmentEntityInfo } from '@main/common/utils/chats.helper';
 import MessageDeleteDialog from '@main/common/components/dialogs/message-delete-dialog.vue';
 
 function packRelatedMessageToSend(msg: ChatMessageView, relationType: 'reply' | 'forward'): RelatedMessage {
@@ -79,8 +81,8 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   const { addTask, cancelTasks } = useTaskRunner();
   provide('task-runner', { addTask });
 
-  const { $tr } = inject(I18N_KEY)!;
-  const dialog = inject(DIALOGS_KEY)!;
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
 
   const {
     route,
@@ -103,7 +105,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   const { currentChatMessages, selectedMessages } = storeToRefs(messagesStore);
   const { getChatMessage, clearSelectedMessages, deleteMessagesInChat } = messagesStore;
 
-  let files: web3n.files.ReadonlyFile[] | undefined;
+  const files = ref<(web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[]>([]);
 
   const inputEl = ref<Nullable<HTMLTextAreaElement>>(null);
   const msgText = ref<string>('');
@@ -120,6 +122,47 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   const messageListElementRect = ref<DOMRect | undefined>(undefined);
   const whetherShowButtonDown = ref(false);
 
+  const mention = ref<{ startIndex: number; member: Nullable<string> }>({
+    startIndex: -1,
+    member: null,
+  });
+  const activeSuggestionIndex = ref(-1);
+  const filteredMembers = computed(() => currentChat.value && (currentChat.value as GroupChatView).members
+    ? Object.keys((currentChat.value as GroupChatView).members).filter(addr => {
+      if (mention.value.member === null) {
+        return false;
+      }
+
+      const mail = toCanonicalAddress(addr.toLowerCase());
+      return mail !== user.value && mail.includes(mention.value.member.toLowerCase());
+    })
+    : [],
+  );
+
+  watch(
+    () => size(filteredMembers.value),
+    val=> {
+      setTimeout(() => {
+        if (val > 0) {
+          activeSuggestionIndex.value = -1;
+        }
+      }, 100);
+    }, {
+      immediate: true,
+    },
+  );
+
+  const attachmentsTotal = computed(() => {
+    if (isEmpty(attachmentsInfo.value)) {
+      return 0;
+    }
+
+    return (attachmentsInfo.value || []).reduce((acc, item) => {
+      acc += item.size;
+      return acc;
+    }, 0);
+  });
+
   const readonly = computed(() => {
     return !currentChat.value
       || currentChat.value?.status === 'no-members'
@@ -131,6 +174,67 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     return !(msgText.value.trim() || attachmentsInfo.value) || disabled.value || readonly.value;
   });
 
+  function hideSuggestions() {
+    mention.value = {
+      startIndex: -1,
+      member: null,
+    };
+    activeSuggestionIndex.value = -1;
+  }
+
+  function recognizeMention(text: string) {
+    const cursorPosition = inputEl.value!.selectionStart;
+    const lastAtSymbolIndex = text.lastIndexOf('@', cursorPosition - 1);
+    if (lastAtSymbolIndex !== -1 && (lastAtSymbolIndex === 0 || /\s/.test(text[lastAtSymbolIndex - 1]))) {
+      mention.value.startIndex = lastAtSymbolIndex + 1;
+      mention.value.member = text.substring(lastAtSymbolIndex + 1, cursorPosition);
+    }
+  }
+
+  function onInput(text: string) {
+    if (currentChat.value?.isGroupChat) {
+      recognizeMention(text);
+    }
+  }
+
+  function onKeydown(event: KeyboardEvent) {
+    const { key } = event;
+    switch (key) {
+      case 'ArrowUp': {
+        event.preventDefault();
+        const possibleSuggestionIndex = activeSuggestionIndex.value - 1;
+        activeSuggestionIndex.value = possibleSuggestionIndex === -1
+          ? size(filteredMembers.value) - 1
+          : possibleSuggestionIndex;
+        break;
+      }
+      case 'ArrowDown': {
+        event.preventDefault();
+        const possibleSuggestionIndex = activeSuggestionIndex.value + 1;
+        activeSuggestionIndex.value = possibleSuggestionIndex === size(filteredMembers.value)
+          ? 0
+          : possibleSuggestionIndex;
+        break;
+      }
+      default:
+    }
+  }
+
+  function selectMention(index: number) {
+    const member = filteredMembers.value[index];
+    const parsedMember = member.split('@');
+    const currentMention = `${parsedMember[0]}[${parsedMember[1]}]`;
+    const newMsgText = msgText.value.slice(0, mention.value.startIndex)
+      + currentMention + msgText.value.slice(mention.value.startIndex + 1) + ' ';
+    msgText.value = newMsgText;
+
+    activeSuggestionIndex.value = -1;
+    mention.value = {
+      startIndex: -1,
+      member: null,
+    };
+    inputEl.value!.focus();
+  }
 
   function setMessageListElementRect(el: Nullable<HTMLDivElement>) {
     messageListElementRect.value = el
@@ -211,38 +315,105 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   }
 
   async function addFiles(): Promise<void> {
-    files = await w3n.shell?.fileDialogs?.openFileDialog!('Select file(s)', '', true);
-    if (!isEmpty(files)) {
-      attachmentsInfo.value = await getAttachmentFilesInfo({ files });
-      inputEl.value && inputEl.value.focus();
+    if (isEmpty(attachmentsInfo.value)) {
+      attachmentsInfo.value = [];
     }
+
+    const newFiles = await w3n.shell?.fileDialogs?.openFileDialog!('Select file(s)', '', true);
+    if (!newFiles) {
+      return;
+    }
+
+    for (const f of newFiles) {
+      files.value.push(f);
+      const attachmentInfo = await prepareAttachmentEntityInfo(f);
+      attachmentInfo && attachmentsInfo.value!.push(attachmentInfo);
+    }
+
+    inputEl.value && inputEl.value.focus();
+  }
+
+  async function fileTo3nFile(f: File):
+    Promise<web3n.files.ReadonlyFile | web3n.files.ReadonlyFS | undefined | null> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async e => {
+        const fileContent = e.target?.result;
+        if (fileContent) {
+          const fileId = await fileLinkStoreSrv.saveFile(fileContent as ArrayBuffer, f.name);
+          const entity = await fileLinkStoreSrv.getFile(fileId) as web3n.files.ReadonlyFile | null | undefined;
+          resolve(entity);
+        }
+      };
+
+      reader.onerror = e => {
+        reject(e);
+      };
+
+      reader.readAsArrayBuffer(f);
+    });
   }
 
   async function addFilesViaDnD(fileList: FileList): Promise<void> {
-    files = [];
+    if (readonly.value) {
+      return;
+    }
+
+    if (isEmpty(attachmentsInfo.value)) {
+      attachmentsInfo.value = [];
+    }
     // @ts-ignore
     for (const f of [...fileList]) {
-      const file = await w3n.shell!.deviceFiles?.standardFileToDeviceFile!(f);
-      if (file) {
-        files.push(file);
+      let entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS | null | undefined;
+
+      try {
+        const fStats = await w3n.shell!.deviceFiles?.statStandardItem(f)
+
+        entity = fStats!.isFolder
+          ? await w3n.shell!.deviceFiles?.standardFileToDeviceFolder!(f)
+          : await w3n.shell!.deviceFiles?.standardFileToDeviceFile!(f);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } catch (e: any) {
+        if (e.type === 'file' && e.isInMemoryFile) {
+          entity = await fileTo3nFile(f);
+        } else {
+          w3n.log('error', 'Error reading file. ', e);
+        }
       }
-      if (!isEmpty(files)) {
-        attachmentsInfo.value = await getAttachmentFilesInfo({ files });
-        inputEl.value && inputEl.value.focus();
+
+      if (entity) {
+        files.value.push(entity);
+        const attachmentInfo = await prepareAttachmentEntityInfo(entity);
+        attachmentInfo && attachmentsInfo.value!.push(attachmentInfo);
+      }
+    }
+
+    inputEl.value && inputEl.value.focus();
+  }
+
+  async function addFilesViaPaste(ev: ClipboardEvent): Promise<void> {
+    if (size(ev.clipboardData?.files) > 0) {
+      const currentMsgText = msgText.value;
+      await addFilesViaDnD(ev.clipboardData!.files);
+      inputEl.value && inputEl.value.select();
+      const selection = window.getSelection();
+      if (selection) {
+        selection.deleteFromDocument();
+        msgText.value = currentMsgText;
       }
     }
   }
 
   async function deleteAttachment(index: number) {
-    files && files.splice(index, 1);
-    attachmentsInfo.value = await getAttachmentFilesInfo({ files });
+    files.value && files.value.splice(index, 1);
+    attachmentsInfo.value && attachmentsInfo.value.splice(index, 1);
     if (size(attachmentsInfo.value) === 0) {
       attachmentsInfo.value = undefined;
     }
   }
 
   function clearAttachments() {
-    files = undefined;
+    files.value = [];
     attachmentsInfo.value = undefined;
   }
 
@@ -267,8 +438,36 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     inputEl.value!.focus();
   }
 
+  function isMsgEmpty() {
+    if (!(msgText.value || size(files) > 0)) {
+      return true;
+    }
+
+    if (size(files.value) > 0) {
+      return false;
+    }
+
+    if (msgText.value === '\n') {
+      msgText.value = '';
+      return true;
+    }
+
+    return false;
+  }
+
   async function sendMessage(ev?: Ui3nTextEnterEvent, force = false) {
-    if (disabled.value || readonly.value) {
+    if (disabled.value || readonly.value || isMsgEmpty()) {
+      return;
+    }
+
+    if (!isEmpty(filteredMembers.value)) {
+      if (activeSuggestionIndex.value >= 0) {
+        selectMention(activeSuggestionIndex.value);
+        setTimeout(() => {
+          const lastCharCode = msgText.value.charCodeAt(msgText.value.length - 1);
+          lastCharCode === 10 && (msgText.value = msgText.value.slice(0, -1));
+        }, 50);
+      }
       return;
     }
 
@@ -286,7 +485,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
 
         setTimeout(() => {
           msgText.value = '';
-          files = undefined;
+          files.value = [];
           attachmentsInfo.value = undefined;
           initialMessage.value = null;
           editableMessage.value = null;
@@ -301,16 +500,31 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
         : undefined;
       disabled.value = true;
 
+      if (msgText.value) {
+        const mentions = msgText.value.match(/@.*?]/g);
+        for (const item of (mentions || [])) {
+          msgText.value =  msgText.value.replace(item, `<a class="mention" data-mention="${item}">${item}</a>`)
+        }
+
+        const msgTextWithoutTagsA = msgText.value.replace(/<a[^>]*>(.*?)<\/a>/gi, '');
+
+        // eslint-disable-next-line no-useless-escape
+        const urls = msgTextWithoutTagsA.match(/((http|https):\/\/)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/[\w\-\.\?\#=&\/\+\%]+)*\/?/g);
+        for (const url of (urls || [])) {
+          msgText.value = msgText.value.replace(url, `<a class="url" data-href="${url}">${url}</a>`);
+        }
+      }
+
       sendMessageInChat({
         chatId: toRaw(currentChatId.value!),
         text: (msgText.value || '').trim(),
-        files,
+        files: toRaw(files.value),
         relatedMessage,
       });
 
       setTimeout(() => {
         msgText.value = '';
-        files = undefined;
+        files.value = [];
         attachmentsInfo.value = undefined;
         initialMessage.value = null;
         editableMessage.value = null;
@@ -389,11 +603,14 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     }
 
     scrollToFirstUnreadMessage();
+
+    inputEl.value && inputEl.value.addEventListener('keydown', onKeydown);
   }
 
   function doBeforeUnMount() {
     routeQueryWatching.stop();
     messageListElement.value!.removeEventListener('scroll', onMessageListScroll);
+    inputEl.value && inputEl.value.removeEventListener('keydown', onKeydown);
   }
 
   async function doBeforeRouteUpdate(
@@ -434,17 +651,26 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     initialMessage,
     initialMessageType,
     editableMessage,
+    files,
     attachmentsInfo,
+    attachmentsTotal,
     sendBtnDisabled,
-
+    mention,
+    filteredMembers,
+    activeSuggestionIndex,
     clearSelectedMessages,
     deleteMessages,
+    onInput,
+    onKeydown,
+    selectMention,
+    hideSuggestions,
     onMessageListElementInit,
     scrollMessageListToEnd,
     setMsgForWhichInfoIsDisplayed,
     getTextOfEditableOrInitialMsg,
     addFilesViaDnD,
     addFiles,
+    addFilesViaPaste,
     prepareReplyMessage,
     startEditMsgMode,
     onEmoticonSelect,

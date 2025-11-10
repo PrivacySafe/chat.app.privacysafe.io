@@ -19,7 +19,7 @@ import { computed, inject } from 'vue';
 import isEmpty from 'lodash/isEmpty';
 import size from 'lodash/size';
 import hasIn from 'lodash/hasIn';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import type { ChatMessageHistoryChange, MessageStatus } from '~/index';
 
 const props = defineProps<{
@@ -28,7 +28,7 @@ const props = defineProps<{
   timestamp: number;
 }>();
 
-const { $tr } = inject(I18N_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 const errorsChanges = computed(() => props.changes
   .filter(c => c.type === 'error')
@@ -139,7 +139,7 @@ function prepareErrorText(
     return `[${address}] ${$tr('chat.message.info.error.connectError')}`;
   }
 
-  return `[${address}] ${$tr('msg.sending.error.noDescription')}`;
+  return `[${address}] ${$tr('chat.message.info.error.noDescription')}`;
 }
 
 function getErrorText(address: string, err: web3n.asmail.DeliveryException | web3n.RuntimeException | Error): string {

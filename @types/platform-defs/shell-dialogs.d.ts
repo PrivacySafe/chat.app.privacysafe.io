@@ -104,6 +104,7 @@ declare namespace web3n.shell.files {
 	interface DeviceFiles {
 		standardFileToDeviceFile?: (stdFile: File) => Promise<web3n.files.ReadonlyFile>;
 		standardFileToDeviceFolder?: (stdFile: File) => Promise<web3n.files.ReadonlyFS>;
+		statStandardItem: (stdFile: File) => Promise<web3n.files.Stats>;
 	}
 
 }

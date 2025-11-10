@@ -110,7 +110,7 @@ watch(
         action.accent && $style.withAccent,
         action.blockStart && $style.withMargin,
       ]"
-      @click="handleAction(action.id)"
+      @click.stop.prevent="handleAction(action.id)"
     >
       <div :class="$style.itemIcon">
         <ui3n-icon

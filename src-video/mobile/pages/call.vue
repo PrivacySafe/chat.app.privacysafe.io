@@ -21,10 +21,20 @@ import { useInCalls } from '@video/common/composables/use-in-calls';
 import { Ui3nButton } from '@v1nt1248/3nclient-lib';
 import OwnVideo from '@video/common/components/own-video.vue';
 import PeerVideo from '@video/common/components/peer-video.vue';
+import CallParticipants from '@video/common/components/call-participants.vue';
 
-const { ownName, isGroupChat, peerVideos, doOnMounted, doBeforeUnmount, streams, toggleMicStatus, toggleCamStatus,
-  endCall } =
-  useInCalls();
+const {
+  ownName,
+  isGroupChat,
+  isParticipantListOpen,
+  peerVideos,
+  streams,
+  doOnMounted,
+  doBeforeUnmount,
+  toggleMicStatus,
+  toggleCamStatus,
+  endCall,
+} = useInCalls();
 
 const peersNumber = computed(() => size(peerVideos.value) + 1);
 
@@ -107,6 +117,12 @@ onBeforeUnmount(doBeforeUnmount);
         />
       </div>
     </div>
+
+    <call-participants
+      v-if="isParticipantListOpen"
+      :peer-videos="peerVideos"
+      @close="isParticipantListOpen = false"
+    />
   </div>
 </template>
 

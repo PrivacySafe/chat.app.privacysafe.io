@@ -16,18 +16,14 @@
 -->
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
-import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { type Nullable, Ui3nButton, Ui3nTabs, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
 import { useAppStore } from '@main/common/store/app.store';
 import type { ChatMessageHistoryChange, RegularMsgView } from '~/index';
+import { ONE_HOUR, ONE_DAY, ONE_MONTH, ONE_MINUTE } from '@shared/constants';
 import ChatMessageInfoText from './chat-message-info-text.vue';
 import ChatMessageInfoReactions from './chat-message-info-reactions.vue';
 import ChatMessageInfoErrors from './chat-message-info-errors.vue';
-import { ONE_HOUR, ONE_DAY, ONE_MONTH } from '@shared/constants.ts';
-
-dayjs.extend(relativeTime);
 
 const props = defineProps<{
   msg: Nullable<RegularMsgView>
@@ -36,7 +32,7 @@ const emits = defineEmits<{
   (event: 'close'): void;
 }>();
 
-const { $tr } = inject(I18N_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const appStore = useAppStore();
 
 let remainingMessageLifespanTimerId: ReturnType<typeof setInterval> | null = null;
@@ -62,27 +58,25 @@ function getRemainingMessageLifespanAsString() {
   }
 
   const now = Date.now();
-  const diffMs = props.msg.removeAfter - now;
-  const dateStart = dayjs(now);
-  const dateEnd = dayjs(props.msg.removeAfter);
-  if (diffMs < ONE_HOUR) {
-    const minutes = dateEnd.diff(dateStart, 'minutes');
-    const seconds = dateEnd.diff(dateStart, 'seconds') % 60;
+  const diff = props.msg.removeAfter - now;
+  if (diff < ONE_HOUR) {
+    const minutes = Math.floor(diff / ONE_MINUTE);
+    const seconds = (diff % ONE_MINUTE) / 1000;
     remainingMessageLifespanAsText.value = `${minutes} ${$tr('chat.minutes')} ${seconds} ${$tr('chat.seconds')}`;
-  } else if (diffMs < ONE_DAY) {
-    const hours = dateEnd.diff(dateStart, 'hours');
-    const minutes = dateEnd.diff(dateStart, 'minutes') % 60;
+  } else if (diff < ONE_DAY) {
+    const hours = Math.floor(diff / ONE_HOUR);
+    const minutes = Math.ceil((diff - hours * ONE_HOUR) / ONE_MINUTE);
     remainingMessageLifespanAsText.value = `${hours} ${$tr('chat.hours')} ${minutes} ${$tr('chat.minutes')}`;
-  } else if (diffMs < ONE_MONTH) {
-    const days = dateEnd.diff(dateStart, 'days');
-    const hours = dateEnd.diff(dateStart, 'hours') % 24;
-    const minutes = dateEnd.diff(dateStart, 'minutes') % 60;
+  } else if (diff < ONE_MONTH) {
+    const days = Math.floor(diff / ONE_DAY);
+    const hours = Math.floor((diff - days * ONE_DAY) / ONE_HOUR);
+    const minutes = Math.ceil((diff - days * ONE_DAY - hours * ONE_HOUR) / ONE_MINUTE);
     remainingMessageLifespanAsText.value = `${days} ${$tr('chat.days')} ${hours} ${$tr('chat.hours')} ${minutes} ${$tr('chat.minutes')}`;
   } else {
-    const months = dateEnd.diff(dateStart, 'months');
-    const days = dateEnd.diff(dateStart, 'days') % 30;
-    const hours = dateEnd.diff(dateStart, 'hours') % 24;
-    const minutes = dateEnd.diff(dateStart, 'minutes') % 60;
+    const months = Math.floor(diff / ONE_MONTH);
+    const days = Math.floor((diff - months * ONE_MONTH) / ONE_DAY);
+    const hours = Math.floor((diff - months * ONE_MONTH - days * ONE_DAY) / ONE_HOUR);
+    const minutes = Math.ceil((diff - months * ONE_MONTH - days * ONE_DAY - hours * ONE_HOUR) / ONE_MINUTE);
     remainingMessageLifespanAsText.value = `${months} ${$tr('chat.months')} ${days} ${$tr('chat.days')} ${hours} ${$tr('chat.hours')} ${minutes} ${$tr('chat.minutes')}`;
   }
 }
@@ -94,7 +88,10 @@ watch(
       remainingMessageLifespanTimerId && clearInterval(remainingMessageLifespanTimerId);
 
       remainingMessageLifespanTimerId = setInterval(() => {
-        remainingMessageLifespan.value = props.msg ? props.msg.removeAfter - Date.now() : 0;
+        if (props.msg && props.msg.removeAfter) {
+          remainingMessageLifespan.value = props.msg.removeAfter - Date.now();
+        }
+
         getRemainingMessageLifespanAsString();
       }, 1000);
     }
@@ -129,10 +126,16 @@ onBeforeUnmount(() => {
         />
       </ui3n-tooltip>
 
-      <span v-if="appStore.isMobileMode">
-        {{ $tr('chat.info.dialog.mobile.auto.delete', { period: remainingMessageLifespanAsText }) }}
+      <span v-if="!msg || !msg?.removeAfter">
+        {{ $tr('chat.message.info.auto-delete.off') }}
       </span>
-      <span v-else>{{ $tr('chat.message.info.removeAfter', { period: remainingMessageLifespanAsText }) }}</span>
+
+      <template v-else>
+        <span v-if="appStore.isMobileMode">
+          {{ $tr('chat.message.info.mobile.removeAfter', { period: remainingMessageLifespanAsText }) }}
+        </span>
+        <span v-else>{{ $tr('chat.message.info.removeAfter', { period: remainingMessageLifespanAsText }) }}</span>
+      </template>
     </div>
 
     <div :class="$style.body">

@@ -1,2 +1,3 @@
-export * from './app-info.ts'
-export * from './chats.ts'
+export * from './app-info';
+export * from './chats';
+export * from './files';

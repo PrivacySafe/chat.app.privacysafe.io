@@ -27,15 +27,34 @@ import type {
   ChatMessageAttachmentsInfo,
   ChatMessageView,
   FileWithId,
-  MessageStatus,
+  ReadonlyFsWithId,
+  MessageStatus, ReadonlyFS,
 } from '~/index';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from './chat-ui.helper';
 
+export async function prepareAttachmentEntityInfo(
+  entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS,
+): Promise<ChatMessageAttachmentsInfo | undefined> {
+  if (!entity) {
+    return;
+  }
+
+  return {
+    name: entity.name,
+    size: (entity as ReadonlyFS).listFolder
+      ? 0
+      : (await (entity as FileWithId).stat()).size!,
+    isFolder: !!(entity as ReadonlyFS).listFolder,
+    ...((entity as ReadonlyFsWithId).id && { id: (entity as ReadonlyFsWithId).id }),
+    ...((entity as FileWithId).fileId && { id: (entity as FileWithId).fileId }),
+  };
+}
+
 export async function getAttachmentFilesInfo(
   { files, incomingAttachments, outgoingAttachments }:
   {
-    files?: web3n.files.ReadonlyFile[],
+    files?: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[],
     incomingAttachments?: web3n.files.ReadonlyFS,
     outgoingAttachments?: AttachmentsContainer
   },
@@ -44,31 +63,37 @@ export async function getAttachmentFilesInfo(
     return;
   }
 
-  const filesInfo = [] as ChatMessageAttachmentsInfo[];
+  const attachmentsInfo = [] as ChatMessageAttachmentsInfo[];
   if (!isEmpty(incomingAttachments)) {
-    const fileList = await incomingAttachments.listFolder('/');
-    for (const file of fileList) {
-      const fileStat = await incomingAttachments.stat(file.name);
-      const size = fileStat.size!;
-      filesInfo.push({ name: file.name, size });
+    const entities = await incomingAttachments.listFolder('/');
+    for (const entity of entities) {
+      const entityStat = await incomingAttachments.stat(entity.name);
+      const size = entityStat.isFolder ? 0 : entityStat.size;
+      attachmentsInfo.push({ name: entity.name, size: size || 0 });
     }
   } else {
-    const processedFiles = !isEmpty(files)
-      ? files!
-      : Object.values(outgoingAttachments!.files!);
-    for (const file of processedFiles!) {
-      const fileStat = await file.stat();
-      const size = fileStat.size!;
+    const processedEntities = !isEmpty(files)
+      ? files
+      : [...Object.values(outgoingAttachments!.files!), ...Object.values(outgoingAttachments!.folders!)];
+    for (const entity of processedEntities!) {
+      const entityStat = (entity as ReadonlyFsWithId).listFolder
+        ? {
+          name: entity.name,
+          size: 0,
+          isFolder: true,
+          ...((entity as ReadonlyFsWithId).id && { id: (entity as ReadonlyFsWithId).id }),
+        } : {
+          name: entity.name,
+          size: (await (entity as FileWithId).stat()).size!,
+          isFolder: false,
+          ...((entity as FileWithId).fileId && { id: (entity as FileWithId).fileId }),
+        };
 
-      filesInfo.push({
-        name: file.name,
-        size,
-        ...((file as FileWithId).fileId && { id: (file as FileWithId).fileId }),
-      });
+      attachmentsInfo.push(entityStat);
     }
   }
 
-  return filesInfo;
+  return attachmentsInfo;
 }
 
 function prepareMsgDataToExport(
@@ -142,7 +167,7 @@ export async function exportChatMessages(
         await (outFile as web3n.files.WritableFile).writeTxt(chatContent);
         return true;
       } catch (e) {
-        console.error(e);
+        w3n.log('error', 'Error chat messages content saving. ', e);
         return false;
       }
     }
@@ -202,13 +227,18 @@ function checkAction(
 export function getMessageActions(
   msg: ChatMessageView,
   $tr: (txt: string) => string,
+  readonly?: boolean,
 ): Omit<ChatMessageAction, 'conditions'>[] {
   const { isIncomingMsg, status, timestamp } = msg;
   const messageType = isIncomingMsg ? 'incoming' : 'outgoing';
   return messageActions
     .filter(action => {
-      const { conditions, disabled = false } = action;
+      const { conditions, allowInReadonlyMode, disabled = false } = action;
       if (disabled) {
+        return false;
+      }
+
+      if (readonly && !allowInReadonlyMode) {
         return false;
       }
 
@@ -225,6 +255,7 @@ export function getMessageActions(
           break;
         }
       }
+
       return isAllowedAction;
     })
     .map(item => ({

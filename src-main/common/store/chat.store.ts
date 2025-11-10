@@ -114,7 +114,7 @@ export const useChatStore = defineStore('chat', () => {
       chatId: ChatIdObj,
       chatMessageId?: string,
       text: string,
-      files: web3n.files.ReadonlyFile[] | undefined,
+      files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined,
       relatedMessage: RelatedMessage | undefined,
       withoutCurrentChatCheck?: boolean,
     }) {
@@ -130,7 +130,7 @@ export const useChatStore = defineStore('chat', () => {
   ) {
     const chat = chatsStore.getChatView(chatId);
     if (!chat) {
-      console.error(`The chat with id ${JSON.stringify(chatId)} is not found`);
+      w3n.log('error', `The chat with id ${JSON.stringify(chatId)} is not found.`);
       return;
     }
 

@@ -91,7 +91,7 @@ export function useVideoView(
             return;
           }
 
-          return transformWeb3nFileToFile(file3n);
+          return transformWeb3nFileToFile(file3n as web3n.files.ReadonlyFile);
         })
         .then(val => {
           if (!val) {

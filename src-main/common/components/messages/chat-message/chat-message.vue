@@ -16,12 +16,13 @@
 -->
 
 <script lang="ts" setup>
-import { computed, onMounted, useTemplateRef } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, useTemplateRef } from 'vue';
 import size from 'lodash/size';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { type Nullable, Ui3nIcon, Ui3nRadio } from '@v1nt1248/3nclient-lib';
 import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
-import { ChatInvitationMsgView, ChatMessageView, MessageStatus, RegularMsgView } from '~/index';
+import type { ChatInvitationMsgView, ChatMessageView, MessageStatus, RegularMsgView } from '~/index';
 import ChatMessageSystem from './chat-message-system.vue';
 import ChatMessageInvitationRequest from './chat-message-invitation-request.vue';
 import ChatMessageRegular from './chat-message-regular.vue';
@@ -29,6 +30,7 @@ import ChatMessageRegular from './chat-message-regular.vue';
 const props = defineProps<{
   msg: ChatMessageView;
   selectedMessages: string[];
+  messagesAreProcessing: string[];
   relatedMessage?: RegularMsgView['relatedMessage'];
   prevMsgSender: string | undefined;
   prevMsgInfo: Nullable<{ isIncomingMsg?: boolean, status: MessageStatus | undefined }>;
@@ -38,9 +40,12 @@ const emits = defineEmits<{
   (event: 'select', value: string): void;
 }>();
 
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const chatStore = useChatStore();
 const messagesStore = useMessagesStore();
 const { markMessageAsRead } = messagesStore;
+
+let intersectionObserver: IntersectionObserver | null = null;
 
 const chatMsgElement = useTemplateRef<Nullable<Element>>('chat-msg-element');
 
@@ -60,6 +65,7 @@ const isMsgFirstUnred = computed(() => props.msg.isIncomingMsg
 );
 
 const isSelectionMode = computed(() => size(props.selectedMessages) > 0);
+const isProcessing = computed(() => props.messagesAreProcessing.includes(props.msg.chatMessageId));
 
 function intersectHandler(
   entries: IntersectionObserverEntry[],
@@ -68,7 +74,7 @@ function intersectHandler(
   entries.forEach(async entry => {
     if (entry.isIntersecting) {
       const { chatMessageId, isIncomingMsg, chatMessageType, status, chatId } = props.msg;
-      const msgIdFromDomElement = entry.target.id.replace('msg-', '');
+      const msgIdFromDomElement = entry.target.id.replace('footer-', '');
 
       if (
         chatMessageId === msgIdFromDomElement
@@ -78,22 +84,30 @@ function intersectHandler(
       ) {
         await markMessageAsRead(chatId, chatMessageId);
       }
+
       observer.unobserve(entry.target);
     }
   });
 }
 
-onMounted(() => {
-  const observer = new IntersectionObserver(intersectHandler, {
-    root: document.getElementById('chatMessages'),
-    rootMargin: '0px',
-    threshold: 1,
-  });
-  if (chatMsgElement.value) {
-    observer.observe(chatMsgElement.value as Element);
+onMounted(async () => {
+  if (props.msg.chatMessageType === 'regular' && props.msg.status === 'unread') {
+    intersectionObserver = new IntersectionObserver(intersectHandler, {
+      root: document.getElementById('chat-messages'),
+      rootMargin: '0px',
+      threshold: 1,
+    });
+
+    const targetElement = document.getElementById(`footer-${props.msg.chatMessageId}`);
+    if (targetElement) {
+      intersectionObserver.observe(targetElement);
+    }
   }
 });
 
+onBeforeUnmount(() => {
+  intersectionObserver && intersectionObserver.disconnect();
+})
 </script>
 
 <template>
@@ -117,6 +131,7 @@ onMounted(() => {
         :model-value="selectedMessages.includes(msg.chatMessageId)"
         size="32"
         @change="emits('select', msg.chatMessageId)"
+        @click.stop.prevent
       >
         <template #checkedIcon>
           <ui3n-icon
@@ -162,7 +177,8 @@ onMounted(() => {
       :wrap-msg-element="chatMsgElement"
       :related-message="relatedMessage"
       :prev-msg-sender="prevMsgSender"
-      @click:right="emits('click:right', $event)"
+      :is-processing="isProcessing"
+      @click.right="emits('click:right', $event)"
     />
   </div>
 </template>

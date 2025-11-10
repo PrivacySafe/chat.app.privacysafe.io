@@ -50,7 +50,7 @@ export function useSystemLevelAppConfig() {
         const imgBlob = blobFromDataURL(dataURL);
         customLogoSrc.value = URL.createObjectURL(imgBlob);
       } catch (err) {
-        console.error(`Parsing dataURL with customLogo throws error:`, err);
+        w3n.log('error', 'Parsing dataURL with customLogo throws error.' , err);
       }
     } else {
       customLogoSrc.value = undefined;
@@ -75,13 +75,12 @@ export function useSystemLevelAppConfig() {
         },
       });
     } catch (e) {
-      console.error('Load the app config error: ', e);
+      w3n.log('error', 'Load the app config error. ', e);
     }
   }
 
   async function initialize(): Promise<void> {
     await Promise.all([
-
       w3n.myVersion().then(v => {
         appVersion.value = v;
       }),
@@ -91,7 +90,6 @@ export function useSystemLevelAppConfig() {
       }),
 
       readAndStartWatchingAppConfig()
-
     ]);
   }
 

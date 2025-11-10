@@ -54,7 +54,10 @@ const { prepareTimeForBlockNow, prepareTimeForBlockHistory } = useInfoChanges(ms
           :class="$style.msg"
         >
           <div
-            v-ui3n-html.sanitize.classes="currentText"
+            v-ui3n-html:sanitize="{
+              dirty: currentText,
+              allowedAttributes: { '*': ['class', 'data-mention', 'data-href'] }
+            }"
             :class="$style.text"
           />
         </div>
@@ -96,7 +99,10 @@ const { prepareTimeForBlockNow, prepareTimeForBlockHistory } = useInfoChanges(ms
 
         <div :class="$style.msg">
           <div
-            v-ui3n-html.sanitize.classes="change.value"
+            v-ui3n-html:sanitize="{
+              dirty: change.value,
+              allowedAttributes: { '*': ['class', 'data-mention', 'data-href'] }
+            }"
             :class="$style.text"
           />
         </div>

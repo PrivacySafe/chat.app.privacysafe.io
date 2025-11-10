@@ -53,37 +53,44 @@ export const chatMenuItems: ChatMenuItem[] = [
     icon: 'outline-timer',
     action: 'chat:timer',
     text: 'chat.action.menu.txt.timer',
-    chatTypes: ['single', 'group'],
+    chatTypes: ['single', 'group&admin'],
+    disable: ['chat-with-call'],
     subMenu: [
       {
         icon: '',
         action: 'chat:timer:0',
         text: 'chat.action.menu.txt.timer.0',
-        chatTypes: ['single', 'group'],
+        chatTypes: ['single', 'group&admin'],
       },
       {
         icon: '',
         action: 'chat:timer:1',
         text: 'chat.action.menu.txt.timer.1',
-        chatTypes: ['single', 'group'],
+        chatTypes: ['single', 'group&admin'],
       },
       {
         icon: '',
         action: 'chat:timer:2',
         text: 'chat.action.menu.txt.timer.2',
-        chatTypes: ['single', 'group'],
+        chatTypes: ['single', 'group&admin'],
       },
       {
         icon: '',
         action: 'chat:timer:3',
         text: 'chat.action.menu.txt.timer.3',
-        chatTypes: ['single', 'group'],
+        chatTypes: ['single', 'group&admin'],
       },
       {
         icon: '',
         action: 'chat:timer:4',
         text: 'chat.action.menu.txt.timer.4',
-        chatTypes: ['single', 'group'],
+        chatTypes: ['single', 'group&admin'],
+      },
+      {
+        icon: '',
+        action: 'chat:timer:5',
+        text: 'chat.action.menu.txt.timer.5',
+        chatTypes: ['single', 'group&admin'],
       },
     ],
   },
@@ -91,6 +98,7 @@ export const chatMenuItems: ChatMenuItem[] = [
     icon: 'outline-edit',
     action: 'chat:rename',
     text: 'chat.action.menu.txt.rename',
+    disable: ['chat-with-call'],
     chatTypes: ['group&admin'],
   },
   {
@@ -104,12 +112,14 @@ export const chatMenuItems: ChatMenuItem[] = [
     action: 'history:clean',
     text: 'chat.action.menu.txt.history.clean',
     chatTypes: ['single', 'group'],
+    disable: ['chat-with-call'],
   },
   {
     icon: 'round-close',
     action: 'chat:close',
     text: 'chat.action.menu.txt.close',
     chatTypes: ['single', 'group'],
+    disable: ['chat-with-call'],
   },
   {
     icon: 'outline-delete',
@@ -118,6 +128,7 @@ export const chatMenuItems: ChatMenuItem[] = [
     chatTypes: ['single', 'group'],
     isAccent: true,
     margin: true,
+    disable: ['chat-with-call'],
   },
 ];
 
@@ -147,6 +158,7 @@ export const messageActions: ChatMessageAction[] = [
     icon: { name: 'round-content-copy' },
     title: 'chat.message.actions.menu.txt.copy',
     conditions: ['incoming:::', 'outgoing:sent,read,error,canceled::'],
+    allowInReadonlyMode: true,
   },
   {
     id: 'forward',
@@ -165,39 +177,43 @@ export const messageActions: ChatMessageAction[] = [
     icon: { name: 'outline-download-for-offline' },
     title: 'chat.message.actions.menu.txt.download',
     conditions: ['incoming::true:', 'outgoing:sent,read,error,canceled:true:'],
+    allowInReadonlyMode: true,
   },
   {
     id: 'resend',
     icon: { name: 'round-refresh' },
     title: 'chat.message.actions.menu.txt.resend',
-    conditions: ['outgoing:error::']
+    conditions: ['outgoing:error::', 'outgoing:canceled::']
   },
   {
     id: 'select',
     icon: { name: 'round-check-circle-outline' },
     title: 'chat.message.actions.menu.txt.select',
     conditions: [':::'],
+    allowInReadonlyMode: true,
   },
   {
     id: 'info',
     icon: { name: 'outline-info', rotateIcon: 2 },
     title: 'chat.message.actions.menu.txt.info',
     conditions: [':::'],
+    allowInReadonlyMode: true,
   },
   {
     id: 'delete_message',
     icon: { name: 'outline-delete' },
     title: 'chat.message.actions.menu.txt.delete_message',
     conditions: ['incoming:::', 'outgoing:sent,read,error,canceled::'],
+    allowInReadonlyMode: true,
     blockStart: true,
     accent: 'var(--warning-content-default)',
   },
   {
     id: 'cancel_sending',
-    disabled: true,
-    icon: { name: 'outline-delete' },
+    icon: { name: 'round-cancel-schedule-send' },
     title: 'chat.message.actions.menu.txt.cancel_sending',
     conditions: ['outgoing:sending::'],
+    allowInReadonlyMode: true,
     blockStart: true,
     accent: 'var(--warning-content-default)',
   },
@@ -205,4 +221,64 @@ export const messageActions: ChatMessageAction[] = [
 
 export const validationParams = {
   chatsNameMaxLength: 50,
+};
+
+export const FILE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
+  doc: {
+    bg: 'var(--files-word-secondary)',
+    color: 'var(--files-word-primary)',
+  },
+  docx: {
+    bg: 'var(--files-word-secondary)',
+    color: 'var(--files-word-primary)',
+  },
+  xls: {
+    bg: 'var(--files-excel-secondary)',
+    color: 'var(--files-excel-primary)',
+  },
+  xlsx: {
+    bg: 'var(--files-excel-secondary)',
+    color: 'var(--files-excel-primary)',
+  },
+  pdf: {
+    bg: 'var(--files-pdf-secondary)',
+    color: 'var(--files-pdf-primary)',
+  },
+  jpg: {
+    bg: 'var(--files-image-secondary)',
+    color: 'var(--files-image-primary)',
+  },
+  jpeg: {
+    bg: 'var(--files-image-secondary)',
+    color: 'var(--files-image-primary)',
+  },
+  png: {
+    bg: 'var(--files-image-secondary)',
+    color: 'var(--files-image-primary)',
+  },
+  gif: {
+    bg: 'var(--files-image-secondary)',
+    color: 'var(--files-image-primary)',
+  },
+  tiff: {
+    bg: 'var(--files-image-secondary)',
+    color: 'var(--files-image-primary)',
+  },
+  webp: {
+    bg: 'var(--files-image-secondary)',
+    color: 'var(--files-image-primary)',
+  },
+  svg: {
+    bg: 'var(--files-image-secondary)',
+    color: 'var(--files-image-primary)',
+  },
+  ico: {
+    bg: 'var(--files-image-secondary)',
+    color: 'var(--files-image-primary)',
+  },
+};
+
+export const FILE_TYPE_COLOR_DEFAULT = {
+  bg: 'var(--color-bg-control-secondary-pressed)',
+  color: 'var(--color-text-control-primary-default)',
 };

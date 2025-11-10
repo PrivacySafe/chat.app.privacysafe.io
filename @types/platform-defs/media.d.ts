@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024 3NSoft Inc.
+ Copyright (C) 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,6 +23,11 @@ declare namespace web3n.media {
 		 * Sets handler for choosing "display media": screens and windows.
 		 */
 		setSelectDisplayMediaForCaptureHandler?: SetSelectDisplayMediaForCaptureHandler;
+
+		isAudioCaptureAvailable(): Promise<boolean>;
+
+		ensureDeviceAllowsScreenCapture(): Promise<boolean>;
+
 	}
 
 	/**
@@ -41,19 +46,19 @@ declare namespace web3n.media {
 		screens?: ScreenSrcInfo[];
 		windows?: WindowSrcInfo[];
 	}
-	
+
 	interface ScreenSrcInfo {
 		id: string;
 		name: string;
 		display_id: string;
 		thumbnail: Uint8Array;
 	}
-	
+
 	interface WindowSrcInfo {
 		id: string;
 		name: string;
 		thumbnail: Uint8Array;
 		appIcon?: Uint8Array;
 	}
-	
+
 }

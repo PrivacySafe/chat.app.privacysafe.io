@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,7 +19,16 @@
 declare namespace web3n.connectivity {
 
 	interface Connectivity {
-		isOnline(): Promise<OnlineAssesment>;
+		isOnline: () => Promise<OnlineAssesment>;
+		watch: (obs: Observer<ConnectivityEvent>) => (() => void);
+	}
+
+	interface ConnectivityEvent {
+		isOnline: boolean;
+		wsEvent?: {
+			ping?: number;
+			service: 'inbox'|'storage';
+		};
 	}
 
 	type OnlineAssesment = 'offline_99%' | 'online_80%';

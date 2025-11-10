@@ -15,27 +15,40 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { computed, inject, ref } from 'vue';
+import { computed, type ComputedRef, inject, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { I18N_KEY, DIALOGS_KEY, VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import { useAppStore } from '@video/common/store/app.store.ts';
-import { useStreamsStore } from '@video/common/store/streams.store.ts';
-import type { PeerEvents } from '@video/common/types/events.ts';
+import isEmpty from 'lodash/isEmpty';
+import difference from 'lodash/difference';
+import {
+  I18N_KEY,
+  DIALOGS_KEY,
+  VUEBUS_KEY,
+  VueBusPlugin,
+  I18nPlugin,
+  DialogsPlugin,
+} from '@v1nt1248/3nclient-lib/plugins';
+import { useAppStore } from '@video/common/store/app.store';
+import { useStreamsStore } from '@video/common/store/streams.store';
+import type { PeerVideo } from '~/index';
+import type { PeerEvents } from '@video/common/types/events';
+import type { SharedStream } from '@video/common/types';
 import ScreenShareChoiceDialog
   from '@video/desktop/components/dialogs/screen-share-choice-dialog/screen-share-choice-dialog.vue';
-import type { SharedStream } from '@video/common/types';
+
 
 export function useInCalls() {
   const { $emitter } = inject<VueBusPlugin<PeerEvents>>(VUEBUS_KEY)!;
-  const { $tr } = inject(I18N_KEY)!;
-  const dialog = inject(DIALOGS_KEY)!;
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
 
   const { user: ownName } = useAppStore();
   const streams = useStreamsStore();
-  const { isGroupChat, peers, ownScreens, isSharingOwnDeskSound } = storeToRefs(streams);
+  const { isGroupChat, peers, ownVA, isMicOn, isCamOn, ownScreens, isSharingOwnDeskSound } = storeToRefs(streams);
   const { handlePeerDisconnected, endCall, removeOwnScreen, addOwnScreen, setOwnDeskSoundSharing } = streams;
 
   const isFullscreen = ref(false);
+  const screenShareMode = ref<'row' | 'column'>('row');
+  const isParticipantListOpen = ref(false);
 
   const peerVideos = computed(
     () => peers.value.map(({ peerAddr, peerName }, i) => ({
@@ -45,7 +58,11 @@ export function useInCalls() {
       videoMuted: !peers.value[i].isCamOn,
       audioMuted: !peers.value[i].isMicOn,
     })),
-  );
+  ) as ComputedRef<PeerVideo[]>;
+  const activePeerVideos = computed(() => peerVideos.value.filter(item => item.vaStream));
+  const activePeerVideosForObservation = computed(() => JSON.stringify(
+    activePeerVideos.value.map(p => p.peerAddr),
+  ));
 
   const peerSharedStreams = computed(
     () => peers.value.flatMap(({ peerAddr, peerName }) => [
@@ -78,7 +95,12 @@ export function useInCalls() {
     }
   }
 
+  function toggleScreenShareMode() {
+    screenShareMode.value = screenShareMode.value === 'row' ? 'column' : 'row';
+  }
+
   function openScreenShareChoice() {
+    isParticipantListOpen.value = false;
     dialog.$openDialog<typeof ScreenShareChoiceDialog>({
       component: ScreenShareChoiceDialog,
       componentProps: {
@@ -126,16 +148,45 @@ export function useInCalls() {
     $emitter.off('peer:disconnected', endCallWhenPeerCloses);
   }
 
+  watch(
+    activePeerVideosForObservation,
+    (val, oVal) => {
+      if (!ownVA.value) {
+        return;
+      }
+
+      if (val && val !== oVal) {
+        const oldValueAsArray = oVal ? JSON.parse(oVal) : [];
+        const valueAsArray = JSON.parse(val);
+        const dif = difference(valueAsArray, oldValueAsArray);
+        if (!isEmpty(dif)) {
+          const streamId = ownVA.value.stream.id;
+          peers.value.forEach(({ channel }) => channel.signalOwnStreamState({
+            streamId,
+            audio: isMicOn.value,
+            video: isCamOn.value,
+          }));
+        }
+      }
+    }, {
+      immediate: true,
+    },
+  );
+
   return {
     ownName,
     isGroupChat,
     isFullscreen,
+    screenShareMode,
+    isParticipantListOpen,
     streams,
     peerVideos,
+    activePeerVideos,
     peerSharedStreams,
     toggleMicStatus,
     toggleCamStatus,
     toggleFullscreen,
+    toggleScreenShareMode,
     openScreenShareChoice,
     endCall,
     doOnMounted,

@@ -46,14 +46,14 @@ onMounted(async () => {
   isProcessing.value = true;
 
   try {
-    const file3n = await getFileByInfoFromMsg(props.item.id!, props.incomingMsgId);
-    if (!file3n) {
+    const entity = await getFileByInfoFromMsg(props.item.id!, props.incomingMsgId);
+    if (!entity) {
       isProcessing.value = false;
       emits('error');
       return null;
     }
 
-    const file = await transformWeb3nFileToFile(file3n);
+    const file = await transformWeb3nFileToFile(entity as web3n.files.ReadonlyFile);
     if (!file) {
       return null;
     }

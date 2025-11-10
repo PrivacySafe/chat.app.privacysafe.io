@@ -353,6 +353,10 @@ export class ChatsData {
     return this.msgs.getUnreadMsgsCountIn(chatId);
   }
 
+  async getRecentReactions(quantity: number): Promise<string[]> {
+    return this.msgs.getRecentReactions(quantity);
+  }
+
   async updateMessageRecord(
     chatMessageId: ChatMessageId,
     toUpdate: Partial<MsgDbEntry>,

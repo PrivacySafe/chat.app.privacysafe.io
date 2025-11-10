@@ -19,7 +19,7 @@
 import { computed, inject, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import dayjs from 'dayjs';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nBadge, Ui3nButton, Ui3nIcon, Ui3nHtml } from '@v1nt1248/3nclient-lib';
 import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from '@main/common/utils/chat-ui.helper';
@@ -37,7 +37,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits(['click']);
 
-const { $tr } = inject(I18N_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const { user: ownAddr } = storeToRefs(useAppStore());
 const { currentChatId } = storeToRefs(useChatStore());
 const { toggleRinging, joinIncomingCall, dismissIncomingCall, endCall } = useUiIncomingStore();
@@ -145,7 +145,7 @@ watch(
 
         <div
           v-else
-          v-ui3n-html.sanitize="message"
+          v-ui3n-html:sanitize="message"
           :class="$style.chatListItemMessage"
         />
       </div>

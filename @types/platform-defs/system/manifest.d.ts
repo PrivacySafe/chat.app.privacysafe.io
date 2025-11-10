@@ -25,6 +25,7 @@ declare namespace web3n.system {
 			platform?: 'all';
 			monitor?: 'all';
 			logout?: true;
+			userLogin?: 'all';
 		};
 	}
 

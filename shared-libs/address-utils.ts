@@ -54,7 +54,7 @@ export function toCanonicalAddress(address: string): string {
     user = address.substring(0, indOfAt).replace(whiteSpace, '');
   }
 
-  return `${user}@${domain}`.toLowerCase();
+  return `${user}@${domain}`.toLowerCase().trim();
 }
 
 export function includesAddress(arr: string[], address: string): boolean {

@@ -26,7 +26,7 @@ export function useCommandHandler() {
   async function openChatWith(cmdArg: OpenChatCmdArg): Promise<void> {
     const peerAddress = cmdArg?.peerAddress;
     if ((typeof peerAddress !== 'string') || !peerAddress) {
-      console.error(`Invalid peer address passed in open chat command`);
+      w3n.log('error', 'Invalid peer address passed in open chat command');
       return;
     }
 
@@ -58,7 +58,7 @@ export function useCommandHandler() {
         case 'incoming-call':
           return showIncomingCall(params[0]);
         default:
-          console.error(`🫤 Unknown/unimplemented command`, cmd, `with parameters`, params);
+          w3n.log('error', `🫤 Unknown/unimplemented command ${cmd}, with parameters ${(params || []).join(', ')}}`);
           break;
       }
     } catch (err) {
@@ -72,7 +72,7 @@ export function useCommandHandler() {
       next: cmdParams => {
         process(cmdParams);
       },
-      error: err => console.error(`Error in listening to commands for chat app:`, err),
+      error: err => w3n.log('error', `Error in listening to commands for chat app:`, err),
       complete: () => console.info(`Listening to commands for chat app is closed by platform side.`),
     });
 

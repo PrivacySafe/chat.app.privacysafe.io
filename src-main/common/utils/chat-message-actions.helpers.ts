@@ -18,7 +18,7 @@ import dayjs from 'dayjs';
 import size from 'lodash/size';
 import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
-import type { RegularMsgView } from '~/index';
+import type { ReadonlyFile, ReadonlyFS, RegularMsgView } from '~/index';
 
 export async function copyMessageToClipboard(message: RegularMsgView | undefined) {
   if (!message) {
@@ -46,26 +46,37 @@ export async function downloadAttachments(
   const messagesStore = useMessagesStore();
 
   const { incomingMsgId, attachments, sender, timestamp } = message;
-  const files = await messagesStore.getMessageAttachments(attachments, incomingMsgId);
+  const entities = await messagesStore.getMessageAttachments(attachments, incomingMsgId);
 
-  if (files && size(files) > 0) {
-    const targetFolderName = `${chatStore.currentChat?.name}_${sender}_${dayjs(timestamp).format('YYYY-MM-DD')}`;
-    const targetFs = await w3n.shell?.fileDialogs?.saveFolderDialog!(
-      $tr('chat.message.attachments.download.title'),
-      $tr('app.ok'),
-      targetFolderName,
-    );
+  try {
+    if (entities && size(entities) > 0) {
+      const targetFolderName = `${chatStore.currentChat?.name}_${sender}_${dayjs(timestamp).format('YYYY-MM-DD')}`;
+      const targetFs = await w3n.shell?.fileDialogs?.saveFolderDialog!(
+        $tr('chat.message.attachments.download.title'),
+        $tr('app.ok'),
+        targetFolderName,
+      );
 
-    if (!targetFs) {
+      if (!targetFs) {
+        return undefined;
+      }
+
+      for (const entityName of Object.keys(entities)) {
+        const isFolder = !!(entities[entityName] as ReadonlyFS).listFolder;
+
+        if (isFolder) {
+          await targetFs.saveFolder(entities[entityName] as ReadonlyFS, entityName);
+        } else {
+          await targetFs.saveFile(entities[entityName] as ReadonlyFile, entityName);
+        }
+      }
+
+      return true;
+    } else {
       return false;
     }
-
-    for (const fileName of Object.keys(files)) {
-      await targetFs.saveFile(files[fileName], fileName);
-    }
-
-    return true;
-  } else {
+  } catch (err) {
+    w3n.log('error', $tr('chat.message.file.download.error'), err);
     return false;
   }
 }

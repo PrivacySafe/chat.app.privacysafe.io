@@ -36,7 +36,7 @@ export const useContactsStore = defineStore('contacts', () => {
         }))
         .sort((a, b) => (a.displayName > b.displayName ? 1 : -1));
     } catch (e) {
-      console.error(e);
+      w3n.log('error', 'Error contacts fetching. ', e);
     }
     return contactList.value;
   }

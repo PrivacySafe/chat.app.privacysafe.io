@@ -20,6 +20,7 @@ import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import { getChatName } from '@main/common/utils/chat-ui.helper';
 import type { ChatInfoDialogProps, ChatInfoDialogEmits } from './types';
 import { useChatInfo } from './useChatInfo';
+import { AUTODELETE_OFF } from '@shared/constants';
 import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
 import ContactList from '@main/common/components/contacts/contact-list.vue';
 import ListItemMenu from './list-item-menu.vue';
@@ -103,7 +104,12 @@ const {
             </span>
 
             <span :class="$style.chatInfoDialogAutoDeleting">
-              <i>{{ $tr('chat.info.dialog.auto.delete', { period: $tr(autoDeleteMessageInfo.label) }) }}</i>
+              <i v-if="autoDeleteMessageInfo.value === AUTODELETE_OFF">
+                {{ $tr('chat.info.dialog.auto.delete.off') }}
+              </i>
+              <i v-else>
+                {{ $tr('chat.info.dialog.auto.delete', { period: $tr(autoDeleteMessageInfo.label) }) }}
+              </i>
             </span>
 
             <span

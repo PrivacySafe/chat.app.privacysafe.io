@@ -67,7 +67,7 @@ export function useAppView() {
 
       deleteExpiredMessagesTimerId = setInterval(() => deleteExpiredMessages(), 60000);
     } catch (e) {
-      console.error('Error while the app component mounting. ', e);
+      w3n.log('error', 'Error while the app component mounting.', e)
       throw e;
     }
   });

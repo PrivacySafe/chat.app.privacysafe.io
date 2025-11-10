@@ -18,8 +18,9 @@
 import { computed, ComputedRef, inject } from 'vue';
 import { storeToRefs } from 'pinia';
 import get from 'lodash/get';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
-import { Ui3nHtml as vUi3nHtml, type Nullable } from '@v1nt1248/3nclient-lib';
+import size from 'lodash/size';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { Ui3nHtml as vUi3nHtml, type Nullable, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import type { OutgoingMessageStatus, RegularMsgView } from '~/index';
 import { useAppStore } from '@main/common/store/app.store';
@@ -29,19 +30,16 @@ import { useUiOutgoingStore } from '@main/common/store/ui.outgoing.store';
 import ChatMessageStatus from './chat-message-status.vue';
 import ChatMessageAttachments from './chat-message-attachments/chat-message-attachments.vue';
 import ChatMessageReactions from './chat-message-reactions/chat-message-reactions.vue';
-import size from 'lodash/size';
 
 const props = defineProps<{
   msg: RegularMsgView;
   wrapMsgElement: Nullable<Element>;
   relatedMessage?: RegularMsgView['relatedMessage'];
   prevMsgSender: string | undefined;
-}>();
-const emits = defineEmits<{
-  (event: 'click:right', value: MouseEvent): void;
+  isProcessing?: boolean;
 }>();
 
-const { $tr } = inject(I18N_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 const { user: ownAddr, isMobileMode } = storeToRefs(useAppStore());
 const { getContactName } = useContactsStore();
@@ -99,6 +97,7 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
       $style.chatMessageRegular,
       isMobileMode && $style.chatMessageRegularMobile,
       isIncomingMsg ? $style.incoming : $style.outgoing,
+      isProcessing && $style.chatMessageRegularProcessing,
     ]"
   >
     <div
@@ -122,7 +121,10 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
             {{ getContactName(replyMessage.sender || ownAddr) }}
           </span>
           <span
-            v-ui3n-html.sanitize.classes="replyMessageText"
+            v-ui3n-html:sanitize="{
+              dirty: replyMessageText,
+              allowedAttributes: { '*': ['class', 'data-mention', 'data-href'] }
+            }"
             :class="$style.replyMessageText"
           />
         </div>
@@ -135,18 +137,23 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
         </div>
 
         <pre
-          v-ui3n-html.sanitize.classes="msg.body"
+          v-ui3n-html:sanitize="{
+            dirty: msg.body,
+            allowedAttributes: { '*': ['class', 'data-mention', 'data-href'] }
+          }"
           :class="$style.text"
+          style="pointer-events: auto;"
         />
 
         <chat-message-attachments
           v-if="msg.attachments"
           :message="msg"
-          :disabled="!isIncomingMsg"
-          @click:right="emits('click:right', $event)"
         />
 
-        <div :class="$style.footer">
+        <div
+          :id="`footer-${msg.chatMessageId}`"
+          :class="$style.footer"
+        >
           <chat-message-reactions
             :reactions="msg.reactions"
             :is-incoming-msg="isIncomingMsg"
@@ -173,15 +180,40 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
         </div>
 
         <div
-          v-if="msgsSendingProgress[chatMsgInfo]"
+          v-if="msgsSendingProgress[chatMsgInfo]?.progress > 0"
           :class="$style.progress"
         >
-          {{ msgsSendingProgress[chatMsgInfo] }}%
+          {{ msgsSendingProgress[chatMsgInfo].progress }}%
         </div>
+      </div>
+
+      <div
+        v-if="isProcessing"
+        :class="$style.processing"
+      >
+        <ui3n-progress-circular
+          indeterminate
+          size="32"
+        />
       </div>
     </div>
   </div>
 </template>
+
+<style lang="scss">
+.mention {
+  display: inline-block;
+  color: var(--color-text-chat-bubble-user-quote-header);
+  padding: 2px var(--spacing-xs);
+  border-radius: var(--spacing-xs);
+  background-color: var(--color-bg-block-tritery-disabled);
+}
+
+.url {
+  display: inline-block;
+  color: var(--color-text-chat-bubble-user-quote-header);
+}
+</style>
 
 <style lang="scss" module>
 .chatMessageRegular {
@@ -205,7 +237,7 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
 
     .content {
       max-width: calc(var(--message-max-width) - 120px);
-      background-color: var(--color-bg-chat-bubble-user-default);
+      background-color: var(--color-bg-chat-bubble-user-default) !important;
     }
   }
 
@@ -214,8 +246,12 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
 
     .content {
       max-width: calc(var(--message-max-width) - 95px);
-      background-color: var(--color-bg-chat-bubble-other-default);
+      background-color: var(--color-bg-chat-bubble-other-default) !important;
     }
+  }
+
+  &.chatMessageRegularProcessing {
+    pointer-events: none;
   }
 }
 
@@ -223,7 +259,7 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
   position: relative;
   min-width: var(--message-min-width);
   border-radius: var(--spacing-s);
-  padding: var(--spacing-s) var(--spacing-sm) var(--spacing-xs) var(--spacing-sm);
+  padding: var(--spacing-m) var(--spacing-sm) var(--spacing-s) var(--spacing-sm);
   font-size: var(--font-14);
   color: var(--color-text-chat-bubble-other-default);
   cursor: pointer;
@@ -246,6 +282,7 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
   line-height: var(--font-14);
   color: var(--color-text-control-primary-default);
   background-color: var(--color-bg-chat-bubble-other-quote);
+  margin-bottom: var(--spacing-xs);
 }
 
 .replyMessageSender {
@@ -273,8 +310,7 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
 
 .progress {
   position: absolute;
-  font-size: var(--font-10);
-  line-height: var(--font-12);
+  font-size: var(--font-12);
   font-weight: 500;
   color: var(--color-text-chat-bubble-other-default);
   right: var(--spacing-s);
@@ -308,5 +344,15 @@ const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
   line-height: var(--font-12);
   font-weight: 500;
   color: var(--color-text-chat-bubble-other-sub);
+}
+
+.processing {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 </style>

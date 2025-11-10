@@ -20,11 +20,14 @@ import { ChatMessageSendingProgressEvent } from '~/services.types.ts';
 import { LocalMetadataInDelivery } from '~/chat.types.ts';
 
 export const useUiOutgoingStore = defineStore('ui-outgoing', () => {
-  const msgsSendingProgress = ref<Record<string, number>>({});
+  const msgsSendingProgress = ref<Record<string, {
+    deliveryId: string;
+    progress: number;
+  }>>({});
 
   function updateSendingProgressesList(event: ChatMessageSendingProgressEvent) {
     const { data } = event;
-    const { progress } = data;
+    const { id: deliveryId, progress } = data;
     const { localMeta, allDone, msgSize, recipients } = progress;
 
     const chatMsgInfo = JSON.stringify([
@@ -44,7 +47,10 @@ export const useUiOutgoingStore = defineStore('ui-outgoing', () => {
         return res;
       }, 0);
 
-    msgsSendingProgress.value[chatMsgInfo] = Math.min(Math.round(bytesSent / msgSize * 100), 100);
+    msgsSendingProgress.value[chatMsgInfo] = {
+      deliveryId,
+      progress: Math.min(Math.round(bytesSent / msgSize * 100), 100)
+    };
   }
 
   function removeRecordFromSendingProgressesList(msgInfo: string) {

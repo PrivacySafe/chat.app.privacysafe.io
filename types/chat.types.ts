@@ -33,7 +33,7 @@ export interface ChatMenuItem {
   action: string; // the composite action -> entity:action:value
   text: string;
   chatTypes: ('single' | 'group' | 'group&admin')[];
-  disabled?: boolean;
+  disable?: ('chat-with-call' | 'incoming-call')[];
   isAccent?: boolean;
   margin?: boolean;
   subMenu?: ChatMenuItem[];
@@ -95,6 +95,7 @@ export interface ChatMessageHistory {
 export interface ChatMessageAttachmentsInfo {
   id?: string;
   name: string;
+  isFolder?: boolean;
   size: number;
 }
 
@@ -202,6 +203,7 @@ export interface ChatMessageAction {
   };
   title: string;
   conditions: string[];
+  allowInReadonlyMode?: boolean;
   blockStart?: boolean;
   accent?: string;
   disabled?: boolean;

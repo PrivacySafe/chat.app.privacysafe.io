@@ -18,7 +18,7 @@
 import { computed, inject } from 'vue';
 import { storeToRefs } from 'pinia';
 import get from 'lodash/get';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nButton, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { getTextForChatInvitationMessage } from '@main/common/utils/chat-ui.helper';
@@ -34,7 +34,7 @@ const props = defineProps<{
   msg: ChatInvitationMsgView;
 }>();
 
-const { $tr } = inject(I18N_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 const { router } = useRouting();
 
 const { user, isMobileMode } = storeToRefs(useAppStore());
@@ -56,7 +56,7 @@ const date = computed(() => {
 
 const isChatAccepted = computed(() =>
   (currentChat.value?.isGroupChat && get(currentChat.value, ['members', user.value, 'hasAccepted']))
-  || (!currentChat.value?.isGroupChat && currentChat.value?.status === 'on')
+  || (!currentChat.value?.isGroupChat && currentChat.value?.status === 'on'),
 );
 
 const doesAllowAddingContact = computed(() => !contactList.value.find(c => c.mail === props.msg.sender));
@@ -109,7 +109,7 @@ async function addContactToList() {
     </ui3n-tooltip>
 
     <div
-      v-if="!isChatAccepted"
+      v-if="!isChatAccepted && currentChat?.status !== 'no-members' && currentChat?.status !== 'accepted'"
       :class="$style.action"
     >
       <ui3n-button
@@ -119,7 +119,7 @@ async function addContactToList() {
         text-color="var(--warning-fill-default)"
         @click.stop.prevent="deny"
       >
-        Deny
+        {{ $tr('chat.invitation.deny') }}
       </ui3n-button>
 
       <ui3n-button
@@ -129,7 +129,7 @@ async function addContactToList() {
         text-color="var(--success-fill-default)"
         @click.stop.prevent="accept"
       >
-        Accept
+        {{ $tr('chat.invitation.accept') }}
       </ui3n-button>
     </div>
 
@@ -149,7 +149,6 @@ async function addContactToList() {
   overflow: hidden;
   height: var(--spacing-l);
   margin: var(--spacing-s) auto;
-  //border-radius: var(--spacing-l);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -171,6 +170,7 @@ async function addContactToList() {
 
     .text {
       white-space: break-spaces;
+      text-align: center;
     }
 
     .date {
@@ -183,12 +183,14 @@ async function addContactToList() {
   position: relative;
   min-width: 100px;
   color: var(--color-text-block-secondary-default);
+  text-align: center;
 
   @include mixins.text-overflow-ellipsis();
 }
 
 .date {
   flex-grow: 1;
+  min-width: fit-content;
   white-space: nowrap;
   position: relative;
   color: var(--color-text-chat-bubble-user-sub);

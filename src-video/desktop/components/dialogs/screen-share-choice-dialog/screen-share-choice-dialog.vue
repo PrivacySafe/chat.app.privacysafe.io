@@ -18,7 +18,7 @@
 <script lang="ts" setup>
 import { Ui3nSwitch } from '@v1nt1248/3nclient-lib';
 import type { SharedStream } from '@video/common/types';
-import { useScreenShareChoiceDialog } from './sharing-choice-dialog.ts';
+import { useScreenShareChoiceDialog } from './sharing-choice-dialog';
 import SharePreview from '@video/desktop/components/share-preview.vue';
 
 export interface ScreenShareChoicesProps {
@@ -34,6 +34,7 @@ const props = defineProps<ScreenShareChoicesProps>();
 const emits = defineEmits<ScreenShareChoicesEmits>();
 
 const {
+  isAudioCaptureAvailable,
   selectAudio,
   windowChoices,
   screenChoices,
@@ -45,7 +46,10 @@ const {
 <template>
   <div :class="$style.shareOptions">
     <div :class="$style.body">
-      <div :class="$style.soundShare">
+      <div
+        v-if="isAudioCaptureAvailable"
+        :class="$style.soundShare"
+      >
         <ui3n-switch
           v-model="selectAudio"
           size="24"

@@ -17,20 +17,18 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 
 import { defineStore } from 'pinia';
 import { computed, ref, type Ref } from 'vue';
+import isEmpty from 'lodash/isEmpty';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import { toRO } from '@main/common/utils/readonly';
 import { usePeerFuncs } from './utils/peer';
-import { makePeerState } from './utils/utils';
-import { useOwnVideoAudio } from './utils/own-video-audio';
+import { makePeerState, toggleAudioIn, toggleVideoIn } from './utils/utils';
 import { useOwnScreenShare } from './utils/own-screen-share';
 import { areAddressesEqual } from '@shared/address-utils';
 import { useAppStore } from '@video/common/store/app.store';
 import { videoChatSrv } from '@video/common/services/service-provider';
 import { PeerChannelWithStreams } from '@video/common/services/streaming-channel';
-import type { PeerState } from '@video/common/types';
+import type { OwnVideoAudio, PeerState } from '@video/common/types';
 import type { ChatIdObj } from '~/asmail-msgs.types';
 import { generateChatMessageId } from '@shared/chat-ids';
-import { isEmpty } from 'lodash';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 function noop() {
@@ -44,6 +42,67 @@ export const useStreamsStore = defineStore('streams', () => {
   const chatName = ref('');
   const ownName = ref('');
   const ownAddr = ref('');
+
+  const ownVA = ref<Nullable<OwnVideoAudio>>(null);
+  const isMicOn = ref(false);
+  const isCamOn = ref(false);
+
+  const isOwnAudioAvailable = computed(() => ownVA.value
+    ? ownVA.value.stream.getAudioTracks().length > 0
+    : undefined,
+  );
+  const isOwnVideoAvailable = computed(() => ownVA.value
+    ? ownVA.value.stream.getVideoTracks().length > 0
+    : undefined,
+  );
+
+  const isGroupChat = computed(() => chatObjId.value?.isGroupChat);
+  const isAnyOneConnected = computed(
+    () => !!peers.value.find(p => p.webRTCConnected),
+  );
+  const singlePeer = computed(() => peers.value[0]);
+
+  const peerFuncs = usePeerFuncs(getPeer);
+  const ownScreenShare = useOwnScreenShare(peers as Ref<PeerState[]>);
+
+  function setMicOn(val: boolean): void {
+    if (isMicOn.value !== val && ownVA.value) {
+      isMicOn.value = val;
+      toggleAudioIn(ownVA.value.stream, val);
+      const streamId = ownVA.value.stream.id;
+      peers.value.forEach(({ channel }) => channel.signalOwnStreamState({
+        streamId,
+        audio: val,
+        video: isCamOn.value,
+      }));
+    }
+  }
+
+  function setCamOn(val: boolean): void {
+    if (isCamOn.value !== val && ownVA.value) {
+      isCamOn.value = val;
+      toggleVideoIn(ownVA.value.stream, val);
+      const streamId = ownVA.value.stream.id;
+      peers.value.forEach(({ channel }) => channel.signalOwnStreamState({
+        streamId,
+        audio: isMicOn.value,
+        video: isCamOn.value,
+      }));
+    }
+  }
+
+  function setOwnVAStream(val: Nullable<MediaStream>, videoDevId: Nullable<string>): void {
+    if (val) {
+      ownVA.value = {
+        stream: val,
+        deviceId: videoDevId!,
+      };
+      toggleAudioIn(ownVA.value.stream, isMicOn.value);
+      toggleVideoIn(ownVA.value.stream, isCamOn.value);
+    } else {
+      ownVA.value = null;
+    }
+  }
 
   function initialize(
     chatId: ChatIdObj,
@@ -62,23 +121,26 @@ export const useStreamsStore = defineStore('streams', () => {
     ));
   }
 
-  const isGroupChat = computed(() => chatObjId.value?.isGroupChat);
-  const isAnyOneConnected = computed(
-    () => !!peers.value.find(p => p.webRTCConnected),
-  );
-  const singlePeer = computed(() => peers.value[0]);
-
   function getPeer(peerAddr: string) {
     const peer = peers.value.find(p => areAddressesEqual(p.peerAddr, peerAddr));
     if (!peer) {
       throw new Error(`Peer with address ${peerAddr} not found among ${peers.value.length} peers. Is it exact spelling as is used in chat info?`);
     }
+
     return peer as PeerState;
   }
 
-  const ownVideoAudio = useOwnVideoAudio(peers as Ref<PeerState[]>);
-  const ownScreenShare = useOwnScreenShare(peers as Ref<PeerState[]>);
-  const { ownVA } = ownVideoAudio;
+  function updatePeer(peerAddr: string, data: Partial<PeerState> = {}) {
+    const peerIndex = peers.value.findIndex(p => areAddressesEqual(p.peerAddr, peerAddr));
+    if (peerIndex === -1) {
+      throw new Error(`Peer with address ${peerAddr} not found among ${peers.value.length} peers. Is it exact spelling as is used in chat info?`);
+    }
+
+    Object.keys(data).forEach(field => {
+      // @ts-ignore
+      peers.value[peerIndex][field] = data[field];
+    });
+  }
 
   function startCall() {
     if (!ownVA.value) {
@@ -103,7 +165,8 @@ export const useStreamsStore = defineStore('streams', () => {
 
     if (isGroupChat.value) {
       await Promise.allSettled(
-        peers.value.map(({ channel }) => channel.close().catch(err => console.error(err)),
+        peers.value.map(({ peerAddr, channel }) => channel.close()
+          .catch(err => w3n.log('error', `Error closing channel with ${peerAddr}`, err)),
         ));
     } else {
       await singlePeer.value.channel.close();
@@ -147,9 +210,14 @@ export const useStreamsStore = defineStore('streams', () => {
 
   return {
     peers,
-    chatName: toRO(chatName),
-    ownName: toRO(ownName),
-    ownAddr: toRO(ownAddr),
+    chatName,
+    ownName,
+    ownAddr,
+    ownVA,
+    isMicOn,
+    isCamOn,
+    isOwnAudioAvailable,
+    isOwnVideoAvailable,
 
     isGroupChat,
     chatObjId,
@@ -160,8 +228,12 @@ export const useStreamsStore = defineStore('streams', () => {
     startCall,
     endCall,
     getPeer,
-    ...usePeerFuncs(getPeer),
-    ...ownVideoAudio,
+    updatePeer,
+    setMicOn,
+    setCamOn,
+    setOwnVAStream,
+
+    ...peerFuncs,
     ...ownScreenShare,
     handlePeerDisconnected,
   };

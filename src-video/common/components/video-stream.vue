@@ -19,7 +19,7 @@
 import { onMounted, useTemplateRef } from 'vue';
 
 const { stream, isStreamOwn, muted } = defineProps<{
-  stream: MediaStream|Promise<MediaStream>;
+  stream: MediaStream | Promise<MediaStream> | undefined;
   isStreamOwn?: boolean;
   muted?: boolean;
 }>();
@@ -28,7 +28,7 @@ const videoTag = useTemplateRef<HTMLVideoElement>('video-tag');
 
 onMounted(async () => {
   if ((stream as Promise<MediaStream>).then) {
-    videoTag.value!.srcObject = await stream;
+    videoTag.value!.srcObject = (await stream) as MediaStream;
   } else {
     videoTag.value!.srcObject = stream as MediaStream;
   }

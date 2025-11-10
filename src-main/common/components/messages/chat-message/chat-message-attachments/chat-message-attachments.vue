@@ -25,10 +25,7 @@ import ChatMessageAttachment from './chat-message-attachment.vue';
 
 const props = defineProps<{
   message: RegularMsgView;
-  disabled: boolean;
-}>();
-const emits = defineEmits<{
-  (event: 'click:right', value: MouseEvent): void;
+  disabled?: boolean;
 }>();
 
 const attachments = computed<AttachmentViewInfo[]>(() => {
@@ -38,13 +35,13 @@ const attachments = computed<AttachmentViewInfo[]>(() => {
 
   return props.message.attachments!.map(i => {
     const lastDotPosition = i.name.lastIndexOf('.');
-    const ext = getFileExtension(i.name);
+    const ext = getFileExtension(i.name).toLowerCase();
     const data: AttachmentViewInfo = {
       ...i,
       filename: i.name.slice(0, lastDotPosition),
       ext,
       id: i.id || i.name,
-      isActionAvailable: isActionAvailableForFile(i) || ext === 'pdf',
+      isActionAvailable: isActionAvailableForFile(i) || ['zip', 'pdf'].includes(ext) || i.isFolder,
     };
     return data;
   });
@@ -67,7 +64,6 @@ function isActionAvailableForFile(item: ChatMessageAttachmentsInfo) {
       <chat-message-attachment
         :item="item"
         :incoming-msg-id="message.incomingMsgId"
-        @click.right="emits('click:right', $event)"
       />
     </template>
   </div>

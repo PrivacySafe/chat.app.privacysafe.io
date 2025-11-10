@@ -46,16 +46,21 @@ export async function makePdfThumbnail(
 }
 
 export async function createPdfThumbnail(
-  { fileId, incomingMsgId, targetSize = 200 }:
-  { fileId: string; incomingMsgId?: string; targetSize?: number },
+  { file3n, fileId, incomingMsgId, targetSize = 200 }:
+  {
+    file3n?: web3n.files.ReadonlyFile,
+    fileId?: string;
+    incomingMsgId?: string;
+    targetSize?: number,
+  },
 ): Promise<Nullable<string>> {
-  const file3n = await getFileByInfoFromMsg(fileId, incomingMsgId);
-  if (!file3n) {
+  const processedFile3n = file3n || await getFileByInfoFromMsg(fileId!, incomingMsgId);
+  if (!processedFile3n) {
     return null;
   }
   await schedulerYield();
 
-  const byteArray = await file3n.readBytes();
+  const byteArray = await (processedFile3n as web3n.files.ReadonlyFile).readBytes();
   if (!byteArray) {
     return null;
   }

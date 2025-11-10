@@ -23,21 +23,25 @@ import VideoStream from "@video/common/components/video-stream.vue";
 const props = defineProps<{
   peerName: string;
   peerAddr: string;
-  stream: MediaStream;
+  stream: MediaStream | Promise<MediaStream> | undefined;
   isVideoOn: boolean;
   isAudioOn: boolean;
   styleClass?: string|(string|Record<string,boolean>)[]|Record<string,boolean>;
   size?: 'normal' | 'small';
 }>();
 
+const sizeCss = computed(() => props.size === 'small' ? '16px' : '24px');
+
 const isAudioOnly = computed(() => (!props.isVideoOn && props.isAudioOn));
-let audio: HTMLAudioElement|undefined = undefined;
+
+let audio: HTMLAudioElement | undefined = undefined;
+
 const onAudioOnlyEffect = watchEffect(() => {
   if (isAudioOnly.value) {
     if (!audio) {
       audio = new Audio();
       audio.autoplay = true;
-      audio.srcObject = props.stream;
+      audio.srcObject = props.stream as MediaStream;
     }
   } else {
     if (audio) {
@@ -71,19 +75,25 @@ onBeforeUnmount(() => {
       :width="size === 'small' ? 72 : 144"
     />
 
-    <ui3n-icon
+    <div
       v-if="!isAudioOn"
-      icon="round-mic-off"
-      color="var(--color-icon-button-tritery-default)"
-      :width="size === 'small' ? 16 : 24"
-      :height="size === 'small' ? 16 : 24"
-      :class="$style.micIcon"
-    />
+      :class="$style.micOff"
+    >
+      <ui3n-icon
+        icon="round-mic-off"
+        color="var(--color-icon-chat-bubble-other-selected)"
+        :width="size === 'small' ? 16 : 24"
+        :height="size === 'small' ? 16 : 24"
+      />
+    </div>
   </div>
 </template>
 
 <style lang="scss" module>
 .peerVideo {
+  --peer-icon-size: v-bind(sizeCss);
+  --peer-icon-wrap-size: calc(var(--peer-icon-size) * 1.25);
+
   position: relative;
   width: 100%;
   height: 100%;
@@ -94,10 +104,16 @@ onBeforeUnmount(() => {
   border-radius: var(--spacing-s);
 }
 
-.micIcon {
+.micOff {
   position: absolute;
-  left: calc(50% - var(--spacing-s));
-  top: var(--spacing-s);
+  right: calc(var(--peer-icon-wrap-size) / 4);
+  top: calc(var(--peer-icon-wrap-size) / 4);
+  width: var(--peer-icon-wrap-size);
+  height: var(--peer-icon-wrap-size);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: var(--color-bg-block-tritery-default);
 }
-
 </style>

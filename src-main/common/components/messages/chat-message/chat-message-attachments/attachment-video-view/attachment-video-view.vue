@@ -71,7 +71,7 @@ const {
             <ui3n-slider
               v-if="videoPlayerRef"
               :model-value="volume"
-              :transform-value-method="val => `${val}%`"
+              :transform-value-method="(val: number) => `${val}%`"
               :disabled="isProcessing || !videoPlayerRef?.src"
               @update:model-value="updateVolume"
             />

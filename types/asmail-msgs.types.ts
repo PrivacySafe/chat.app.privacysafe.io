@@ -93,14 +93,18 @@ export interface ChatInvitationMsgV1 extends ChatMessageJsonBodyV1Base {
   inviteData: InvitationProcessMsgData;
 }
 
-export type InvitationProcessMsgData = GroupChatParameters | OneToOneChatParameters | AcceptedInvitationReference;
+export type InvitationProcessMsgData = GroupChatParameters
+  | OneToOneChatParameters
+  | AcceptedInvitationReference
+  | UpdatedMembersInvitationData;
 
 export interface GroupChatParameters {
   type: 'group-chat-invite';
   groupChatId: string;
   name: string;
-  members: Record<string, { hasAccepted: boolean }>;
-  admins: string[];
+  addr?: string;
+  members?: Record<string, { hasAccepted: boolean }>;
+  admins?: string[];
 }
 
 /**
@@ -112,11 +116,10 @@ export interface OneToOneChatParameters {
   name: string;
 }
 
-export type StoredInvitationParams = AcceptedInvitationReference | (
-  (GroupChatParameters | OneToOneChatParameters) & {
+export type StoredInvitationParams = AcceptedInvitationReference
+  | ((GroupChatParameters | OneToOneChatParameters) & {
   neverContactedInitiator?: boolean;
-}
-  );
+});
 
 export interface AcceptedInvitationReference {
   type: 'invite-acceptance';
@@ -140,6 +143,12 @@ export interface AcceptedInvitationReference {
    * oneToOneChat contains contact parameters of invitation accepting side.
    */
   oneToOneChat?: OneToOneChatParameters;
+}
+
+export interface UpdatedMembersInvitationData {
+  type: 'updated-members-invitation-data';
+  chatId: ChatIdObj;
+  members: string[];
 }
 
 export interface ChatWebRTCMsgV1 extends ChatMessageJsonBodyV1Base {
@@ -178,7 +187,7 @@ export interface RelatedMessage {
   };
   forwardFrom?: {
     sender: string;
-  }
+  };
 }
 
 /**
@@ -235,7 +244,7 @@ export interface MemberLeftSysMsgData {
   event: 'member-left';
   value?: {
     sender: string;
-  }
+  };
 }
 
 export interface MemberRemovalSysMsgData {

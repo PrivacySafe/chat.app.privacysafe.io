@@ -22,6 +22,7 @@ import type { Task } from '~/index';
 import { createPdfThumbnail } from '@main/common/utils/create-thumbnail/create-pdf-thumbnail';
 import { createImageThumbnail } from '@main/common/utils/create-thumbnail/create-image-thumbnail';
 import { createVideoThumbnail } from '@main/common/utils/create-thumbnail/create-video-thumbnail';
+import { useOpenAttachment } from './useOpenAttachment';
 import type { AttachmentViewInfo } from './types';
 import ChatMessageAttachmentView from './chat-message-attachment-view.vue';
 
@@ -29,11 +30,10 @@ const props = defineProps<{
   item: AttachmentViewInfo;
   incomingMsgId?: string;
 }>();
-const emits = defineEmits<{
-  (event: 'click:right', value: MouseEvent): void;
-}>();
 
 const { addTask } = inject('task-runner') as { addTask: (task: Task) => void };
+
+const { openEntity } = useOpenAttachment(props);
 
 const thumbnail = ref<Nullable<string>>(null);
 const isThumbnailCreationProcessGoingOn = ref(false);
@@ -56,8 +56,15 @@ const previewStyle = computed(() => {
   }
 });
 
-function onAttachmentElementClick() {
-  isViewOpen.value = true;
+async function onAttachmentElementClick() {
+  if (props.item.isActionAvailable) {
+    isViewOpen.value = true;
+    return;
+  }
+
+  if (!props.incomingMsgId) {
+    await openEntity();
+  }
 }
 
 async function makeThumbnailTask() {
@@ -81,7 +88,7 @@ async function makeThumbnailTask() {
       });
     }
   } catch (e) {
-    console.error('# T => ', e);
+    w3n.log('error', `The thumbnail making error for the file ${props.item.name}.`, e)
   } finally {
     isThumbnailCreationProcessGoingOn.value = false;
   }
@@ -103,7 +110,6 @@ makeThumbnail();
   <div
     :class="[$style.chatMessageAttachment, item.isActionAvailable && $style.chatMessageAttachmentClickable]"
     @click.stop.prevent="onAttachmentElementClick"
-    @click.right="emits('click:right', $event)"
   >
     <div
       v-if="isThumbnailAvailable"
@@ -120,7 +126,7 @@ makeThumbnail();
         />
 
         <ui3n-icon
-          v-if="!thumbnail"
+          v-if="!isThumbnailCreationProcessGoingOn && !thumbnail"
           icon="file-remove-outline"
           :size="attachmentsItemPreviewSize / 5 * 4"
         />
@@ -134,24 +140,37 @@ makeThumbnail();
       <ui3n-icon
         v-if="isFileAudio({ fullName: item.name })"
         icon="sound-wave-circle"
-        width="24"
-        height="24"
+        size="24"
+      />
+
+      <ui3n-icon
+        v-else-if="item.isFolder"
+        icon="round-folder"
+        size="24"
+      />
+
+      <ui3n-icon
+        v-else-if="item.ext === 'zip'"
+        icon="file-zip"
+        size="24"
       />
 
       <ui3n-icon
         v-else
         :class="$style.icon"
         icon="round-attach-file"
-        width="16"
-        height="16"
+        size="24"
       />
     </div>
 
     <div :class="$style.chatMessageAttachmentName">
-      {{ item.filename }}
+      {{ item.isFolder ? item.name : item.filename }}
     </div>
 
-    <div :class="$style.chatMessageAttachmentExt">
+    <div
+      v-if="!item.isFolder"
+      :class="$style.chatMessageAttachmentExt"
+    >
       .{{ item.ext }}
     </div>
 
@@ -182,7 +201,7 @@ makeThumbnail();
   font-weight: 400;
   color: var(--color-text-chat-bubble-user-default);
 
-  &.chatMessageAttachmentClickable {
+  //&.chatMessageAttachmentClickable {
     pointer-events: all;
 
     &:hover {
@@ -192,7 +211,7 @@ makeThumbnail();
         --ui3n-icon-color: var(--color-icon-chat-bubble-user-quote);
       }
     }
-  }
+  //}
 }
 
 .previewWrap {

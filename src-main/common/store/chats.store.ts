@@ -14,10 +14,12 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { computed, ref } from 'vue';
+import { computed, inject, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 import cloneDeep from 'lodash/cloneDeep';
+import { NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { getRandomId } from '@v1nt1248/3nclient-lib/utils';
 import { useAppStore } from '@main/common/store/app.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
 import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
@@ -33,7 +35,6 @@ import type {
 import { getChatName } from '@main/common/utils/chat-ui.helper';
 import { chatService } from '@main/common/services/external-services';
 import { areChatIdsEqual, generateChatMessageId } from '@shared/chat-ids';
-import { randomStr } from '@shared/randomStr';
 
 export type ChatsStore = ReturnType<typeof useChatsStore>;
 
@@ -48,6 +49,8 @@ export interface ChatCreationException extends web3n.RuntimeException {
 }
 
 export const useChatsStore = defineStore('chats', () => {
+  const { $createNotice } = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
+
   const route = useRoute();
   const router = useRouter();
 
@@ -104,7 +107,10 @@ export const useChatsStore = defineStore('chats', () => {
     try {
       return await chatService.createOneToOneChat({ name, peerAddr, ownName });
     } catch (error: unknown) {
-      // TODO Maybe it should show a notification about this.
+      $createNotice({
+        type: 'error',
+        content: 'Error creating a one to one chat.',
+      });
       w3n.log('error', 'Error creating a one to one chat. ', error);
     }
   }
@@ -116,11 +122,14 @@ export const useChatsStore = defineStore('chats', () => {
     try {
       return await chatService.createGroupChat({
         name,
-        chatId: randomStr(20),
+        chatId: getRandomId(20),
         members: groupMembers,
       });
     } catch (error: unknown) {
-      // TODO Maybe it should show a notification about this.
+      $createNotice({
+        type: 'error',
+        content: 'Error creating a group chat.',
+      });
       w3n.log('error', 'Error creating a group chat. ', error);
     }
   }
@@ -130,9 +139,10 @@ export const useChatsStore = defineStore('chats', () => {
       if (!ownName) {
         ownName = appStore.user.substring(0, appStore.user.indexOf('@'));
       }
+
       return await chatService.acceptChatInvitation(chatId, chatMessageId, ownName);
     } catch (err) {
-      console.error(`Accepting chat invite failed with`, err);
+      w3n.log('error', `Accepting chat invite failed with `, err);
       throw err;
     }
   }
@@ -164,7 +174,7 @@ export const useChatsStore = defineStore('chats', () => {
       await refreshChatList();
       chatInd = findIndexOfChatInCurrentList(chatId);
       if (chatInd < 0) {
-        console.error(`The chat with chatId ${chatId.chatId} does not exist`);
+        w3n.log('error', `The chat with chatId ${chatId.chatId} does not exist.`);
         return;
       }
     }

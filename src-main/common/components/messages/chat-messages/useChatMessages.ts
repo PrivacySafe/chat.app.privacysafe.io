@@ -14,13 +14,17 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { inject, nextTick, onMounted, onBeforeUnmount, ref, useTemplateRef } from 'vue';
+import { type ComputedRef, inject, nextTick, onMounted, onBeforeUnmount, ref, useTemplateRef, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import isEmpty from 'lodash/isEmpty';
 import {
   DIALOGS_KEY,
+  DialogsPlugin,
   I18N_KEY,
+  I18nPlugin,
   NOTIFICATIONS_KEY,
+  NotificationsPlugin,
   VUEBUS_KEY,
   VueBusPlugin,
 } from '@v1nt1248/3nclient-lib/plugins';
@@ -30,6 +34,7 @@ import type {
   ChatIdObj,
   ChatMessageAction,
   ChatMessageActionType,
+  ChatMessageId,
   ChatMessageView,
   RegularMsgView,
 } from '~/index';
@@ -40,36 +45,57 @@ import {
 import { getMessageActions } from '@main/common/utils/chats.helper';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import { useAppStore } from '@main/common/store/app.store';
+import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
+import { useContactsStore } from '@main/common/store/contacts.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
-import { useRouting } from '@main/desktop/composables/useRouting';
+import { useUiOutgoingStore } from '@main/common/store/ui.outgoing.store';
+import { APP_ROUTES } from '@main/mobile/constants';
+import { toCanonicalAddress } from '@shared/address-utils';
 import type { ChatMessagesEmits } from './chat-messages.vue';
 import MessageDeleteDialog from '@main/common/components/dialogs/message-delete-dialog.vue';
 import MessageForwardDialog from '@main/common/components/dialogs/message-forward-dialog.vue';
 
-export default function useChatMessages(emits: ChatMessagesEmits) {
-  const { goToChatRoute } = useRouting();
+export default function useChatMessages(
+  chatId: ComputedRef<string>,
+  readonly: ComputedRef<boolean>,
+  emits: ChatMessagesEmits,
+) {
+  const router = useRouter();
 
-  const { $tr } = inject(I18N_KEY)!;
-  const dialog = inject(DIALOGS_KEY)!;
-  const notifications = inject(NOTIFICATIONS_KEY)!;
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
+  const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
 
   const { user: ownAddr, isMobileMode } = storeToRefs(useAppStore());
 
+  const contactsStore = useContactsStore();
+  const { contactList } = storeToRefs(contactsStore);
+  const chatsStore = useChatsStore();
+  const { chatList } = storeToRefs(chatsStore);
+  const { createNewOneToOneChat } = chatsStore;
   const chatStore = useChatStore();
   const { currentChatId } = storeToRefs(chatStore);
   const { sendMessageInChat } = chatStore;
 
   const messagesStore = useMessagesStore();
-  const { currentChatMessages, selectedMessages } = storeToRefs(messagesStore);
+  const { currentChatMessages, selectedMessages, recentReactions } = storeToRefs(messagesStore);
   const {
+    cancelSendingMessage,
     changeMessageReaction,
     getMessageInCurrentChat,
     deleteMessageInChat,
     getMessageAttachments,
     selectMessage,
+    addReactionInRecentList,
   } = messagesStore;
+
+  const uiOutgoingStore = useUiOutgoingStore();
+  const { msgsSendingProgress } = storeToRefs(uiOutgoingStore);
+  const { removeRecordFromSendingProgressesList } = uiOutgoingStore;
+
+  const showMessages = ref(false);
 
   const listElement = useTemplateRef<HTMLDivElement>('list-element');
 
@@ -82,9 +108,8 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
     actions: [],
     msg: null,
   });
+  const messagesAreProcessing = ref<string[]>([]);
 
-  const recentReactionsLimit = 5;
-  const recentReactions = ref<string[]>([]);
   const msgReactionsMenuProps = ref<{
     open: boolean;
     msg: ChatMessageView | null;
@@ -93,13 +118,13 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
     msg: null,
   });
 
-  async function scrollList({ chatId }: AppGlobalEvents['message:sent']) {
+  async function scrollList({ chatId }: AppGlobalEvents['message:sent'], motSmoothly?: boolean) {
     if (listElement.value && currentChatId.value?.chatId === chatId.chatId) {
       await nextTick(() => {
         listElement.value!.scrollTo({
           top: 1e12,
           left: 0,
-          behavior: 'smooth',
+          behavior: motSmoothly ? 'auto' : 'smooth',
         });
       });
     }
@@ -109,7 +134,7 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
     if (msg && (msg.chatMessageType !== 'system' && msg.chatMessageType !== 'invitation')) {
       msgActionsMenuProps.value = {
         open: true,
-        actions: getMessageActions(msg, $tr),
+        actions: getMessageActions(msg, $tr, readonly.value),
         msg,
       };
     }
@@ -127,41 +152,103 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
     };
   }
 
+  function addMsgToProcessingInfoList(chatMessageId: string) {
+    if (!messagesAreProcessing.value.includes(chatMessageId)) {
+      messagesAreProcessing.value.push(chatMessageId);
+    }
+  }
+
+  function removeMsgFromProcessingInfoList(chatMessageId: string) {
+    const index = messagesAreProcessing.value.indexOf(chatMessageId);
+    if (index > -1) {
+      messagesAreProcessing.value.splice(index, 1);
+    }
+  }
+
   function getMessageFromCurrentChat(chatMessageId: string): RegularMsgView | undefined {
     return currentChatMessages.value.find(
       m => (m.chatMessageId === chatMessageId),
     ) as RegularMsgView | undefined;
   }
 
-  function getMessageByElement(ev: MouseEvent, isNestedElement?: boolean): ChatMessageView | undefined {
+  function getMessageByElement(ev: MouseEvent): ChatMessageView | undefined {
     const { target } = ev;
 
-    if (isNestedElement) {
-      const getMsg = (el: Element): ChatMessageView | undefined => {
-        const { parentElement } = el;
-        const { id, classList } = parentElement as Element;
-        if (classList.contains('chat-message')) {
-          return undefined;
-        }
+    const getMsg = (el: HTMLElement): ChatMessageView | undefined => {
+      const { parentElement, classList, id } = el;
 
-        if (classList.contains('chat-message__content') && id) {
-          return getMessageFromCurrentChat(id);
-        }
+      if (!parentElement) {
+        return undefined;
+      }
 
-        return getMsg(parentElement as Element);
-      };
+      if (classList.contains('chat-message')) {
+        return undefined;
+      }
 
-      return getMsg(target as Element);
-    }
+      if (classList.contains('chat-message__content') && id) {
+        return getMessageFromCurrentChat(id);
+      }
 
-    const { id, classList } = target as Element;
-    return classList.contains('chat-message__content') && id
-      ? getMessageFromCurrentChat(id)
-      : undefined;
+      return getMsg(parentElement as HTMLElement);
+    };
+
+    return getMsg(target as HTMLElement);
   }
 
-  function goToMessage(ev: MouseEvent) {
+  async function onMsgClick(ev: PointerEvent) {
+    if (msgActionsMenuProps.value.open) {
+      return;
+    }
+
+    const element = ev.target as Nullable<HTMLElement>;
+
+    if (element && element.nodeName === 'A') {
+      if (element.classList.contains('mention')) {
+        const dataMention = element.dataset.mention;
+        if (!dataMention) {
+          return;
+        }
+
+        const dataMentionSplitted = dataMention.replace('@', '').split('[');
+        const user = `${dataMentionSplitted[0]}@${dataMentionSplitted[1]}`.slice(0, -1);
+        if (user === ownAddr.value) {
+          return;
+        }
+
+        const isTargetChatPresent = !!chatList.value.find(chat => chat.chatId === user);
+
+        if (!isTargetChatPresent) {
+          const contact = contactList.value.find(c => c.mail === user);
+          await createNewOneToOneChat(contact?.displayName || user, toCanonicalAddress(user));
+        }
+
+        return await router.push({
+          name: APP_ROUTES.CHAT,
+          params: {
+            chatType: 's',
+            chatId: toCanonicalAddress(user),
+          },
+        });
+      }
+
+      if (element.classList.contains('url')) {
+        let dataHref = element.dataset.href;
+        if (!dataHref) {
+          return;
+        }
+
+        if (!/^https?:\/\//i.test(dataHref)) {
+          dataHref = `https://${dataHref}`;
+        }
+
+        return w3n.shell!.openURL!(dataHref);
+      }
+
+      return;
+    }
+
     const msg = getMessageByElement(ev);
+
     if (
       msg?.chatMessageType === 'regular'
       && msg.relatedMessage
@@ -174,17 +261,14 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
   }
 
   function handleClickOnMessagesBlock(ev: MouseEvent) {
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
+
     clearMessageMenu();
     nextTick(() => {
-      ev.preventDefault();
       const msg = getMessageByElement(ev);
       openMessageMenu(msg);
     });
-  }
-
-  function handleRightClickOnAttachmentElement(ev: MouseEvent) {
-    const msg = getMessageByElement(ev, true);
-    openMessageMenu(msg);
   }
 
   function openReactionDialog(chatMessageId: string) {
@@ -209,15 +293,7 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
       return;
     }
 
-    const isReactionInRecentList = recentReactions.value.includes(reaction.id);
-    if (isReactionInRecentList) {
-      return;
-    }
-
-    if (recentReactions.value.length === recentReactionsLimit) {
-      recentReactions.value.shift();
-    }
-    recentReactions.value.push(reaction.id);
+    addReactionInRecentList(reaction.id);
   }
 
   async function copyMsgText(chatMessageId: string) {
@@ -241,7 +317,11 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
         confirmButtonBackground: 'var(--color-bg-button-secondary-default)',
         cancelButtonColor: 'var(--color-text-button-primary-default)',
         cancelButtonBackground: 'var(--color-bg-button-primary-default)',
-        onConfirm: deleteForEveryone => deleteMessageInChat(chatMessageId, !!deleteForEveryone),
+        onConfirm: deleteForEveryone => {
+          addMsgToProcessingInfoList(chatMessageId);
+          deleteMessageInChat(chatMessageId, !!deleteForEveryone)
+            .finally(() => removeMsgFromProcessingInfoList(chatMessageId));
+        },
       },
     });
   }
@@ -260,13 +340,19 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
     if (msg?.chatMessageType !== 'regular') {
       return;
     }
-    const res = await downloadAttachments(msg, $tr);
-    if (res === false) {
-      notifications?.$createNotice({
-        type: 'error',
-        content: $tr('chat.message.file.download.error'),
-      });
+
+    addMsgToProcessingInfoList(chatMessageId);
+    const res = await downloadAttachments(msg, $tr)
+      .finally(() => removeMsgFromProcessingInfoList(chatMessageId));
+
+    if (res === undefined) {
+      return;
     }
+
+    notifications?.$createNotice({
+      type: res ? 'success' : 'error',
+      content: res ? $tr('chat.message.file.download.success') : $tr('chat.message.file.download.error'),
+    });
   }
 
   function replyMsg(chatMessageId: string) {
@@ -298,15 +384,15 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
 
           const { chatId } = data as { chatId?: ChatIdObj; contact?: { mail: string; name: string; } };
 
-          let files: Record<string, web3n.files.ReadonlyFile> = {};
+          let entities: Record<string, web3n.files.ReadonlyFile | web3n.files.ReadonlyFS> = {};
           if (!isEmpty(msg.attachments)) {
-            files = await getMessageAttachments(msg.attachments!, msg.incomingMsgId);
+            entities = await getMessageAttachments(msg.attachments!, msg.incomingMsgId);
           }
 
           await sendMessageInChat({
             chatId: chatId!,
             text: msg.body,
-            files: isEmpty(files) ? undefined : Object.values(files),
+            files: isEmpty(entities) ? undefined : Object.values(entities),
             relatedMessage: {
               forwardFrom: {
                 sender: msg.sender || ownAddr.value,
@@ -315,10 +401,37 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
             withoutCurrentChatCheck: true,
           });
 
-          await goToChatRoute(chatId!);
+          await router.push({
+            name: APP_ROUTES.CHAT,
+            params: {
+              chatType: chatId!.isGroupChat ? 'g' : 's',
+              chatId: chatId!.chatId,
+            },
+          });
         }),
       },
     });
+  }
+
+  async function cancelSending(chatMessageId: string) {
+    const msg = currentChatMessages.value
+      .find(m => m.chatMessageId === chatMessageId) as RegularMsgView | undefined;
+    if (!msg) {
+      return;
+    }
+
+    const chatMsgInfo = JSON.stringify([msg.chatId.chatId, msg.chatMessageId]);
+    const progressData = msgsSendingProgress.value[chatMsgInfo];
+    if (!progressData) {
+      return;
+    }
+
+    const chatMsgId: ChatMessageId = {
+      chatId: msg.chatId,
+      chatMessageId: chatMessageId,
+    }
+    await cancelSendingMessage({ deliveryId: progressData.deliveryId, chatMsgId });
+    removeRecordFromSendingProgressesList(chatMsgInfo);
   }
 
   async function resendMsg(chatMessageId: string) {
@@ -328,16 +441,16 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
       return;
     }
 
-    let files: Record<string, web3n.files.ReadonlyFile> = {};
+    let entities: Record<string, web3n.files.ReadonlyFile | web3n.files.ReadonlyFS> = {};
     if (!isEmpty(msg.attachments)) {
-      files = await getMessageAttachments(msg.attachments!, msg.incomingMsgId);
+      entities = await getMessageAttachments(msg.attachments!, msg.incomingMsgId);
     }
 
     await sendMessageInChat({
       chatId: msg.chatId,
       chatMessageId: msg.chatMessageId,
       text: msg.body,
-      files: isEmpty(files) ? undefined : Object.values(files),
+      files: isEmpty(entities) ? undefined : Object.values(entities),
       relatedMessage: undefined,
       withoutCurrentChatCheck: true,
     });
@@ -354,6 +467,7 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
     forward: forwardMsg,
     edit: editMsg,
     resend: resendMsg,
+    'cancel_sending': cancelSending,
   };
 
   function handleAction({ action, chatMessageId }: {
@@ -365,6 +479,22 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
       messageAction(chatMessageId);
     }
   }
+
+  watch(
+    chatId,
+    (val, oldVal) => {
+      if (val && val !== oldVal) {
+        showMessages.value = false;
+        messagesAreProcessing.value = [];
+        setTimeout(() => {
+          showMessages.value = true;
+          scrollList({ chatId: currentChatId.value! }, true);
+        }, 100);
+      }
+    }, {
+      immediate: true,
+    },
+  );
 
   onMounted(() => {
     emits('init', listElement.value);
@@ -380,15 +510,17 @@ export default function useChatMessages(emits: ChatMessagesEmits) {
 
   return {
     $tr,
+    showMessages,
     listElement,
     selectedMessages,
+    messagesAreProcessing,
     msgActionsMenuProps,
     msgReactionsMenuProps,
     recentReactions,
     selectMessage,
+    cancelSending,
     handleClickOnMessagesBlock,
-    handleRightClickOnAttachmentElement,
-    goToMessage,
+    onMsgClick,
     clearMessageMenu,
     handleAction,
     handleSelectionReaction,

@@ -15,36 +15,40 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import type { ChatsData } from '../dataset/index.ts';
-import type { GroupChatStatus, GroupChatView, SingleChatView } from '../../types/chat.types.ts';
-import type { ChatIdObj, ChatMessageId, InvitationProcessMsgData } from '../../types/asmail-msgs.types.ts';
-import type { ChatService } from './index.ts';
+import type { ChatsData } from '../../dataset';
+import type { GroupChatStatus, GroupChatView, SingleChatView } from '../../../types/chat.types.ts';
+import type {
+  ChatIdObj,
+  ChatMessageId,
+  AcceptedInvitationReference,
+  ChatIncomingMessage,
+  ChatInvitationMsgV1,
+  GroupChatParameters,
+  OneToOneChatParameters, UpdatedMembersInvitationData,
+} from '../../../types/asmail-msgs.types.ts';
+import type { ChatService } from '../index.ts';
 import {
   chatIdOfGroupChat,
   chatIdOfOTOChat,
   excludeAddrFrom,
   makeMsgDbEntry,
-  recipientsInChat,
-} from './common-transforms.ts';
-import { sendChatInvitation } from '../utils/send-chat-msg.ts';
-import type {
-  AcceptedInvitationReference,
-  ChatIncomingMessage,
-  ChatInvitationMsgV1,
-  GroupChatParameters,
-  OneToOneChatParameters,
-  StoredInvitationParams,
-} from '../../types/asmail-msgs.types.ts';
-import { generateChatMessageId } from '../../shared-libs/chat-ids.ts';
-import { GroupChatDbEntry, OTOChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
-import { includesAddress, toCanonicalAddress } from '../../shared-libs/address-utils.ts';
-import { makeDbRecordException } from '../utils/exceptions.ts';
-import type { MsgDbEntry } from '@bg/dataset/versions/v2/msgs-db.ts';
+} from '../common-transforms.ts';
+import { sendChatInvitation } from '../../utils/send-chat-msg.ts';
+import { makeDbRecordException } from '../../utils/exceptions.ts';
+import { generateChatMessageId } from '../../../shared-libs/chat-ids.ts';
+import { includesAddress } from '../../../shared-libs/address-utils.ts';
+import { GroupChatDbEntry, OTOChatDbEntry } from '../../dataset/versions/v2/chats-db.ts';
+import type { MsgDbEntry } from '../../dataset/versions/v2/msgs-db.ts';
+import { LOGO_ICON_AS_ARRAY } from '../../../src-main/common/constants/files.ts';
+import { AppSettings } from '../../utils/app-settings.ts';
+import type { OpenChatCmdArg } from '~/chat-commands.types.ts';
+import { inviteChatId, serializeInvitation } from './utils.ts';
 
 export class ChatCreation {
   constructor(
     private readonly data: ChatsData,
     private readonly emit: ChatService['emit'],
+    private readonly i18n: AppSettings,
     private readonly ownAddr: string,
     private readonly removeMessageFromInbox:
     ChatService['removeMessageFromInbox'],
@@ -59,7 +63,7 @@ export class ChatCreation {
       peerAddr,
       name,
       settings: {
-        autoDeleteMessages: '0',
+        autoDeleteMessages: '1',
       },
       status: 'initiated',
     });
@@ -103,7 +107,7 @@ export class ChatCreation {
       members,
       admins,
       settings: {
-        autoDeleteMessages: '0',
+        autoDeleteMessages: '1',
       },
       status: 'initiated',
     });
@@ -138,6 +142,55 @@ export class ChatCreation {
     return chatId;
   }
 
+  private async showSystemNotification(
+    { sender, chatId }: { sender: string; chatId: ChatIdObj },
+  ) {
+    const icon = Uint8Array.from(LOGO_ICON_AS_ARRAY);
+    const notificationTitle = await this.i18n.$tr('app.notification.invite', { sender });
+    await w3n.shell?.userNotifications?.addNotification({
+      icon,
+      title: notificationTitle,
+      cmd: {
+        cmd: 'open-chat-with',
+        params: [{
+          chatId,
+          peerAddress: sender,
+        } as OpenChatCmdArg],
+      },
+    });
+  }
+
+  private async createDisplayableSystemMessage(
+    { chatId, sender }: { chatId: ChatIdObj; sender: string },
+  ) {
+    const { chatMessageId: newChatMsgId, timestamp } = generateChatMessageId();
+    const msg: MsgDbEntry = {
+      groupChatId: chatId.isGroupChat ? chatId.chatId : null,
+      otoPeerCAddr: chatId.isGroupChat ? null : chatId.chatId,
+      chatMessageId: newChatMsgId,
+      isIncomingMsg: false,
+      incomingMsgId: null,
+      groupSender: chatId.isGroupChat ? sender : null,
+      body: JSON.stringify({
+        event: 'accept:invitation',
+        value: { sender },
+      }),
+      attachments: null,
+      chatMessageType: 'system',
+      relatedMessage: null,
+      status: null,
+      timestamp,
+      history: null,
+      reactions: null,
+      settings: null,
+      removeAfter: 0,
+    };
+
+    await this.data.addMessage(msg);
+    this.emit.message.added(msg);
+  }
+
+  /* Creating a new chat based on an invitation message (entry point) */
   async handleChatInvitation(msg: ChatIncomingMessage): Promise<void> {
     const { sender, jsonBody, deliveryTS, establishedSenderKeyChain } = msg;
     const neverContactedInitiator = !establishedSenderKeyChain;
@@ -145,6 +198,10 @@ export class ChatCreation {
 
     if (inviteData.type === 'invite-acceptance') {
       return await this.handleInvitationAcceptance(sender, inviteData, msg);
+    }
+
+    if (inviteData.type === 'updated-members-invitation-data') {
+      return await this.handleUpdateMembersInvitationData(sender, inviteData.chatId, inviteData.members, msg)
     }
 
     const chatId = inviteChatId(sender, inviteData);
@@ -176,11 +233,11 @@ export class ChatCreation {
       case 'group-chat-invite': {
         const { members, admins } = inviteData;
         if (
-          includesAddress(Object.keys(members), this.ownAddr)
-          && includesAddress(Object.keys(members), sender)
-          && includesAddress(admins, sender)
+          includesAddress(Object.keys(members!), this.ownAddr)
+          && includesAddress(Object.keys(members!), sender)
+          && includesAddress(admins!, sender)
         ) {
-          await this.handleGroupChatInvitiation(
+          await this.handleGroupChatInvitation(
             sender,
             chatMessageId,
             inviteData,
@@ -199,6 +256,7 @@ export class ChatCreation {
     }
   }
 
+  /* Creating a new one-to-one chat based on an invitation message */
   private async handleOTOChatInvitation(
     sender: string,
     chatMessageId: string,
@@ -212,7 +270,7 @@ export class ChatCreation {
       peerAddr: sender,
       name: inviteParams.name,
       settings: {
-        autoDeleteMessages: '0',
+        autoDeleteMessages: '1',
       },
       status: 'invited',
     });
@@ -229,13 +287,17 @@ export class ChatCreation {
       }),
       status: 'unread',
       timestamp: deliveryTS,
+      removeAfter: 0,
+      settings: null,
     });
 
     await this.data.addMessage(msg);
     this.emit.message.added(msg);
+    await this.showSystemNotification({ sender, chatId: { isGroupChat: false, chatId: chat.peerCAddr } });
   }
 
-  private async handleGroupChatInvitiation(
+  /* Creating a new group chat based on an invitation message */
+  private async handleGroupChatInvitation(
     sender: string,
     chatMessageId: string,
     inviteParams: GroupChatParameters,
@@ -247,10 +309,10 @@ export class ChatCreation {
     const chat = await this.data.addGroupChat({
       chatId: inviteParams.groupChatId,
       name: inviteParams.name,
-      members: inviteParams.members,
-      admins: inviteParams.admins,
+      members: inviteParams.members!,
+      admins: inviteParams.admins!,
       settings: {
-        autoDeleteMessages: '0',
+        autoDeleteMessages: '1',
       },
       status: 'invited',
     });
@@ -269,10 +331,13 @@ export class ChatCreation {
       }),
       status: 'unread',
       timestamp: deliveryTS,
+      removeAfter: 0,
+      settings: null,
     });
 
     await this.data.addMessage(msg);
     this.emit.message.added(msg);
+    await this.showSystemNotification({ sender, chatId: { isGroupChat: true, chatId: chat.chatId } });
   }
 
   private async handleMaformedInvitation(msgId: string): Promise<void> {
@@ -302,7 +367,10 @@ export class ChatCreation {
         message.msgId,
         `Incoming chat invitation acceptance message ${message.msgId} is for unknown chat. Removing it from inbox.`,
       );
-    } else if (oneToOneChat) {
+      return;
+    }
+
+    if (oneToOneChat) {
       await this.handleOTOChatInvitationAcceptance(
         chat as OTOChatDbEntry,
         chatMessageId,
@@ -318,31 +386,58 @@ export class ChatCreation {
       );
     }
 
-    const { chatMessageId: newChatMsgId, timestamp } = generateChatMessageId();
-    const msg: MsgDbEntry = {
-      groupChatId: groupChat ? chatId.chatId : null,
-      otoPeerCAddr: oneToOneChat ? chatId.chatId : null,
-      chatMessageId: newChatMsgId,
-      isIncomingMsg: false,
-      incomingMsgId: null,
-      groupSender: groupChat ? sender : null,
-      body: JSON.stringify({
-        event: 'accept:invitation',
-        value: { sender },
-      }),
-      attachments: null,
-      chatMessageType: 'system',
-      relatedMessage: null,
-      status: null,
-      timestamp,
-      history: null,
-      reactions: null,
-      settings: null,
-      removeAfter: 0,
-    };
+    await this.createDisplayableSystemMessage({ chatId, sender });
+  }
 
-    await this.data.addMessage(msg);
-    this.emit.message.added(msg);
+  async handleUpdateMembersInvitationData(
+    sender: string,
+    chatId: ChatIdObj,
+    acceptedMembers: string[],
+    incomingMessage: ChatIncomingMessage,
+  ): Promise<void> {
+    const chat = this.data.findChat(chatId);
+    if (!chat) {
+      await this.removeMessageFromInbox(
+        incomingMessage.msgId,
+        `Incoming chat invitation acceptance message ${incomingMessage.msgId} is for unknown chat. Removing it from inbox.`,
+      );
+    }
+
+    const { members, admins } = chat as GroupChatDbEntry;
+    if (!admins.includes(sender)) {
+      return;
+    }
+
+    const newAcceptedMembers = Object.keys(members).reduce((res, addr) => {
+      const { hasAccepted } = members[addr];
+      if (!hasAccepted && acceptedMembers.includes(addr)) {
+        res.push(addr);
+      }
+      return res;
+    }, [] as string[]);
+
+    if (newAcceptedMembers.length === 0) {
+      return;
+    }
+
+    const updatedChatMembers = { ...members };
+
+    for (const acceptedMember of newAcceptedMembers) {
+      if (acceptedMember !== this.ownAddr) {
+        await this.createDisplayableSystemMessage({ chatId, sender: acceptedMember });
+      }
+
+      updatedChatMembers[acceptedMember] = { hasAccepted: true };
+    }
+
+    const updatedChat = await this.data.updateGroupChatRecord(chatId.chatId, {
+      members: updatedChatMembers,
+      ...(acceptedMembers.includes(this.ownAddr) && { status: 'on' }),
+    });
+
+    updatedChat && this.emit.chat.updated(updatedChat);
+
+    await this.removeMessageFromInbox(incomingMessage.msgId);
   }
 
   private async handleOTOChatInvitationAcceptance(
@@ -387,9 +482,6 @@ export class ChatCreation {
     const chatId = chatIdOfGroupChat(chat);
     const id: ChatMessageId = { chatId, chatMessageId };
 
-    // update chat db record
-    // XXX this should be changed to checking who of members replied, recording
-    //     history, etc., and changes to chat should reflect this.
     const msg = await this.data.getMessage(id);
 
     if (msg && (msg.status !== 'read')) {
@@ -400,11 +492,8 @@ export class ChatCreation {
       updatedMsg && this.emit.message.updated(updatedMsg);
     }
 
-    // update chat db record
-    // XXX this should be changed to be in accordance with changes' history
     const chatInitiator = ((incomingMessage.jsonBody as ChatInvitationMsgV1)
       .inviteData as AcceptedInvitationReference)?.initiator;
-    const me = await w3n.mail!.getUserId();
 
     const updatedChatMembers = { ...chat.members };
     msg && (updatedChatMembers[incomingMessage.sender] = { hasAccepted: true });
@@ -414,11 +503,11 @@ export class ChatCreation {
     let status: GroupChatStatus | undefined;
     if (
       areAllMembersAccepted
-      || (!areAllMembersAccepted && chatInitiator !== me && updatedChatMembers[me].hasAccepted)
+      || (!areAllMembersAccepted && chatInitiator !== this.ownAddr && updatedChatMembers[this.ownAddr].hasAccepted)
     ) {
       status = 'on';
     } else {
-      status = chatInitiator === me ? 'partially-on' : chat.status;
+      status = chatInitiator === this.ownAddr ? 'partially-on' : chat.status;
     }
 
     const updatedChat = await this.data.updateGroupChatRecord(chat.chatId, {
@@ -429,10 +518,33 @@ export class ChatCreation {
     updatedChat && this.emit.chat.updated(updatedChat);
 
     await this.removeMessageFromInbox(incomingMessage.msgId);
+
+    const updateMembersData: UpdatedMembersInvitationData = {
+      type: 'updated-members-invitation-data',
+      chatId,
+      members: Object.keys(updatedChatMembers).reduce((res, addr) => {
+        const { hasAccepted } = updatedChatMembers[addr];
+        if (hasAccepted) {
+          res.push(addr);
+        }
+
+        return res;
+      }, [] as string[]),
+    };
+
+    await sendChatInvitation(
+      chatId,
+      Object.keys(updatedChatMembers).reduce((res, addr) => {
+        if (addr !== this.ownAddr) {
+          res.push(addr);
+        }
+        return res;
+      }, [] as string[]),
+      { chatMessageId, inviteData: updateMembersData },
+    );
   }
 
   async acceptChatInvitation(chatId: ChatIdObj, chatMessageId: string, ownName: string): Promise<void> {
-    // check
     const chat = this.data.findChat(chatId);
     const id: ChatMessageId = { chatId, chatMessageId };
     const msg = await this.data.getMessage(id);
@@ -445,19 +557,6 @@ export class ChatCreation {
       return;
     }
 
-    let updatedChat: OTOChatDbEntry | GroupChatDbEntry | undefined;
-    if (chatId.isGroupChat) {
-      const me = await w3n.mail?.getUserId();
-      const chatMembers = { ...(chat as GroupChatDbEntry).members };
-      chatMembers[me!] = { hasAccepted: true };
-
-      updatedChat = await this.data.updateGroupChatRecord(chatId.chatId, { members: chatMembers, status: 'on' });
-    } else {
-      updatedChat = await this.data.updateOTOChatRecord(chatId.chatId, { status: 'on' });
-    }
-
-    this.emit.chat.updated(updatedChat);
-
     if (msg.status !== 'read') {
       const updatedMsg = await this.data.updateMessageRecord(id, {
         status: 'read',
@@ -466,68 +565,46 @@ export class ChatCreation {
       this.emit.message.updated(updatedMsg);
     }
 
-    // notify peers
-    const recipients = recipientsInChat(chat, this.ownAddr);
+    if (chatId.isGroupChat) {
+      const updatedChat = await this.data.updateGroupChatRecord(chatId.chatId, { status: 'accepted' });
+      this.emit.chat.updated(updatedChat);
+
+      const inviteData: AcceptedInvitationReference = {
+        type: 'invite-acceptance',
+        chatMessageId,
+        initiator: msg.groupSender!,
+        groupChat: {
+          type: 'group-chat-invite',
+          groupChatId: (chat as GroupChatDbEntry).chatId,
+          addr: this.ownAddr,
+          name: ownName,
+        },
+      };
+      await sendChatInvitation(
+        chatId,
+        [msg.groupSender!],
+        { chatMessageId, inviteData },
+      );
+
+      return;
+    }
+
+    const updatedChat = await this.data.updateOTOChatRecord(chatId.chatId, { status: 'on' });
+    this.emit.chat.updated(updatedChat);
+
     const inviteData: AcceptedInvitationReference = {
       type: 'invite-acceptance',
       chatMessageId,
       initiator: msg.groupSender!,
-    };
-
-    if (chat.isGroupChat) {
-      const groupChatInvite = deserializeInvitation(msg.body!) as GroupChatParameters & {
-        neverContactedInitiator?: boolean;
-      };
-      delete groupChatInvite['neverContactedInitiator'];
-      inviteData.groupChat = groupChatInvite;
-    } else {
-      inviteData.oneToOneChat = {
+      oneToOneChat: {
         type: 'oto-chat-invite',
         name: ownName,
-      };
-    }
-
+      },
+    };
     await sendChatInvitation(
       chatId,
-      recipients,
+      [(chat as OTOChatDbEntry).peerAddr],
       { chatMessageId, inviteData },
     );
   }
-}
-
-export function inviteChatId(sender: string, inviteData: InvitationProcessMsgData): ChatIdObj | undefined {
-  if (inviteData.type === 'group-chat-invite') {
-    return chatIdFromGroupChatInvite(inviteData);
-  }
-
-  if (inviteData.type === 'oto-chat-invite') {
-    return {
-      isGroupChat: false,
-      chatId: toCanonicalAddress(sender),
-    };
-  }
-
-  const { groupChat, oneToOneChat } = inviteData;
-  if (oneToOneChat) {
-    return {
-      isGroupChat: false,
-      chatId: toCanonicalAddress(sender),
-    };
-  } else if (groupChat) {
-    return chatIdFromGroupChatInvite(groupChat);
-  }
-}
-
-function chatIdFromGroupChatInvite({ groupChatId }: GroupChatParameters): ChatIdObj | undefined {
-  return !groupChatId.includes('@')
-    ? { isGroupChat: true, chatId: groupChatId }
-    : undefined;
-}
-
-function serializeInvitation(inviteParams: StoredInvitationParams): string {
-  return JSON.stringify(inviteParams);
-}
-
-function deserializeInvitation(msgBody: string): StoredInvitationParams {
-  return JSON.parse(msgBody);
 }

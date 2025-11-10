@@ -18,10 +18,10 @@ import { computed, type ComputedRef, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '@main/common/store/chat.store';
 import { chatMenuItems } from '@main/common/constants';
-import { type ChatListItemView, ChatMenuItem } from '~/chat.types.ts';
+import type { ChatListItemView, ChatMenuItem } from '~/index';
 
 export function useChatHeaderActions(
-  props: ComputedRef<{ chat: ChatListItemView; disabled?: boolean }>,
+  props: ComputedRef<{ chat: ChatListItemView; chatWithCall?: boolean; disabled?: boolean }>,
   emits: { (event: 'select:action', value: string): void },
 ) {
   const { currentChat, isAdminOfGroupChat } = storeToRefs(useChatStore());
@@ -43,7 +43,16 @@ export function useChatHeaderActions(
       return true;
     }
 
-    return Object.keys(members).length === 1;
+    const acceptedMembersAndNotAdmins = Object.keys(members).reduce((res, addr) => {
+      const { hasAccepted } = members[addr];
+      if (!admins.includes(addr) && hasAccepted) {
+        res.push(addr);
+      }
+
+      return res;
+    }, [] as string[]);
+
+    return acceptedMembersAndNotAdmins.length === 0;
   });
 
   const availableMenuItems = computed(() => chatMenuItems
@@ -96,6 +105,14 @@ export function useChatHeaderActions(
     return false;
   }
 
+  function isMenuItemDisabled(item: ChatMenuItem): boolean {
+    if (props.value.disabled) {
+      return true;
+    }
+
+    return !!(props.value.chatWithCall && item.disable?.includes('chat-with-call'));
+  }
+
   function initialSubMenusState(): Record<string, boolean> {
     return (availableMenuItems.value || []).reduce((res, item) => {
       if (item.subMenu) {
@@ -116,6 +133,15 @@ export function useChatHeaderActions(
     },
   );
 
+  watch(
+    () => props.value.chatWithCall,
+    (val, oVal) => {
+      if (val && val !== oVal) {
+        isMenuOpen.value = false;
+      }
+    },
+  );
+
   return {
     isMenuOpen,
     subMenusState,
@@ -123,5 +149,6 @@ export function useChatHeaderActions(
     initialSubMenusState,
     selectAction,
     isSubItemSelected,
+    isMenuItemDisabled,
   };
 }

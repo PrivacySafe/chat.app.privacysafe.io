@@ -100,8 +100,8 @@ const {
           :offset-y="4"
         >
           <ui3n-tooltip
-            content="Select WEB-cam"
-            position-strategy="absolute"
+            :content="$tr('va.setup.camera.select.tooltip')"
+            position-strategy="fixed"
             placement="top"
           >
             <div :class="$style.currentWebcam">
@@ -109,8 +109,7 @@ const {
 
               <ui3n-icon
                 icon="outline-arrow-drop-down"
-                width="24"
-                height="24"
+                size="24"
               />
             </div>
           </ui3n-tooltip>

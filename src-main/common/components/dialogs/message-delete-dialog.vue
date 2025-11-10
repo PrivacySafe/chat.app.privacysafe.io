@@ -17,7 +17,7 @@
 
 <script lang="ts" setup>
 import { computed, inject, ref } from 'vue';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nCheckbox } from '@v1nt1248/3nclient-lib';
 
 const props = defineProps<{
@@ -25,7 +25,7 @@ const props = defineProps<{
 }>();
 const emits = defineEmits(['select']);
 
-const { $tr } = inject(I18N_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 const deleteForEveryone = ref(false);
 

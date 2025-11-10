@@ -7,7 +7,7 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['**/@types/**/*.*', '**/app/**/*.*', '**/ci/**/*.*', '**/doc/**/*.*', '**/public/**/*.*'],
+    ignores: ['**/@types/**/*.*', '**/app/**/*.*', '**/ci/**/*.*', '**/doc/**/*.*', '**/public/**/*.*', '**/tests-app/**/*.*'],
   },
 
   eslintJs.configs['recommended'],

@@ -18,7 +18,7 @@
 import { computed, inject, nextTick, onMounted, ref, useTemplateRef } from 'vue';
 import * as pdfjs from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nButton, Ui3nProgressCircular, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
 import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
 import { getFileByInfoFromMsg } from '@main/common/utils/files.helper';
@@ -34,7 +34,7 @@ const emits = defineEmits<{
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
-const { $tr } = inject(I18N_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 let pdfDoc: PDFDocumentProxy | undefined = undefined;
 
@@ -58,7 +58,7 @@ function renderPage(num = 1) {
         canvasStyle.value = {
           ...(viewport.height >= viewport.width && { height: '100%' }),
           ...(viewport.height < viewport.width && { width: '100%' }),
-        }
+        };
 
         const renderTask = page.render({
           canvasContext: ctx.value!,
@@ -101,7 +101,7 @@ onMounted(() => {
         return;
       }
 
-      return file.readBytes();
+      return (file as web3n.files.ReadonlyFile).readBytes();
     })
     .then(byteArray => {
       if (!byteArray) {

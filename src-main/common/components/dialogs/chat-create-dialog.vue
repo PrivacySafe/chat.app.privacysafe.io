@@ -19,9 +19,9 @@
 import { ref, computed, onBeforeMount, inject } from 'vue';
 import { storeToRefs } from 'pinia';
 import keyBy from 'lodash/keyBy';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
-import { Ui3nButton, Ui3nChip, Ui3nInput, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+import { Ui3nButton, Ui3nChip, Ui3nInput, Ui3nProgressCircular, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
 import type { ChatIdObj, PersonView } from '~/index';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useAppStore } from '@main/common/store/app.store';
@@ -38,7 +38,7 @@ interface ChatCreateDialogEmits {
 
 const emits = defineEmits<ChatCreateDialogEmits>();
 
-const { $tr } = inject(I18N_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 const { user } = storeToRefs(useAppStore());
 
@@ -48,6 +48,7 @@ const { fetchContacts, addContact } = contactsStore;
 
 const { createNewOneToOneChat, createNewGroupChat } = useChatsStore();
 
+const isProcessing = ref(false);
 const searchText = ref<string>('');
 const selectedContacts = ref<(PersonView & { displayName: string })[]>([]);
 const groupChatModeStep = ref(1);
@@ -99,23 +100,28 @@ async function onActionRightBtnClick() {
     return;
   }
 
-  let chatId: ChatIdObj | undefined;
-  if (isGroupChatMode.value) {
-    const groupMembers = selectedContacts.value.reduce((res, c) => {
-      const { mail } = c;
-      res[mail] = { hasAccepted: false };
-      return res;
-    }, { [user.value]: { hasAccepted: true } });
+  try {
+    isProcessing.value = true;
+    let chatId: ChatIdObj | undefined;
+    if (isGroupChatMode.value) {
+      const groupMembers = selectedContacts.value.reduce((res, c) => {
+        const { mail } = c;
+        res[mail] = { hasAccepted: false };
+        return res;
+      }, { [user.value]: { hasAccepted: true } });
 
-    const name = chatName.value.trim();
-    chatId = await createNewGroupChat(name, groupMembers);
-  } else {
-    const { displayName: name, mail: peerAddr } = selectedContacts.value[0];
-    chatId = await createNewOneToOneChat(name, peerAddr);
+      const name = chatName.value.trim();
+      chatId = await createNewGroupChat(name, groupMembers);
+    } else {
+      const { displayName: name, mail: peerAddr } = selectedContacts.value[0];
+      chatId = await createNewOneToOneChat(name, peerAddr);
+    }
+
+    emits('select', chatId!);
+    emits('confirm');
+  } finally {
+    isProcessing.value = false;
   }
-
-  emits('select', chatId!);
-  emits('confirm');
 }
 
 async function addNewContact(mail: string) {
@@ -205,6 +211,7 @@ onBeforeMount(async () => {
     <div :class="$style.chatCreateDialogActions">
       <ui3n-button
         type="secondary"
+        :disabled="isProcessing"
         @click="onActionLeftBtnClick"
       >
         {{ capitalize(actionLeftBtnText) }}
@@ -212,12 +219,22 @@ onBeforeMount(async () => {
 
       <ui3n-button
         v-if="selectedContacts.length > 0"
-        :disabled="isGroupChatMode && groupChatModeStep === 2 && !chatName"
+        :disabled="(isGroupChatMode && groupChatModeStep === 2 && !chatName) || isProcessing"
         :class="$style.actionRightBtn"
         @click="onActionRightBtnClick"
       >
         {{ capitalize(actionRightBtnText) }}
       </ui3n-button>
+    </div>
+
+    <div
+      v-if="isProcessing"
+      :class="$style.processing"
+    >
+      <ui3n-progress-circular
+        indeterminate
+        size="80"
+      />
     </div>
   </div>
 </template>
@@ -312,5 +329,15 @@ onBeforeMount(async () => {
 
 .actionRightBtn {
   width: 64px !important;
+}
+
+.processing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  background-color: var(--black-12);
 }
 </style>

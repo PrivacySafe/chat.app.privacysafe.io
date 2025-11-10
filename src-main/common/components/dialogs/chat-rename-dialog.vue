@@ -18,17 +18,17 @@
 <script lang="ts" setup>
 import { ref, inject, watch } from 'vue';
 import size from 'lodash/size';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { Ui3nInput } from '@v1nt1248/3nclient-lib';
 import { validationParams } from '../../constants';
-
-const { chatsNameMaxLength } = validationParams;
-const { $tr } = inject(I18N_KEY)!;
 
 const props = defineProps<{
   chatName: string;
 }>();
 const emit = defineEmits(['select', 'validate']);
+
+const { chatsNameMaxLength } = validationParams;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 const data = ref({ oldName: props.chatName, newName: props.chatName });
 const isValid = ref(false);
@@ -62,7 +62,7 @@ watch(
       :rules="[ checkRequired as any, checkLength as any ]"
       :placeholder="$tr('chat.rename.dialog.input.placeholder')"
       @change="onChange"
-      @update:valid="val => isValid = val"
+      @update:valid="(val: boolean) => isValid = val"
     />
   </div>
 </template>

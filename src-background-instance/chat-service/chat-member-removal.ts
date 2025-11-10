@@ -82,6 +82,7 @@ export class ChatMemberRemoval {
       removeAfter: 0,
       history: null,
       reactions: null,
+      settings: null,
     };
 
     await this.data.addMessage(msg);

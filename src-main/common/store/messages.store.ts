@@ -33,10 +33,12 @@ import type {
   ChatMessageId,
   ChatMessageSendingProgressEvent,
   ChatMessageView,
-  ReadonlyFile,
+  ReadonlyFile, ReadonlyFS,
   RegularMsgView,
 } from '~/index';
 import type { DbRecordException } from '@bg/utils/exceptions';
+
+const recentReactionsLimit = 5;
 
 export const useMessagesStore = defineStore('messages', () => {
   const appStore = useAppStore();
@@ -47,6 +49,7 @@ export const useMessagesStore = defineStore('messages', () => {
   const objOfCurrentChatMessages = ref<Record<string, ChatMessageView>>({});
 
   const selectedMessages = ref<string[]>([]);
+  const recentReactions = ref<string[]>([]);
 
   const currentChatMessages = computed(() =>
     Object.values(objOfCurrentChatMessages.value)
@@ -84,6 +87,12 @@ export const useMessagesStore = defineStore('messages', () => {
 
   function clearSelectedMessages(): void {
     selectedMessages.value = [];
+  }
+
+  async function cancelSendingMessage(
+    { deliveryId, chatMsgId }: { deliveryId: string; chatMsgId: ChatMessageId },
+  ): Promise<void> {
+    return await chatService.cancelSendingMessage(deliveryId, chatMsgId);
   }
 
   function upsertMessageInCurrentChat(chatMsgId: string, data: Partial<ChatMessageView>) {
@@ -125,7 +134,7 @@ export const useMessagesStore = defineStore('messages', () => {
     for (const chatMsgId of chatMsgsIds) {
       const message = getMessageInCurrentChat(chatMsgId);
       if (!message) {
-        console.error(`You are trying to delete a message (${chatMsgId}) that is not in the current chat.`)
+        w3n.log('error', `You are trying to delete a message (${chatMsgId}) that is not in the current chat.`);
         throw Error('Unable to delete a message');
       }
       if (!chatId) {
@@ -133,7 +142,7 @@ export const useMessagesStore = defineStore('messages', () => {
       }
 
       if (!areChatIdsEqual(chatId, message.chatId)) {
-        console.error('You are trying to delete messages from different chats.')
+        w3n.log('error', 'You are trying to delete messages from different chats.');
         throw Error('Unable to delete a message');
       }
     }
@@ -179,27 +188,29 @@ export const useMessagesStore = defineStore('messages', () => {
   async function getMessageAttachments(
     info: ChatMessageAttachmentsInfo[],
     incomingMsgId?: string,
-  ): Promise<Record<string, ReadonlyFile>> {
-    const files: Record<string, ReadonlyFile> = {};
+  ): Promise<Record<string, ReadonlyFile | ReadonlyFS>> {
+    const entities: Record<string, ReadonlyFile | ReadonlyFS> = {};
     if (incomingMsgId) {
       const msg = await chatService.getIncomingMessage(incomingMsgId);
 
       if (msg && msg.attachments) {
-        for (const { name } of info) {
-          files[name] = await msg.attachments.readonlyFile(name);
+        for (const { name, isFolder } of info) {
+          entities[name] = isFolder
+            ? await msg.attachments.readonlySubRoot(name)
+            : await msg.attachments.readonlyFile(name);
         }
       }
     } else {
       for (const { id, name } of info) {
         if (id) {
-          const file = await fileLinkStoreSrv.getFile(id);
-          if (file) {
-            files[name] = file;
+          const entity = await fileLinkStoreSrv.getFile(id);
+          if (entity) {
+            entities[name] = entity;
           }
         }
       }
     }
-    return files;
+    return entities;
   }
 
   async function changeMessageReaction(
@@ -283,16 +294,34 @@ export const useMessagesStore = defineStore('messages', () => {
         uiOutgoingStore.updateSendingProgressesList(event as ChatMessageSendingProgressEvent);
         break;
       default:
-        console.log(`Unknown update event from ChatService:`, event);
+        w3n.log('error', 'Unknown update event from ChatService. ' , event);
         break;
     }
+  }
+
+  async function fetchRecentReactions() {
+    recentReactions.value = await chatService.getRecentReactions(5);
+  }
+
+  function addReactionInRecentList(reactionId: string) {
+    const isReactionInRecentList = recentReactions.value.includes(reactionId);
+    if (isReactionInRecentList) {
+      return;
+    }
+
+    if (recentReactions.value.length === recentReactionsLimit) {
+      recentReactions.value.shift();
+    }
+    recentReactions.value.push(reactionId);
   }
 
   return {
     objOfCurrentChatMessages,
     currentChatMessages,
     selectedMessages,
+    recentReactions,
     fetchMessages,
+    cancelSendingMessage,
     setCurrentChatMessages,
     upsertMessageInCurrentChat,
     getMessageInCurrentChat,
@@ -309,5 +338,7 @@ export const useMessagesStore = defineStore('messages', () => {
     handleAddedMsg,
     handleUpdatedMsg,
     handleRemovedMsg,
+    fetchRecentReactions,
+    addReactionInRecentList,
   };
 });

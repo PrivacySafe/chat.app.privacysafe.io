@@ -39,7 +39,7 @@ export function doWithEach<T>(fn: (v: T) => void): TransformStream<T, T> {
       try {
         fn(v);
       } catch (err) {
-        console.error(err);
+        w3n.log('error', JSON.stringify(err), err);
       }
       ctrl.enqueue(v);
     },
@@ -54,7 +54,7 @@ export function doAndAwaitWithEach<T>(
       try {
         await fn(v);
       } catch (err) {
-        console.error(err);
+        w3n.log('error', JSON.stringify(err), err);
       }
       ctrl.enqueue(v);
     },

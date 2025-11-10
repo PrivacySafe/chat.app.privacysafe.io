@@ -31,6 +31,7 @@ const vUi3nHtml = Ui3nHtml;
 const props = defineProps<{
   chat: ChatListItemView;
   messages: ChatMessageView[];
+  readonly?: boolean;
 }>();
 
 const chatVal = computed(() => props.chat);
@@ -82,7 +83,7 @@ const {
 
       <div
         v-else
-        v-ui3n-html.sanitize="chat.lastMsg?.timestamp ? $tr('chat.header.info', { date: text }) : ''"
+        v-ui3n-html:sanitize="chat.lastMsg?.timestamp ? $tr('chat.header.info', { date: text }) : ''"
         :class="$style.chatHeaderInfo"
       />
     </div>
@@ -135,12 +136,14 @@ const {
       icon="round-phone"
       icon-color="var(--color-icon-button-tritery-default)"
       :class="$style.videoCallBtn"
+      :disabled="readonly"
       @click.stop.prevent="startCall(currentChatObjId)"
     />
 
     <chat-header-actions
       :chat="chat"
-      :disabled="isIncomingCall || chatWithCall"
+      :chat-with-call="chatWithCall"
+      :disabled="isIncomingCall"
       @select:action="selectAction"
     />
   </div>

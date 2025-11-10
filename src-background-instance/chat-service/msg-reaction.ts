@@ -51,6 +51,10 @@ export class MsgReactions {
     return { history, reactions };
   }
 
+  async getRecentReactions(quantity: number): Promise<string[]> {
+    return this.data.getRecentReactions(quantity);
+  }
+
   async changeMessageReactions(
     { chatId, chatMessageId, updatedReactions }:
     { chatId: ChatIdObj; chatMessageId: string; updatedReactions: Record<string, ChatMessageReaction> },

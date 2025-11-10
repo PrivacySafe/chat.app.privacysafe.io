@@ -99,8 +99,7 @@ const {
 
             <ui3n-icon
               icon="outline-arrow-drop-down"
-              width="24"
-              height="24"
+              size="24"
             />
           </div>
 

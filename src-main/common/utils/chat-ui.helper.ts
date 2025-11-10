@@ -64,11 +64,10 @@ export function getTextForChatSystemMessage(
 
     case 'update:settings': {
       const { settings = {} } = (systemData as UpdatedChatSettingsSysMsgData).value;
-      const autoDeleteMessageId = (settings?.autoDeleteMessages || '0') as '0' | '1' | '2' | '3' | '4';
+      const autoDeleteMessageId = (settings?.autoDeleteMessages || '0') as '0' | '1' | '2' | '3' | '4' | '5';
       const timerValueText: string = appStore.$i18n.tr(AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessageId].label);
 
       switch (autoDeleteMessageId) {
-        case '0':
         case '1':
         case '2':
         case '3':
@@ -76,6 +75,7 @@ export function getTextForChatSystemMessage(
           return !sender || sender === ownAddr
             ? appStore.$i18n.tr('auto.delete.messages.set.you', { value: timerValueText })
             : appStore.$i18n.tr('auto.delete.messages.set.user', { user: sender, value: timerValueText });
+        case '0':
         default:
           return !sender || sender === ownAddr
             ? appStore.$i18n.tr('auto.delete.messages.unset.you')
@@ -215,7 +215,7 @@ export function getTextForChatInvitationMessage(
 
     case 'group-chat-invite': {
       const appStore = useAppStore();
-      const members = Object.keys(inviteData.members).filter(m => m !== appStore.user).join(', ');
+      const members = Object.keys(inviteData.members!).filter(m => m !== appStore.user).join(', ');
       if (isIncomingMsg) {
         const { neverContactedInitiator } = inviteData;
         return neverContactedInitiator

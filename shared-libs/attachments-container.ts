@@ -14,6 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+/* eslint-disable @typescript-eslint/no-dynamic-delete */
 import type { AttachmentsContainer, FileW } from '~/index';
 
 export function isContainerEmpty(c: AttachmentsContainer | undefined): boolean {
@@ -26,7 +27,9 @@ export function isContainerEmpty(c: AttachmentsContainer | undefined): boolean {
   return !(c.folders && (Object.keys(c.folders).length > 0));
 }
 
-export function* iterFilesIn(c: AttachmentsContainer | undefined): IterableIterator<{ fileName: string, file: FileW }> {
+export function* iterFilesIn(
+  c: AttachmentsContainer | undefined,
+): IterableIterator<{ fileName: string, file: FileW }> {
   if (!c || !c.files) {
     return;
   }

@@ -15,7 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { type Nullable, Ui3nLongPress as vUi3nLongPress } from '@v1nt1248/3nclient-lib';
+import { computed } from 'vue';
+import dayjs from 'dayjs';
+import { type Nullable, Ui3nLongPress as vUi3nLongPress, Ui3nList } from '@v1nt1248/3nclient-lib';
 import useChatMessages from './useChatMessages';
 import type { ChatListItemView, ChatMessageView, RegularMsgView } from '~/index';
 import ChatMessage from '../chat-message/chat-message.vue';
@@ -25,6 +27,7 @@ import ReactionsDialog from '@main/common/components/dialogs/reactions-dialog.vu
 export interface ChatMessagesProps {
   chat: ChatListItemView;
   messages: ChatMessageView[];
+  readonly?: boolean;
 }
 
 export interface ChatMessagesEmits {
@@ -37,19 +40,44 @@ export interface ChatMessagesEmits {
 const props = defineProps<ChatMessagesProps>();
 const emits = defineEmits<ChatMessagesEmits>();
 
+const chatId = computed(() => props.chat.chatId);
+const readonlyRef = computed(() => props.readonly);
+
+const processedMessages = computed(() => Object.values(props.messages
+  .reduce((res, msg) => {
+    const { timestamp } = msg;
+    const date = dayjs(timestamp).format('YYYY-MM-DD');
+    if (!res[date]) {
+      res[date] = {
+        date,
+        items: [],
+      };
+    }
+
+    res[date].items.push(msg);
+    return res;
+  }, {} as Record<string, { date: string; items: ChatMessageView[] }>))
+  .map(dateBlock => ({
+    date: dateBlock.date,
+    items: dateBlock.items.sort((a, b) => a.timestamp - b.timestamp),
+  }))
+  .sort((a, b) => a.date > b.date ? 1 : -1),
+);
+
 const {
+  showMessages,
   selectedMessages,
+  messagesAreProcessing,
   msgActionsMenuProps,
   msgReactionsMenuProps,
   recentReactions,
   selectMessage,
   handleClickOnMessagesBlock,
-  handleRightClickOnAttachmentElement,
-  goToMessage,
+  onMsgClick,
   clearMessageMenu,
   handleAction,
   handleSelectionReaction,
-} = useChatMessages(emits);
+} = useChatMessages(chatId, readonlyRef, emits);
 </script>
 
 <template>
@@ -59,26 +87,42 @@ const {
     v-ui3n-long-press="{ handler: handleClickOnMessagesBlock, delay: 1000 }"
     :class="$style.chatMessages"
     @click.right="handleClickOnMessagesBlock"
-    @click="goToMessage"
+    @click="onMsgClick"
   >
-    <chat-message
-      v-for="(item, index) in props.messages"
-      :key="item.chatMessageId"
-      :msg="item"
-      :selected-messages="selectedMessages"
-      :prev-msg-sender="index === 0 ? '' : props.messages[index - 1].sender"
-      :prev-msg-info="
-        index === 0
-          ? null
-          : {
-            isIncomingMsg: props.messages[index - 1].isIncomingMsg,
-            status: props.messages[index - 1].status
-          }
-      "
-      :related-message="(item as RegularMsgView).relatedMessage"
-      @select="selectMessage"
-      @click:right="handleRightClickOnAttachmentElement"
-    />
+    <ui3n-list
+      v-if="showMessages"
+      :sticky="false"
+      :items="processedMessages"
+    >
+      <template #item="{ item }">
+        <ui3n-list :items="item.items">
+          <template #title>
+            <div :class="$style.date">
+              <span :class="$style.dateValue">{{ item.date }}</span>
+            </div>
+          </template>
+
+          <template #item="{ item: msg, index }">
+            <chat-message
+              :msg="msg"
+              :selected-messages="selectedMessages"
+              :messages-are-processing="messagesAreProcessing"
+              :prev-msg-sender="index === 0 ? '' : item.items[index - 1].sender"
+              :prev-msg-info="
+                index === 0
+                  ? null
+                  : {
+                    isIncomingMsg: item.items[index - 1].isIncomingMsg,
+                    status: item.items[index - 1].status
+                  }
+              "
+              :related-message="(msg as RegularMsgView).relatedMessage"
+              @select="selectMessage"
+            />
+          </template>
+        </ui3n-list>
+      </template>
+    </ui3n-list>
 
     <teleport
       v-if="msgActionsMenuProps.msg"
@@ -116,11 +160,35 @@ const {
   width: 100%;
   height: 100%;
   background-color: var(--color-bg-chat-bubble-general-bg);
-  padding-bottom: var(--spacing-s);
   overflow-y: auto;
+  scrollbar-gutter: stable;
 
   .scroller {
     height: 100%;
   }
+
+  & > div {
+    --ui3n-list-bg-color: transparent !important;
+  }
+}
+
+.date {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: var(--font-12);
+  font-weight: 600;
+  font-style: italic;
+  color: var(--color-text-block-accent-default);
+  padding: 2px 0;
+}
+
+.dateValue {
+  position: relative;
+  width: fit-content;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: 10px;
+  background-color: var(--color-bg-block-primary-default);
 }
 </style>

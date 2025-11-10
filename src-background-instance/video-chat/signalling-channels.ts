@@ -314,6 +314,6 @@ export async function sendWebRTCMsg(
       });
     });
   } finally {
-    w3n.mail!.delivery.rmMsg(deliveryId).catch(err => console.error(err));
+    w3n.mail!.delivery.rmMsg(deliveryId).catch(err => w3n.log('error', JSON.stringify(err), err));
   }
 }

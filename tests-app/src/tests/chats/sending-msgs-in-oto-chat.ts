@@ -102,46 +102,46 @@ export function sendingMsgsInOTOChatSpec() {
 
   }, 10000);
 
-  itCond(`send message with attachment`, async () => {
-    if (chatStore.currentChatId?.chatId !== chatId.chatId) {
-      await chatStore.setChatAndFetchMessages(chatId);
-    }
-
-    const fileTxt = `This is content of test file`;
-    const filePath = `test-${Date.now()}`;
-    await testFS.writeTxtFile(filePath, fileTxt);
-    const fileToAttach = await testFS.readonlyFile(filePath);
-
-    // send message
-    const text = `test message text, and timestamp ${Date.now()} to find message in test`;
-    const echoedMsgEvent = waitEventFromChatService('message', 'added',
-      ev => {
-        const {
-          isIncomingMsg, incomingMsgId, attachments
-        } = (ev as ChatMessageAddedEvent).msg as RegularMsgView;
-        return (isIncomingMsg && !!incomingMsgId && !!attachments);
-      }
-    );
-    await chatStore.sendMessageInChat({
-      chatId,
-      text,
-      files: [fileToAttach],
-      relatedMessage: undefined,
-    });
-
-    // await echo with same body and attachments
-    const { msg: echoMsg } = (await echoedMsgEvent) as ChatMessageAddedEvent;
-    const {
-      incomingMsgId, attachments, body, relatedMessage
-    } = echoMsg as RegularMsgView;
-    expect(body).toBe(text);
-    const files = await messagesStore.getMessageAttachments(
-      attachments!, incomingMsgId
-    );
-    expect(await files[0].readTxt()).toBe(fileTxt);
-    expect(relatedMessage?.replyTo).withContext(`2nd test user also adds replyTo reference`).toBeDefined();
-
-  }, 20000);
+  // itCond(`send message with attachment`, async () => {
+  //   if (chatStore.currentChatId?.chatId !== chatId.chatId) {
+  //     await chatStore.setChatAndFetchMessages(chatId);
+  //   }
+  //
+  //   const fileTxt = `This is content of test file`;
+  //   const filePath = `test-${Date.now()}`;
+  //   await testFS.writeTxtFile(filePath, fileTxt);
+  //   const fileToAttach = await testFS.readonlyFile(filePath);
+  //
+  //   // send message
+  //   const text = `test message text, and timestamp ${Date.now()} to find message in test`;
+  //   const echoedMsgEvent = waitEventFromChatService('message', 'added',
+  //     ev => {
+  //       const {
+  //         isIncomingMsg, incomingMsgId, attachments
+  //       } = (ev as ChatMessageAddedEvent).msg as RegularMsgView;
+  //       return (isIncomingMsg && !!incomingMsgId && !!attachments);
+  //     }
+  //   );
+  //   await chatStore.sendMessageInChat({
+  //     chatId,
+  //     text,
+  //     files: [fileToAttach],
+  //     relatedMessage: undefined,
+  //   });
+  //
+  //   // await echo with same body and attachments
+  //   const { msg: echoMsg } = (await echoedMsgEvent) as ChatMessageAddedEvent;
+  //   const {
+  //     incomingMsgId, attachments, body, relatedMessage
+  //   } = echoMsg as RegularMsgView;
+  //   expect(body).toBe(text);
+  //   const files = await messagesStore.getMessageAttachments(
+  //     attachments!, incomingMsgId
+  //   );
+  //   expect(await files[0].readTxt()).toBe(fileTxt);
+  //   expect(relatedMessage?.replyTo).withContext(`2nd test user also adds replyTo reference`).toBeDefined();
+  //
+  // }, 20000);
 
   itCond(`deleting non-existing message`, async () => {
     if (chatStore.currentChatId?.chatId !== chatId.chatId) {

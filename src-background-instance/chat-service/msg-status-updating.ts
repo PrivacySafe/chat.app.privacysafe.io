@@ -16,7 +16,7 @@
 */
 
 import { ChatsData } from '../dataset/index.ts';
-import { ChatMessageId } from '../../types/asmail-msgs.types.ts';
+import type { ChatMessageId } from '../../types/asmail-msgs.types.ts';
 import type { ChatService } from './index.ts';
 import { chatIdOfChat, recipientsInChat } from './common-transforms.ts';
 import { ChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
@@ -24,6 +24,7 @@ import { UpdatedMsgStatusSysMsgData } from '../../types/asmail-msgs.types.ts';
 import { MsgDbEntry } from '../dataset/versions/v2/msgs-db.ts';
 import { sendSystemMessage } from '../utils/send-chat-msg.ts';
 import { makeDbRecordException } from '../utils/exceptions.ts';
+import type { MessageStatus } from '../../types/chat.types.ts';
 
 export class MsgStatusUpdating {
 
@@ -34,22 +35,26 @@ export class MsgStatusUpdating {
   ) {
   }
 
-  async markMessageAsReadNotifyingSender(
-    { chatId, chatMessageId }: ChatMessageId): Promise<void> {
-    const chat = this.data.findChat(chatId);
+  async updateMessageStatus(chatMsgId: ChatMessageId, msgStatus: MessageStatus): Promise<ChatDbEntry> {
+    const chat = this.data.findChat(chatMsgId.chatId);
     if (!chat) {
       throw makeDbRecordException({ chatNotFound: true });
     }
 
-    // update local data
     const updatedMsg = await this.data.updateMessageRecord(
-      { chatId, chatMessageId },
-      { status: 'read' },
+      { chatId: chatMsgId.chatId, chatMessageId: chatMsgId.chatMessageId },
+      { status: msgStatus },
     );
     if (!updatedMsg) {
       throw makeDbRecordException({ messageNotFound: true });
     }
     this.emit.message.updated(updatedMsg);
+
+    return chat;
+  }
+
+  async markMessageAsReadNotifyingSender({ chatId, chatMessageId }: ChatMessageId): Promise<void> {
+    const chat = await this.updateMessageStatus({ chatId, chatMessageId }, 'read');
 
     // notify peers
     const recipients = recipientsInChat(chat, this.ownAddr);
@@ -65,6 +70,7 @@ export class MsgStatusUpdating {
     sender: string,
     chat: ChatDbEntry,
     { chatMessageId, status }: UpdatedMsgStatusSysMsgData['value'],
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     timestamp: number,
   ): Promise<void> {
     // check request

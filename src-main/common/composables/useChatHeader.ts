@@ -16,7 +16,14 @@
 */
 import { computed, type ComputedRef, inject, onBeforeUnmount, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { DIALOGS_KEY, I18N_KEY, NOTIFICATIONS_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import {
+  DIALOGS_KEY,
+  DialogsPlugin,
+  I18N_KEY,
+  I18nPlugin,
+  NOTIFICATIONS_KEY,
+  NotificationsPlugin,
+} from '@v1nt1248/3nclient-lib/plugins';
 import { capitalize, prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { areChatIdsEqual } from '@shared/chat-ids';
@@ -26,11 +33,11 @@ import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
+import { chatService } from '@main/common/services/external-services';
 import type { ChatListItemView, ChatMessageView } from '~/chat.types';
 import ConfirmationDialog from '@main/common/components/dialogs/confirmation-dialog.vue';
 import ChatRenameDialog from '@main/common/components/dialogs/chat-rename-dialog.vue';
 import ChatInfoDialog from '@main/common/components/dialogs/chat-info-dialog/chat-info-dialog.vue';
-import { chatService } from '@main/common/services/external-services.ts';
 
 interface ChatActionHandlers {
   history: {
@@ -56,9 +63,9 @@ export function useChatHeader(
     isMobileMode?: boolean;
   },
 ) {
-  const { $tr } = inject(I18N_KEY)!;
-  const dialog = inject(DIALOGS_KEY)!;
-  const notification = inject(NOTIFICATIONS_KEY)!;
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
+  const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const { user } = storeToRefs(useAppStore());
 

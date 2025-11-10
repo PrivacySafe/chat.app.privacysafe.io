@@ -96,7 +96,7 @@ export function setupSecondaryUser(userNum: 2 | 3): void {
       }
       displayUpdateEvent(ev);
     },
-    error: err => console.error(`Failure in watching chat service events`, err),
+    error: err => w3n.log('error', 'Failure in watching chat service events. ', err),
     complete: () => console.warn(`Watching chat service events completed`),
   });
 }
@@ -111,9 +111,7 @@ function handlerToAcceptChatInvitation(
       const { chatId, chatMessageId } = msg;
       await sleep(1000);
       await acceptChatInvitation({ chatId, chatMessageId }, sndUserName)
-        .catch(err => console.error(
-          `Error in accpeting chat invitation`, err,
-        ));
+        .catch(err => w3n.log('error', 'Error in accepting chat invitation', err,));
     }
   };
 }
@@ -146,25 +144,28 @@ function handlerToSendAttachmentBackInReply(
     fs => fs.writableSubRoot(`test on ${Date.now()}`),
   );
   return async msg => {
-    const { isIncomingMsg, attachments, incomingMsgId } = msg;
-    if (!isIncomingMsg || !attachments || !incomingMsgId) {
-      return;
-    }
-    // get attachment
-    const { chatId, chatMessageId, body } = msg;
-    await setChatAndFetchMessages(chatId);
-    const filesFromInbox = Array.from(Object.values(await getMessageAttachments(
-      attachments, incomingMsgId,
-    )));
-    // put them into linkable files
-    const fs = await fsPromise;
-    const files = await Promise.all(
-      Object.values(filesFromInbox).map(f => fs.saveFile(f, f.name).then(() => fs.readonlyFile(f.name),
-      )),
-    );
-    // echo it all back, adding replyTo reference
-    await sendMessageInChat({ chatId, text: body, files, relatedMessage: { replyTo: { chatMessageId } } });
-  };
+    // TODO
+  }
+  // return async msg => {
+  //   const { isIncomingMsg, attachments, incomingMsgId } = msg;
+  //   if (!isIncomingMsg || !attachments || !incomingMsgId) {
+  //     return;
+  //   }
+  //   // get attachment
+  //   const { chatId, chatMessageId, body } = msg;
+  //   await setChatAndFetchMessages(chatId);
+  //   const filesFromInbox = Array.from(Object.values(await getMessageAttachments(
+  //     attachments, incomingMsgId,
+  //   )));
+  //   // put them into linkable files
+  //   const fs = await fsPromise;
+  //   const files = await Promise.all(
+  //     Object.values(filesFromInbox).map(f => fs.saveFile(f, f.name).then(() => fs.readonlyFile(f.name),
+  //     )),
+  //   );
+  //   // echo it all back, adding replyTo reference
+  //   await sendMessageInChat({ chatId, text: body, files, relatedMessage: { replyTo: { chatMessageId } } });
+  // };
 }
 
 function displayUpdateEvent(ev: UpdateEvent): void {

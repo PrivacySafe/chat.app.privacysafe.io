@@ -15,26 +15,31 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import type { ReadonlyFile } from '~/app.types';
-import { chatService, fileLinkStoreSrv } from '@main/common/services/external-services.ts';
+import type { ReadonlyFile, ReadonlyFS } from '~/index';
+import { chatService, fileLinkStoreSrv } from '@main/common/services/external-services';
 
 export async function getFileByInfoFromMsg(
-  fileId: string,
+  entityId: string,
   incomingMsgId?: string,
-): Promise<Nullable<ReadonlyFile>> {
+): Promise<Nullable<ReadonlyFile | ReadonlyFS>> {
   if (incomingMsgId) {
     const msg = await chatService.getIncomingMessage(incomingMsgId);
     if (!msg) {
       return null;
     }
 
-    const file = await msg.attachments?.readonlyFile(fileId);
+    const attachmentsList = await msg.attachments?.listFolder('');
+    const currentAttachmentsItem = (attachmentsList || []).find(i => i.name === entityId);
 
-    return file || null;
+    const entity = currentAttachmentsItem?.isFolder
+      ? await msg.attachments?.readonlySubRoot(entityId)
+      : await msg.attachments?.readonlyFile(entityId);
+
+    return entity || null;
   }
 
-  const file = await fileLinkStoreSrv.getFile(fileId);
-  return file || null;
+  const entity = await fileLinkStoreSrv.getFile(entityId);
+  return entity || null;
 }
 
 export async function saveFileFromMsg(
@@ -42,27 +47,47 @@ export async function saveFileFromMsg(
   $tr: (key: string, placeholders?: Record<string, string>) => string,
   incomingMsgId?: string,
 ): Promise<boolean | undefined> {
-  const file = await getFileByInfoFromMsg(fileId, incomingMsgId);
-  if (!file) {
+  const entity = await getFileByInfoFromMsg(fileId, incomingMsgId);
+  if (!entity) {
     return false;
   }
 
-  const targetFile = await w3n.shell?.fileDialogs?.saveFileDialog!(
-    $tr('chat.message.file.download'),
-    '',
-    file.name,
-  );
+  if ((entity as ReadonlyFS).listFolder) {
+    const targetFolder = await w3n.shell?.fileDialogs?.saveFolderDialog!(
+      $tr('chat.message.folder.download'),
+      '',
+      entity.name,
+    );
 
-  if (!targetFile) {
-    return false;
-  }
+    if (!targetFolder) {
+      return undefined;
+    }
 
-  try {
-    const bytes = await file.readBytes();
-    await targetFile.writeBytes(bytes!);
-    return true;
-  } catch (e) {
-    console.error(e);
-    return false;
+    try {
+      await targetFolder!.saveFolder(entity as ReadonlyFS, entity.name);
+      return true;
+    } catch (e) {
+      w3n.log('error', `Error saving the folder ${entity.name}`, e);
+      return false;
+    }
+  } else {
+    const targetFile = await w3n.shell?.fileDialogs?.saveFileDialog!(
+      $tr('chat.message.file.download'),
+      '',
+      entity.name,
+    );
+
+    if (!targetFile) {
+      return undefined;
+    }
+
+    try {
+      const bytes = await (entity as ReadonlyFile).readBytes();
+      await targetFile.writeBytes(bytes!);
+      return true;
+    } catch (e) {
+      w3n.log('error', `Error saving the file ${entity.name}`, e);
+      return false;
+    }
   }
 }

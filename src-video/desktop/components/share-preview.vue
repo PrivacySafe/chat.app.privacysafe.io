@@ -67,7 +67,7 @@ onBeforeUnmount(async () => {
       <ui3n-switch
         v-model="selected"
         size="24"
-        @change="v => emit('selected', v)"
+        @change="(v: boolean) => emit('selected', v)"
       />
 
       <div :class="$style.text">
@@ -93,6 +93,7 @@ onBeforeUnmount(async () => {
   height: 100%;
   padding-bottom: var(--spacing-xl);
   background-color: var(--color-bg-chat-bubble-general-bg);
+  color: var(--color-text-block-primary-default);
 }
 
 .videoPreview {

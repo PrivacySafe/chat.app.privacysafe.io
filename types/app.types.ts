@@ -30,6 +30,14 @@ export interface FileWithId extends ReadonlyFile {
   fileId: string;
 }
 
+export interface ReadonlyFsWithId extends ReadonlyFS {
+  id: string;
+}
+
+export interface WritableFsWithId extends WritableFS {
+  id: string;
+}
+
 export type AvailableLanguage = 'en';
 
 export type AvailableColorTheme = 'default' | 'dark';

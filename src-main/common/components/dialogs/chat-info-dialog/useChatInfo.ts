@@ -18,9 +18,9 @@ import { computed, inject, onBeforeMount, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
-import { NOTIFICATIONS_KEY } from '@v1nt1248/3nclient-lib/plugins'
+import { NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import { includesAddress } from '@shared/address-utils';
+import { includesAddress, toCanonicalAddress } from '@shared/address-utils';
 import { AUTO_DELETE_MESSAGES_BY_ID } from '@shared/constants';
 import type { GroupChatView, PersonView } from '~/index';
 import type { ChatInfoDialogProps, ChatInfoDialogEmits } from './types';
@@ -29,7 +29,7 @@ import { useContactsStore } from '@main/common/store/contacts.store';
 import { useChatStore } from '@main/common/store/chat.store';
 
 export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmits) {
-  const { $createNotice } = inject(NOTIFICATIONS_KEY)!;
+  const { $createNotice } = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
   const { user: ownAddr } = storeToRefs(useAppStore());
 
   const contactsStore = useContactsStore();
@@ -55,19 +55,31 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
     listItemElId: null,
   });
 
+  const chatCanonicalMembers = computed(() => {
+    if (!props.chat.isGroupChat) {
+      return {};
+    }
+
+    return Object.keys(props.chat.members || {}).reduce((res, addr) => {
+      const canonicalAddr = toCanonicalAddress(addr);
+      res[canonicalAddr] = cloneDeep((props.chat as GroupChatView).members[addr]);
+      return res;
+    }, {} as Record<string, { hasAccepted: boolean  }>);
+  });
+
   const dialogWidth = computed(() => props.isMobileMode ? '300px' : '380px');
 
   const autoDeleteMessageInfo = computed(() => {
     const { settings } = props.chat;
-    const autoDeleteMessagesSetting = (settings?.autoDeleteMessages || '0') as '0' | '1' | '2' | '3' | '4';
-    return AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessagesSetting];
+    const autoDeleteMessagesSettingId = (settings?.autoDeleteMessages || '0') as '0' | '1' | '2' | '3' | '4' | '5';
+    return AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessagesSettingId];
   });
 
   const allContacts = computed(() => {
     const value = cloneDeep(contactList.value);
     if (props.chat.isGroupChat) {
-      for (const addr of Object.keys(props.chat.members)) {
-        const isThereUser = value.find(c => c.mail === addr);
+      for (const addr of Object.keys(chatCanonicalMembers.value)) {
+        const isThereUser = value.find(c => toCanonicalAddress(c.mail) === addr);
 
         if (!isThereUser) {
           value.push({
@@ -78,8 +90,8 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
         }
       }
     } else {
-      const addr = props.chat.peerAddr.toLowerCase().trim();
-      const isThereUser = value.find(c => c.mail === addr);
+      const addr = toCanonicalAddress(props.chat.peerAddr);
+      const isThereUser = value.find(c => toCanonicalAddress(c.mail) === addr);
       if (!isThereUser) {
         value.push({
           id: addr,
@@ -94,10 +106,10 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
 
   const members = computed<(PersonView & { displayName: string })[]>(() => {
     const addrsInChat = props.chat.isGroupChat
-      ? Object.keys(props.chat.members)
-      : [ownAddr.value, props.chat.peerAddr];
+      ? Object.keys(props.chat.members).map(m => toCanonicalAddress(m))
+      : [ownAddr.value, toCanonicalAddress(props.chat.peerAddr)];
 
-    return allContacts.value.filter(c => includesAddress(addrsInChat, c.mail));
+    return allContacts.value.filter(c => includesAddress(addrsInChat, toCanonicalAddress(c.mail)));
   });
 
   const filteredMembers = computed(() => members.value
@@ -105,7 +117,7 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
   );
 
   const nonDeletableUsers = computed(() => {
-    const me = contactList.value.find(c => c.mail === ownAddr.value);
+    const me = contactList.value.find(c => toCanonicalAddress(c.mail) === ownAddr.value);
     return me
       ? [{
         ...me,
@@ -129,10 +141,10 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
 
   function isUserPending(addr: string): boolean {
     if (props.chat.isGroupChat) {
-      return !props.chat.members[addr].hasAccepted;
+      return !chatCanonicalMembers.value[toCanonicalAddress(addr)]?.hasAccepted;
     }
 
-    return addr !== ownAddr.value && props.chat.status !== 'on';
+    return toCanonicalAddress(addr) !== ownAddr.value && props.chat.status !== 'on';
   }
 
   function closeDialog() {

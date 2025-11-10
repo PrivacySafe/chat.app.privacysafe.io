@@ -51,8 +51,8 @@ export function useHandleSystemMessages() {
   function initializeSystemMessagesHandler() {
     return w3n.mail?.inbox.subscribe('message', {
       next: msg => handleSystemMessages(msg),
-      error: err => console.error('# WATCHING ERR => ', err),
-      complete: () => console.log('# WATCHING COMPLETE #'),
+      error: err => w3n.log('error', 'Message observation error. ', err),
+      complete: () => console.info('# WATCHING COMPLETE #'),
     });
   }
 

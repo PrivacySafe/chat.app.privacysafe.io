@@ -16,10 +16,12 @@
 -->
 
 <script lang="ts" setup>
-import { Ui3nButton } from '@v1nt1248/3nclient-lib';
+import { Ui3nButton, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
 
-const { icon, disabled } = defineProps<{
+const { icon, tooltip = '', tooltipPlacement = 'top-start', disabled } = defineProps<{
   icon: string;
+  tooltip?: string;
+  tooltipPlacement?: 'top' | 'bottom';
   disabled?: boolean;
 }>();
 
@@ -27,17 +29,24 @@ const emits = defineEmits(['click', 'focus', 'blur']);
 </script>
 
 <template>
-  <ui3n-button
-    type="custom"
-    color="var(--color-bg-button-tritery-default)"
-    :icon="icon"
-    icon-color="var(--color-icon-button-tritery-default)"
-    :class="$style.btn"
+  <ui3n-tooltip
+    :content="tooltip"
+    :placement="tooltipPlacement"
+    position-strategy="fixed"
     :disabled="disabled"
-    @click="emits('click', $event)"
-    @focusin="emits('focus', $event)"
-    @focusout="emits('blur', $event)"
-  />
+  >
+    <ui3n-button
+      type="custom"
+      color="var(--color-bg-button-tritery-default)"
+      :icon="icon"
+      icon-color="var(--color-icon-button-tritery-default)"
+      :class="$style.btn"
+      :disabled="disabled"
+      @click="emits('click', $event)"
+      @focusin="emits('focus', $event)"
+      @focusout="emits('blur', $event)"
+    />
+  </ui3n-tooltip>
 </template>
 
 <style lang="scss" module>

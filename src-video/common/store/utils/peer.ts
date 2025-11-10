@@ -25,11 +25,19 @@ export function usePeerFuncs(getPeer: (peerAddr: string) => PeerState) {
     stream: MediaStream,
     trackId: string,
   ) {
-    const { streams } = getPeer(peerAddr);
+    const { isMicOn, isCamOn, streams } = getPeer(peerAddr);
     const streamWithInfo = streams.find(({ stream: { id } }) => (id === stream.id));
     if (streamWithInfo) {
       streamWithInfo.tracks.push(trackId);
     } else {
+      if (type === 'camera+mic') {
+        stream.getAudioTracks().forEach(t => {
+          t.enabled = isMicOn;
+        });
+        stream.getVideoTracks().forEach(t => {
+          t.enabled = isCamOn;
+        })
+      }
       streams.push({ type, stream, tracks: [trackId] });
     }
   }

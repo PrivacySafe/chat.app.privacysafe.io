@@ -15,18 +15,20 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-import { inject } from 'vue';
+import { type Component, onBeforeMount, shallowRef } from 'vue';
 import { storeToRefs } from 'pinia';
-import { I18N_KEY, NOTIFICATIONS_KEY } from '@v1nt1248/3nclient-lib/plugins';
 import { isFileImage, isFileVideo, isFileAudio } from '@v1nt1248/3nclient-lib/utils';
-import { useAppStore } from '@main/common/store/app.store';
-import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
-import { saveFileFromMsg } from '@main/common/utils/files.helper';
 import { Ui3nButton, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+import { useAppStore } from '@main/common/store/app.store';
+import { saveFileFromMsg } from '@main/common/utils/files.helper';
+import { useOpenAttachment } from './useOpenAttachment';
+import type { AttachmentViewInfo } from './types';
 import ImageView from './attachment-image-view.vue';
 import PdfView from './attachment-pdf-view.vue';
 import VideoView from './attachment-video-view/attachment-video-view.vue';
 import AudioView from './attachment-audio-view/attachment-audio-view.vue';
+import FolderView from './attachment-folder-archive-view/attachment-folder-view.vue';
+import ArchiveView from './attachment-folder-archive-view/attachment-archive-view.vue';
 
 const props = defineProps<{
   item: AttachmentViewInfo;
@@ -36,13 +38,18 @@ const emits = defineEmits<{
   (event: 'close'): void;
 }>();
 
-const { $tr } = inject(I18N_KEY)!;
-const { $createNotice } = inject(NOTIFICATIONS_KEY)!;
+const { $tr, $createNotice, showError, openEntity } = useOpenAttachment(props, emits);
 
 const { isMobileMode } = storeToRefs(useAppStore());
 
+const viewComponent = shallowRef<Component>()
+
 async function downloadFile() {
   const res = await saveFileFromMsg(props.item.id!, $tr, props.incomingMsgId);
+  if (res === undefined) {
+    return;
+  }
+
   $createNotice({
     type: res ? 'success' : 'error',
     content: res ? $tr('chat.message.file.download.success') : $tr('chat.message.file.download.error'),
@@ -50,20 +57,42 @@ async function downloadFile() {
   });
 }
 
-function showError() {
-  $createNotice({
-    type: 'error',
-    content: $tr('The file may have been deleted or moved'),
-    duration: 3000,
-  });
-
-  emits('close');
-}
+onBeforeMount(() => {
+  if (isFileImage({ fullName: props.item.name.toLowerCase() })) {
+    viewComponent.value = ImageView;
+  } else if (isFileVideo({ fullName: props.item.name.toLowerCase() })) {
+    viewComponent.value = VideoView;
+  } else if (isFileAudio({ fullName: props.item.name.toLowerCase() })) {
+    viewComponent.value = AudioView;
+  } else if (props.item.ext === 'pdf') {
+    viewComponent.value = PdfView;
+  } else if (props.item.isFolder) {
+    viewComponent.value = FolderView;
+  } else if (props.item.ext === 'zip') {
+    viewComponent.value = ArchiveView;
+  }
+});
 </script>
 
 <template>
   <div :class="[$style.chatMessageAttachmentView, isMobileMode && $style.mobile]">
     <div :class="$style.actions">
+      <ui3n-tooltip
+        v-if="!incomingMsgId"
+        :content="item.isFolder ? $tr('chat.message.folder.open') : $tr('chat.message.file.open')"
+        position-strategy="fixed"
+        placement="bottom-end"
+      >
+        <ui3n-button
+          type="icon"
+          color="var(--color-bg-block-primary-default)"
+          icon="outline-folder-open"
+          icon-size="24"
+          icon-color="var(--color-icon-table-primary-default)"
+          @click.stop.prevent="openEntity"
+        />
+      </ui3n-tooltip>
+
       <ui3n-tooltip
         :content="$tr('chat.view.btn.download')"
         position-strategy="fixed"
@@ -95,32 +124,9 @@ function showError() {
       </ui3n-tooltip>
     </div>
 
-    <image-view
-      v-if="isFileImage({ fullName: item.name })"
-      :item="item"
-      :incoming-msg-id="incomingMsgId"
-      :is-mobile-mode="isMobileMode"
-      @error="showError"
-    />
-
-    <pdf-view
-      v-else-if="item.ext === 'pdf'"
-      :item="item"
-      :incoming-msg-id="incomingMsgId"
-      :is-mobile-mode="isMobileMode"
-      @error="showError"
-    />
-
-    <video-view
-      v-else-if="isFileVideo({ fullName: item.name })"
-      :item="item"
-      :incoming-msg-id="incomingMsgId"
-      :is-mobile-mode="isMobileMode"
-      @error="showError"
-    />
-
-    <audio-view
-      v-else-if="isFileAudio({ fullName: item.name })"
+    <component
+      :is="viewComponent"
+      v-if="viewComponent"
       :item="item"
       :incoming-msg-id="incomingMsgId"
       :is-mobile-mode="isMobileMode"

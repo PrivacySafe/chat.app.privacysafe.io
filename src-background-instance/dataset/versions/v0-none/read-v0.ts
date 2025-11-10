@@ -186,7 +186,7 @@ export async function getVersionNoneData(
       );
       msgRecords.push(msg);
     } catch (err) {
-      console.error(err);
+      w3n.log('error', JSON.stringify(err), err);
     }
   }
 
@@ -194,9 +194,7 @@ export async function getVersionNoneData(
   const groupChats = chatsArr.filter(c => !!c.groupChat).map(c => c.groupChat!);
   const otoChats: OTOChatDbEntry[] = [];
   for (const chat of chatsArr.filter(c => !!c.otoChat).map(c => c.otoChat!)) {
-    if (otoChats.find(c => (c.peerCAddr === chat.peerCAddr))) {
-      continue;
-    } else {
+    if (!otoChats.find(c => (c.peerCAddr === chat.peerCAddr))) {
       otoChats.push(chat);
     }
   }

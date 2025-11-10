@@ -15,6 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+// @ts-ignore
+import { excerpt } from 'jsr:@dbushell/hyperless';
 import { ChatsData } from '../dataset/index.ts';
 import {
   ChatMessageAttachmentsInfo,
@@ -24,13 +26,23 @@ import {
 } from '../../types/chat.types.ts';
 import type { ChatService, SendingProgressInfo } from './index.ts';
 import { chatIdOfChat, makeMsgDbEntry, recipientsInChat } from './common-transforms.ts';
-import type { ChatIdObj, ChatMessageId, ChatIncomingMessage, ChatRegularMsgV1, RelatedMessage } from '../../types/asmail-msgs.types.ts';
+import type {
+  ChatIdObj,
+  ChatMessageId,
+  ChatIncomingMessage,
+  ChatRegularMsgV1,
+  RelatedMessage,
+} from '../../types/asmail-msgs.types.ts';
 import { makeDbRecordException } from '../utils/exceptions.ts';
 import { sendRegularMessage, sendSystemMessage } from '../utils/send-chat-msg.ts';
 import { generateChatMessageId } from '../../shared-libs/chat-ids.ts';
 import { ChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
-import { addFileTo } from '../../shared-libs/attachments-container.ts';
-import { AUTO_DELETE_MESSAGES_BY_ID, ONE_YEAR } from '../../shared-libs/constants.ts';
+import { addFileTo, addFolderTo } from '../../shared-libs/attachments-container.ts';
+import { AUTO_DELETE_MESSAGES_BY_ID, AUTODELETE_OFF } from '../../shared-libs/constants.ts';
+import type { FileWithId, ReadonlyFsWithId } from '~/app.types.ts';
+import { LOGO_ICON_AS_ARRAY } from '../../src-main/common/constants/files.ts';
+import { AppSettings } from '../utils/app-settings.ts';
+import type { OpenChatCmdArg } from '../../types/chat-commands.types.ts';
 
 type AttachmentsContainer = web3n.asmail.AttachmentsContainer;
 type ReadonlyFS = web3n.files.ReadonlyFS;
@@ -41,6 +53,7 @@ export class MsgSending {
     private readonly data: ChatsData,
     private readonly emit: ChatService['emit'],
     private readonly filesStore: ChatService['filesStore'],
+    private readonly i18n: AppSettings,
     private readonly ownAddr: string,
     private readonly removeMessageFromInbox: ChatService['removeMessageFromInbox'],
   ) {
@@ -51,7 +64,7 @@ export class MsgSending {
       chatId: ChatIdObj,
       chatMessageId?: string,
       text: string,
-      files: web3n.files.ReadonlyFile[] | undefined,
+      files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined,
       relatedMessage: RelatedMessage | undefined,
     }): Promise<void> {
     const chat = this.data.findChat(chatId);
@@ -77,8 +90,8 @@ export class MsgSending {
       );
     } else {
       const { settings } = chat;
-      const autoDeleteMessages = settings?.autoDeleteMessages as '0' | '1' | '2' | '3' | '4';
-      const autoDeleteTSValue = AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessages].value || ONE_YEAR;
+      const autoDeleteMessagesId = settings?.autoDeleteMessages as '0' | '1' | '2' | '3' | '4' | '5';
+      const autoDeleteTSValue = AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessagesId].value || AUTODELETE_OFF;
 
       const { attachments, attachmentContainer } = await this.prepOutgoingAttachments(files);
 
@@ -86,7 +99,7 @@ export class MsgSending {
         groupChatId: chat.isGroupChat ? chat.chatId : null,
         otoPeerCAddr: chat.isGroupChat ? null : chat.peerCAddr,
         timestamp,
-        removeAfter: timestamp + autoDeleteTSValue,
+        removeAfter: autoDeleteMessagesId === '0' ? 0 : timestamp + autoDeleteTSValue,
         body: text,
         attachments,
         relatedMessage: relatedMessage ?? null,
@@ -109,25 +122,48 @@ export class MsgSending {
     }
   }
 
-  private async prepOutgoingAttachments(files: web3n.files.ReadonlyFile[] | undefined): Promise<{
+  async cancelSendingMessage(deliveryId: string): Promise<void> {
+    await w3n.mail?.delivery.rmMsg(deliveryId, true);
+  }
+
+  private async prepOutgoingAttachments(
+    entities: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined,
+  ): Promise<{
     attachments: ChatMessageAttachmentsInfo[] | null;
     attachmentContainer?: AttachmentsContainer;
   }> {
-    if (!files || (files.length === 0)) {
+    if (!entities || (entities.length === 0)) {
       return { attachments: null };
     }
 
     const attachments: ChatMessageAttachmentsInfo[] = [];
     const attachmentContainer = {} as AttachmentsContainer;
-    for (const file of files) {
-      const stats = await file.stat();
-      const fileId = await this.filesStore.saveLink(file);
+    for (const entity of entities) {
+      const isFolder = !!(entity as ReadonlyFsWithId).listFolder;
+      const entityStat = isFolder
+        ? {
+          name: entity.name,
+          size: 0,
+          isFolder: true,
+          ...((entity as ReadonlyFsWithId).id && { id: (entity as ReadonlyFsWithId).id }),
+        } : {
+          name: entity.name,
+          size: (await (entity as FileWithId).stat()).size!,
+          isFolder: false,
+          ...((entity as FileWithId).fileId && { id: (entity as FileWithId).fileId }),
+        };
+
+      const entityId = await this.filesStore.saveLink(entity);
       attachments.push({
-        name: file.name,
-        size: stats.size!,
-        id: fileId,
+        ...entityStat,
+        id: entityId,
       });
-      addFileTo(attachmentContainer, file);
+
+      if (isFolder) {
+        addFolderTo(attachmentContainer, entity as web3n.files.ReadonlyFS);
+      } else {
+        addFileTo(attachmentContainer, entity as web3n.files.ReadonlyFile);
+      }
     }
     return { attachments, attachmentContainer };
   }
@@ -146,11 +182,13 @@ export class MsgSending {
         info.push({
           name: entry.name,
           size: stats.size!,
+          isFolder: false,
         });
       } else {
         info.push({
           name: entry.name,
-          size: 1,
+          size: 0,
+          isFolder: true,
         });
       }
     }
@@ -174,8 +212,8 @@ export class MsgSending {
     const removeFromInbox = !incomingMsg.attachments;
 
     const { settings } = chat;
-    const autoDeleteMessages = settings?.autoDeleteMessages as '0' | '1' | '2' | '3' | '4';
-    const autoDeleteTSValue = AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessages].value || ONE_YEAR;
+    const autoDeleteMessagesId = settings?.autoDeleteMessages as '0' | '1' | '2' | '3' | '4' | '5';
+    const autoDeleteTSValue = AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessagesId].value || AUTODELETE_OFF;
 
     const msg = makeMsgDbEntry('regular', chatMessageId, {
       isIncomingMsg: true,
@@ -187,7 +225,7 @@ export class MsgSending {
       attachments,
       relatedMessage: relatedMessage ?? null,
       timestamp: deliveryTS,
-      removeAfter: deliveryTS + autoDeleteTSValue,
+      removeAfter: autoDeleteMessagesId === '0' ? 0 : deliveryTS + autoDeleteTSValue,
     });
 
     await this.data.addMessage(msg);
@@ -197,6 +235,25 @@ export class MsgSending {
     if (removeFromInbox) {
       await this.removeMessageFromInbox(msgId);
     }
+
+    const icon = Uint8Array.from(LOGO_ICON_AS_ARRAY);
+    const notificationTitle = await this.i18n.$tr('app.notification.new.message', { sender });
+
+    await w3n.shell?.userNotifications?.addNotification({
+      icon,
+      title: notificationTitle,
+      body: plainTxtBody ? excerpt(`<div>${plainTxtBody}</div>`, 50) : '',
+      cmd: {
+        cmd: 'open-chat-with',
+        params: [{
+          chatId: {
+            isGroupChat: chat.isGroupChat,
+            chatId: chat.isGroupChat ? chat.chatId : chat.peerCAddr,
+          },
+          peerAddress: sender,
+        } as OpenChatCmdArg],
+      },
+    });
 
     await sendSystemMessage({
       chatId: chatIdOfChat(chat),

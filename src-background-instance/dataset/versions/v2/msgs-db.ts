@@ -23,7 +23,12 @@ import {
   SQLiteOn3NStorage,
 } from '../../../../shared-libs/sqlite-on-3nstorage/index.js';
 import { ParamsObject } from '../../../../shared-libs/sqlite-on-3nstorage/sqljs.js';
-import type { ChatMessageHistory, ChatMessageReaction, ChatMessageAttachmentsInfo, MessageStatus } from '../../../../types/chat.types.ts';
+import type {
+  ChatMessageHistory,
+  ChatMessageReaction,
+  ChatMessageAttachmentsInfo,
+  MessageStatus,
+} from '../../../../types/chat.types.ts';
 import type { RelatedMessage, ChatIdObj, ChatMessageId } from '../../../../types/asmail-msgs.types.ts';
 import { GroupChatDbEntry, OTOChatDbEntry } from './chats-db.ts';
 import {
@@ -202,7 +207,7 @@ export class MsgsDBs {
     const query = `--sql
       SELECT *
       FROM messages
-      WHERE chatMessageType='regular' AND (removeAfter=0 OR removeAfter<$now)
+      WHERE chatMessageType='regular' AND removeAfter<$now AND removeAfter<>0
     `;
     const [sqlValue] = this.latestDB.db.exec(query, { $now: now });
     return sqlValue ? fromQueryResult(sqlValue, msgsTabFields) : [];
@@ -483,6 +488,35 @@ export class MsgsDBs {
     const { maxTS } = objectFromQueryExecResult<{ maxTS: number | null }>(sqlValue)[0];
 
     return maxTS === null ? undefined : maxTS;
+  }
+
+  async getRecentReactions(quantity: number): Promise<string[]> {
+    const sqlQuery = `--sql
+      SELECT *
+      FROM messages
+      WHERE chatMessageType='regular' AND reactions IS NOT NULL
+      ORDER BY timestamp DESC
+      LIMIT ${quantity * 4}`;
+
+    const [sqlValue] = this.latestDB.db.exec(sqlQuery);
+
+    if (!sqlValue) {
+      return [];
+    }
+
+    const ownAddr = await w3n.mail?.getUserId();
+
+    const messages = sqlValue ? fromQueryResult(sqlValue, msgsTabFields) : [];
+    const result = [] as string[];
+    for (const msg of messages) {
+      const { reactions } = msg;
+      const reaction = (reactions as Record<string, ChatMessageReaction>)[ownAddr!];
+      if (reaction && !result.includes(reaction.name)) {
+        result.unshift(reaction.name);
+      }
+    }
+
+    return result.splice(0, quantity);
   }
 
   async updateMessageRecord(id: ChatMessageId, toUpdate: Partial<MsgDbEntry>): Promise<boolean> {

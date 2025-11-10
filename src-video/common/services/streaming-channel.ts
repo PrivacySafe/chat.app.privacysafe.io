@@ -16,10 +16,10 @@
 */
 
 import { sleep } from '@v1nt1248/3nclient-lib/utils';
-import type { Peer, StreamsStore } from '@video/common/store/streams.store.ts';
+import type { Peer, StreamsStore } from '@video/common/store/streams.store';
 import type { VueEventBus } from '@v1nt1248/3nclient-lib/plugins';
-import type { PeerEvents } from '../types/events.ts';
-import { WebRTCPeerChannel } from './webrtc-peer-channel.ts';
+import type { PeerEvents } from '../types/events';
+import { WebRTCPeerChannel } from './webrtc-peer-channel';
 import type {
   DisconnectMsg,
   InfoMsg,
@@ -122,12 +122,18 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
     this.dataChannel?.send(JSON.stringify(json));
   }
 
-  signalOwnStreamState(streamId: string, audio: boolean, video: boolean): void {
+  signalOwnStreamState(
+    { streamId, audio, video }:
+    { streamId: string; audio: boolean; video: boolean },
+  ): void {
     const json: StreamStateMsg = {
       type: 'stream-state',
       streamId, audio, video,
     };
-    this.dataChannel?.send(JSON.stringify(json));
+
+    if (this.dataChannel?.readyState === 'open') {
+      this.dataChannel?.send(JSON.stringify(json));
+    }
   }
 
   private signalStreamRemoval(streamId: string): void {
@@ -171,11 +177,10 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
         case 'disconnect':
           return this.absorbPeerDisconnectEvent();
         default:
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          console.error(`Unknown type in data channel message:`, (json as any).type);
+          w3n.log('error', `Unknown type in data channel message: ${(json as Msg).type}`);
       }
     } catch (err) {
-      console.error(`Captured error in handling data channel message`, err);
+      w3n.log('error', 'Captured error in handling data channel message. ', err);
     }
   }
 
@@ -210,6 +215,7 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
       this.store.addPeerStreamTrack(this.peerAddr, type, stream, trackId);
     }
     this.store.syncUIWithPeerTracksState(this.peerAddr);
+
     this.eventBus.emit('stream:added', {
       peerAddr: this.peerAddr,
       streamId: stream.id,
@@ -243,23 +249,23 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
     }
   }
 
-  private absorbStreamStateEvent(
-    { streamId, audio, video }: StreamStateMsg,
-  ): void {
+  private absorbStreamStateEvent({ streamId, audio, video }: StreamStateMsg): void {
+    this.store.updatePeer(this.peerAddr, { isMicOn: audio, isCamOn: video });
+    this.eventBus.emit('stream:track-event', {
+      peerAddr: this.peerAddr,
+      streamId, audio, video,
+    });
+
     const stream = this.store.getPeerStream(this.peerAddr, streamId)?.stream;
     if (!stream) {
       return;
     }
+
     stream.getAudioTracks().forEach(t => {
       t.enabled = audio;
     });
     stream.getVideoTracks().forEach(t => {
       t.enabled = video;
-    });
-    this.store.syncUIWithPeerTracksState(this.peerAddr);
-    this.eventBus.emit('stream:track-event', {
-      peerAddr: this.peerAddr,
-      streamId, audio, video,
     });
   }
 

@@ -23,6 +23,7 @@ import type { ChatListItemView } from '~/chat.types.ts';
 
 const props = defineProps<{
   chat: ChatListItemView;
+  chatWithCall?: boolean;
   disabled?: boolean;
 }>();
 const emits = defineEmits<{
@@ -31,7 +32,8 @@ const emits = defineEmits<{
 
 const propsValue = computed(() => props);
 
-const { isMenuOpen, availableMenuItems, selectAction, isSubItemSelected } = useChatHeaderActions(propsValue, emits);
+const { isMenuOpen, availableMenuItems, selectAction, isMenuItemDisabled, isSubItemSelected } =
+  useChatHeaderActions(propsValue, emits);
 </script>
 
 <template>
@@ -65,9 +67,9 @@ const { isMenuOpen, availableMenuItems, selectAction, isSubItemSelected } = useC
             item.margin && $style.margin,
             item.isAccent && $style.chatHeaderActionsMenuItemAccent,
             item.subMenu && $style.withSubMenu,
-            (disabled || item.disabled) && $style.disabled,
+            isMenuItemDisabled(item) && $style.disabled,
           ]"
-          v-on="(item.disabled || item.subMenu) ? {} : { click: () => selectAction(item) }"
+          v-on="(isMenuItemDisabled(item) || item.subMenu) ? {} : { click: () => selectAction(item) }"
         >
           <ui3n-icon
             :icon="item.icon"
@@ -98,9 +100,9 @@ const { isMenuOpen, availableMenuItems, selectAction, isSubItemSelected } = useC
                 subItem.margin && $style.margin,
                 subItem.isAccent && $style.chatHeaderActionsMenuItemAccent,
                 isSubItemSelected(subItem) && $style.isSelected,
-                (disabled || subItem.disabled) && $style.disabled,
+                isMenuItemDisabled(subItem) && $style.disabled,
               ]"
-              v-on="(subItem.disabled || subItem.subMenu) ? {} : { click: () => selectAction(subItem) }"
+              v-on="(isMenuItemDisabled(subItem) || subItem.subMenu) ? {} : { click: () => selectAction(subItem) }"
             >
               {{ $tr(subItem.text) }}
             </div>

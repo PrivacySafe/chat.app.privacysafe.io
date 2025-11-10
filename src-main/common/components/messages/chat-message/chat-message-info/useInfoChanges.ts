@@ -17,13 +17,13 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 import { type ComputedRef, inject } from 'vue';
 import isEmpty from 'lodash/isEmpty';
 import dayjs from 'dayjs';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import type { ChatMessageHistoryChange } from '~/index';
 
 const dateTimeFormat = 'YYYY-MM-DD HH:mm:ss';
 
 export function useInfoChanges(changes: ComputedRef<ChatMessageHistoryChange[]>, ts: number) {
-  const { $tr } = inject(I18N_KEY)!;
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
   function getTimeForBlockNow() {
     return isEmpty(changes.value) ? ts : changes.value[0].timestamp;

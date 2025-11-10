@@ -26,6 +26,7 @@ export function useScreenShareChoiceDialog(
   props: ScreenShareChoicesProps,
   emits: ScreenShareChoicesEmits,
 ) {
+  const isAudioCaptureAvailable = ref(false);
   const selectAudio = ref(props.initialDeskSoundShared);
   const screenChoices = ref<ScreenShareOption[]>();
   const windowChoices = ref<WindowShareOption[]>();
@@ -52,7 +53,7 @@ export function useScreenShareChoiceDialog(
 
     mediaIdToGet = undefined;
     await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-      .catch(err => console.error(`Error on the start of collection`, err));
+      .catch(err => w3n.log('error', 'Error on the start of collection. ', err));
 
     async function setStreamIn(
       { srcId, initiallySelected }: ScreenShareOption | WindowShareOption,
@@ -66,7 +67,8 @@ export function useScreenShareChoiceDialog(
         if (deferred) {
           deferredStreams.delete(mediaIdToGet);
           await navigator.mediaDevices.getDisplayMedia({
-            video: true, audio: true,
+            video: true,
+            // audio: true,
           }).then(
             stream => {
               deferred.resolve(stream);
@@ -159,7 +161,9 @@ export function useScreenShareChoiceDialog(
     emits('select', { selected, selectedDeskSound });
   }
 
-  onBeforeMount(() => {
+  onBeforeMount(async () => {
+    isAudioCaptureAvailable.value = !!(await w3n.mediaDevices?.isAudioCaptureAvailable());
+
     collectAvailableScreenShareOptions();
   });
 
@@ -170,6 +174,7 @@ export function useScreenShareChoiceDialog(
   });
 
   return {
+    isAudioCaptureAvailable,
     selectAudio,
     screenChoices,
     windowChoices,

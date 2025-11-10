@@ -29,30 +29,6 @@ import type {
   RelatedMessage,
 } from '../../types/index.ts';
 
-export async function sendSystemMessage(
-  { chatId, recipients, chatMessageId, chatSystemData }:
-    { chatId: ChatIdObj; recipients: string[] } & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>,
-): Promise<string> {
-  const jsonBody: ChatSystemMsgV1 = {
-    v: 1,
-    chatMessageType: 'system',
-    groupChatId: (chatId.isGroupChat ? chatId.chatId : undefined),
-    chatMessageId,
-    chatSystemData,
-  };
-  const outMsg: ChatOutgoingMessage = {
-    msgType: 'chat',
-    jsonBody,
-  };
-  const deliveryMetadata: LocalMetadataInDelivery = {
-    chatId,
-    chatMessageType: 'system',
-    chatSystemData,
-  };
-
-  return await addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
-}
-
 async function addMessageToDeliveryList(
   message: ChatOutgoingMessage,
   recipients: string[],
@@ -77,6 +53,98 @@ async function addMessageToDeliveryList(
   }
 }
 
+export async function deleteSentMessage(deliveryId: string, deleteIfErrorSending?: boolean): Promise<void> {
+  let isDone = false;
+  let hasError = false;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      w3n.mail!.delivery.observeDelivery(deliveryId, {
+        next: p => {
+          if (isDone) {
+            return;
+          }
+
+          if (p.allDone) {
+            isDone = true;
+            if (p.allDone === 'all-ok') {
+              resolve();
+            } else if (p.allDone === 'with-errors') {
+              const errs = Object.keys(p.recipients).reduce((res, peerAddr) => {
+                const { err } = p.recipients[peerAddr];
+
+                if (err) {
+                  res.push(err);
+                }
+                return res;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              }, [] as any[]);
+
+              reject(errs);
+            }
+          }
+        },
+        complete: () => {
+          if (!isDone) {
+            isDone = true;
+            resolve();
+          }
+        },
+        error: err => {
+          if (!isDone) {
+            isDone = true;
+            hasError = true;
+            reject(err);
+          }
+        },
+      });
+    });
+  } finally {
+    if (!deleteIfErrorSending || (deleteIfErrorSending && hasError)) {
+      w3n.mail!.delivery.rmMsg(deliveryId)
+        .catch(err => w3n.log('error', JSON.stringify(err), err));
+    }
+  }
+}
+
+export async function sendSystemMessage(
+  { chatId, recipients, chatMessageId, chatSystemData }:
+    { chatId: ChatIdObj; recipients: string[] } & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>,
+): Promise<string> {
+  const jsonBody: ChatSystemMsgV1 = {
+    v: 1,
+    chatMessageType: 'system',
+    groupChatId: (chatId.isGroupChat ? chatId.chatId : undefined),
+    chatMessageId,
+    chatSystemData,
+  };
+  const outMsg: ChatOutgoingMessage = {
+    msgType: 'chat',
+    jsonBody,
+  };
+  const deliveryMetadata: LocalMetadataInDelivery = {
+    chatId,
+    chatMessageType: 'system',
+    chatSystemData,
+  };
+
+  return await addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
+}
+
+export async function sendSystemDeletableMessage(
+  { chatId, recipients, chatMessageId, chatSystemData }:
+    { chatId: ChatIdObj; recipients: string[] } & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>,
+): Promise<void> {
+  const deliveryId = await sendSystemMessage({
+    chatId,
+    recipients,
+    chatMessageId,
+    chatSystemData,
+  });
+
+  await deleteSentMessage(deliveryId);
+}
+
 export async function sendChatInvitation(
   chatId: ChatIdObj,
   recipients: string[],
@@ -97,7 +165,9 @@ export async function sendChatInvitation(
     chatId,
     chatMessageType: 'invitation',
   };
-  await addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
+
+  const deliveryId = await addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
+  await deleteSentMessage(deliveryId);
 }
 
 export async function sendSysMsgsAboutRemovalFromChat(
@@ -105,7 +175,7 @@ export async function sendSysMsgsAboutRemovalFromChat(
   recipients: string[],
   chatDeleted?: true,
 ): Promise<void> {
-  await Promise.allSettled(recipients.map(recipient => sendSystemMessage({
+  await Promise.allSettled(recipients.map(recipient => sendSystemDeletableMessage({
     chatId,
     recipients: [recipient],
     chatSystemData: {
@@ -158,60 +228,4 @@ export async function sendRegularMessage(
   };
 
   addMessageToDeliveryList(outMsg, recipients, deliveryMetadata);
-}
-
-export async function sendSystemDeletableMessage(
-  { chatId, recipients, chatMessageId, chatSystemData }:
-    { chatId: ChatIdObj; recipients: string[] } & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>,
-): Promise<void> {
-  const deliveryId = await sendSystemMessage({
-    chatId,
-    recipients,
-    chatMessageId,
-    chatSystemData,
-  });
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      let isDone = false;
-      w3n.mail!.delivery.observeDelivery(deliveryId, {
-        next: p => {
-          if (isDone) {return;}
-
-          if (p.allDone) {
-            isDone = true;
-            if (p.allDone === 'all-ok') {
-              resolve();
-            } else if (p.allDone === 'with-errors') {
-              const errs = Object.keys(p.recipients).reduce((res, peerAddr) => {
-                const { err } = p.recipients[peerAddr];
-
-                if (err) {
-                  res.push(err);
-                }
-                return res;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              }, [] as any[]);
-
-              reject(errs);
-            }
-          }
-        },
-        complete: () => {
-          if (!isDone) {
-            isDone = true;
-            resolve();
-          }
-        },
-        error: err => {
-          if (!isDone) {
-            isDone = true;
-            reject(err);
-          }
-        },
-      });
-    });
-  } finally {
-    w3n.mail!.delivery.rmMsg(deliveryId).catch(err => console.error(err));
-  }
 }

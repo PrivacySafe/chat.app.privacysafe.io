@@ -1,7 +1,7 @@
 import { computed, inject, onBeforeMount, onMounted, ref, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
-import { I18N_KEY, NOTIFICATIONS_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin, NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import type { DeviceOption } from '@video/common/types';
 import { useAppStore } from '@video/common/store/app.store';
 import { useStreamsStore } from '@video/common/store/streams.store';
@@ -9,8 +9,8 @@ import { useStreamsStore } from '@video/common/store/streams.store';
 export function useVaSetup() {
   const router = useRouter();
 
-  const { $tr } = inject(I18N_KEY)!;
-  const notification = inject(NOTIFICATIONS_KEY)!;
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const appStore = useAppStore();
   const { user } = storeToRefs(appStore);
@@ -122,6 +122,7 @@ export function useVaSetup() {
   });
 
   return {
+    $tr,
     user,
     isAnyOneConnected,
     choicesWithVideoInput,

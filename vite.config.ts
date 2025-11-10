@@ -21,7 +21,7 @@ export const makeConfig = ({ mode }: UserConfig) => {
   const plugins = [
     vue(),
     nodePolyfills({
-      include: ['timers', 'timers/promises'],
+      include: ['timers', 'timers/promises', 'path', 'url', 'fs'],
     }),
     vueDevTools(),
   ];

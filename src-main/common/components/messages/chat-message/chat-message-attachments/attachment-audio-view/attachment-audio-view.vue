@@ -92,7 +92,7 @@ watch(
             <ui3n-slider
               v-if="audioPlayerRef"
               :model-value="volume"
-              :transform-value-method="val => `${val}%`"
+              :transform-value-method="(val: number) => `${val}%`"
               :disabled="isProcessing || !audioPlayerRef?.src"
               @update:model-value="updateVolume"
             />
@@ -146,7 +146,7 @@ watch(
               :model-value="currentAudioVisualization === 1"
               size="16"
               :disabled="isPlaying || isProcessing || !audioPlayerRef?.src"
-              @change="v => currentAudioVisualization = v ? 1 : 2"
+              @change="(v: number) => currentAudioVisualization = v ? 1 : 2"
             />
           </ui3n-tooltip>
 

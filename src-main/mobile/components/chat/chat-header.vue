@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2025 3NSoft Inc.
+ Copyright (C) 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -90,7 +90,7 @@ async function goToChats() {
 
       <div
         v-else
-        v-ui3n-html.sanitize="chat.lastMsg?.timestamp ? $tr('chat.header.info', { date: text }) : ''"
+        v-ui3n-html:sanitize="chat.lastMsg?.timestamp ? $tr('chat.header.info', { date: text }) : ''"
         :class="$style.headerInfo"
       />
     </div>
@@ -133,7 +133,8 @@ async function goToChats() {
 
     <chat-header-actions
       :chat="chat"
-      :disabled="isIncomingCall || chatWithCall"
+      :chat-with-call="chatWithCall"
+      :disabled="isIncomingCall"
       @select:action="selectAction"
     />
   </div>

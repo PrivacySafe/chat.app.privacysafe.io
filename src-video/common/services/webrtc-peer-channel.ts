@@ -54,10 +54,10 @@ export abstract class WebRTCPeerChannel {
     this.conn.onnegotiationneeded = makeSyncedFunc(this.syncProc, this, this.handleNegotiationNeeded);
     this.conn.onicecandidate = ({ candidate }) => {
       if (candidate) {
-        console.log(`📤 sending out ICE candidate:`, candidate.toJSON());
+        console.info(`📤 sending out ICE candidate:`, candidate.toJSON());
         this.offBandComm.send({ candidate });
       } else {
-        console.log(`Falsy ice candidate:`, candidate);
+        console.info(`Falsy ice candidate:`, candidate);
       }
     };
     this.conn.oniceconnectionstatechange = () => {
@@ -97,7 +97,7 @@ export abstract class WebRTCPeerChannel {
         description: this.conn.localDescription!,
       });
     } catch (err) {
-      console.error(err);
+      w3n.log('error', JSON.stringify(err), err);
     } finally {
       this.makingOffer = false;
     }
@@ -105,7 +105,7 @@ export abstract class WebRTCPeerChannel {
 
   private async handleOffBandSignal({ description, candidate }: OffBandMessage): Promise<void> {
     try {
-      console.log(`📩 received description`, description, `candidate`, candidate);
+      console.info(`📩 received description`, description, `candidate`, candidate);
       if (description) {
         const offerCollision =
           (description.type === 'offer') &&
@@ -138,7 +138,7 @@ export abstract class WebRTCPeerChannel {
         }
       }
     } catch (err) {
-      console.error(err);
+      w3n.log('error', JSON.stringify(err), err);
     }
   }
 
@@ -191,6 +191,7 @@ export abstract class WebRTCPeerChannel {
     if (!this.dataChannel) {
       this.dataChannel = this.conn.createDataChannel('chat');
     }
+
     if (sendConnectionAcknowledge) {
       this.dataChannel.onopen = async () => {
         this.dataChannel!.send(CONNECTION_ACK_STR);

@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2020 - 2024 3NSoft Inc.
+ Copyright (C) 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,41 +14,40 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
-
-<script lang="ts" setup>
-import { Ui3nChip, Ui3nIcon } from '@v1nt1248/3nclient-lib';
+<script setup lang="ts">
+import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
 
 defineProps<{
   name: string;
-  size: number;
-  deletable?: boolean;
 }>();
-
-const emits = defineEmits(['delete']);
 </script>
 
 <template>
-  <ui3n-chip
-    class="chat-attachment"
-    closeable
-    @close="emits('delete')"
-  >
-    <template #left>
-      <ui3n-icon
-        icon="round-attach-file"
-        width="12"
-        height="12"
-      />
-    </template>
+  <div :class="$style.viewFile">
+    <ui3n-icon
+      icon="round-subject"
+      size="16"
+      color="var(--color-icon-control-secondary-default)"
+    />
+
     {{ name }}
-  </ui3n-chip>
+  </div>
 </template>
 
 <style lang="scss" module>
-.chatAttachment {
-  --chip-default-color: var(--color-icon-chat-bubble-user-default);
+.viewFile {
+  --view-file-height: 28px;
 
-  margin: 0 var(--spacing-xs) var(--spacing-xs) 0;
-  cursor: pointer;
+  position: relative;
+  padding-left: var(--spacing-ml);
+  width: fit-content;
+  height: var(--view-file-height);
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  column-gap: var(--spacing-xs);
+  font-size: var(--font-14);
+  font-weight: 500;
+  color: var(--color-text-table-primary-default);
 }
 </style>

@@ -52,7 +52,8 @@ import type {
 } from '../../types/services.types.ts';
 import { ChatsData } from '../dataset/index.ts';
 import { checkAddressExistenceForASMail, ensureAllAddressesExist } from '../utils/for-msg-sending.ts';
-import { ChatCreation, inviteChatId } from './chat-creation.ts';
+import { ChatCreation } from './chat-creation/chat-creation.ts';
+import { inviteChatId } from './chat-creation/utils.ts';
 import {
   chatViewForGroupChat,
   chatViewForOTOChat,
@@ -70,6 +71,7 @@ import { MsgSending } from './msg-sending.ts';
 import { MsgStatusUpdating } from './msg-status-updating.ts';
 import { MsgReactions } from './msg-reaction.ts';
 import { MsgEditing } from './msg-editing.ts';
+import { AppSettings } from '../utils/app-settings.ts'
 import type { ChatDbEntry, ChatSettings, GroupChatDbEntry, OTOChatDbEntry } from '../dataset/versions/v2/chats-db.ts';
 import type { MsgDbEntry } from '../dataset/versions/v2/msgs-db.ts';
 import { makeOutgoingFileLinkStore } from '../dataset/versions/v0-none/attachments.ts';
@@ -106,9 +108,11 @@ function exposeServiceOnIPC(chats: ChatService): () => void {
     'deleteExpiredMessages',
     'getMessage',
     'getMessagesByChat',
+    'getRecentReactions',
     'sendRegularMessage',
     'markMessageAsReadNotifyingSender',
     'checkAddressExistenceForASMail',
+    'cancelSendingMessage',
     'getIncomingMessage',
     'updateEarlySentMessage',
     'changeMessageReaction',
@@ -189,6 +193,7 @@ function preVtoV1(preVjsonBody: ChatMessageJsonBodyPreV): {
   return;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function triggerMainUIOpenning(chatId: ChatIdObj, sender: string): void {
   w3n.shell!.startAppWithParams!(null, 'open-chat-with', {
     chatId,
@@ -211,6 +216,7 @@ export class ChatService implements ChatServiceIPC {
   private readonly msgStatusUpdating: MsgStatusUpdating;
   private readonly msgEditing: MsgEditing;
   private readonly msgReactions: MsgReactions;
+  private readonly appSettings: AppSettings;
 
   private constructor(
     private readonly data: ChatsData,
@@ -219,7 +225,15 @@ export class ChatService implements ChatServiceIPC {
   ) {
     const removeMessageFromInbox = this.removeMessageFromInbox.bind(this);
 
-    this.chatCreation = new ChatCreation(this.data, this.emit, this.ownAddr, removeMessageFromInbox);
+    this.appSettings = new AppSettings();
+
+    this.chatCreation = new ChatCreation(
+      this.data,
+      this.emit,
+      this.appSettings,
+      this.ownAddr,
+      removeMessageFromInbox,
+    );
 
     this.chatRenaming = new ChatRenaming(this.data, this.emit, this.ownAddr);
 
@@ -249,6 +263,7 @@ export class ChatService implements ChatServiceIPC {
       this.data,
       this.emit,
       this.filesStore,
+      this.appSettings,
       this.ownAddr,
       removeMessageFromInbox,
     );
@@ -325,7 +340,6 @@ export class ChatService implements ChatServiceIPC {
         `Incoming chat message ${msg.msgId}, type ${chatMsgBody.chatMessageType} has no known chat. Removing it from inbox.`,
       );
     }
-
 
     if (chat.isGroupChat && !includesAddress(Object.keys(chat.members), msg.sender)) {
       return await this.removeMessageFromInbox(
@@ -493,10 +507,10 @@ export class ChatService implements ChatServiceIPC {
   private emitChatEvent(event: UpdateEvent): void {
     if (this.updateEventsObservers.isEmpty()) {
       // TODO this may turn into other notifications form later
-      if (event.updatedEntityType === 'message' && event.event === 'added') {
-        const { chatId, sender } = event.msg;
-        triggerMainUIOpenning(chatId, sender);
-      }
+      // if (event.updatedEntityType === 'message' && event.event === 'added') {
+      //   const { chatId, sender } = event.msg;
+      //   triggerMainUIOpenning(chatId, sender);
+      // }
     } else {
       this.updateEventsObservers.next(event);
     }
@@ -659,14 +673,18 @@ export class ChatService implements ChatServiceIPC {
       });
   }
 
-  sendRegularMessage(
+  async sendRegularMessage(
     { chatId, chatMessageId, text, files, relatedMessage }: {
     chatId: ChatIdObj,
     chatMessageId?: string,
     text: string,
-    files: web3n.files.ReadonlyFile[] | undefined,
+    files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined,
     relatedMessage: RelatedMessage | undefined,
   }): Promise<void> {
+    if (chatMessageId) {
+      await this.msgStatusUpdating.updateMessageStatus({ chatId, chatMessageId }, 'sending');
+    }
+
     return this.msgSending.sendRegularMessage({ chatId, chatMessageId, text, files, relatedMessage });
   }
 
@@ -725,6 +743,7 @@ export class ChatService implements ChatServiceIPC {
         removeAfter: 0,
         history: null,
         reactions: null,
+        settings: null,
       };
       await this.data.addMessage(msg);
       return this.emit.message.added(msg);
@@ -797,6 +816,10 @@ export class ChatService implements ChatServiceIPC {
     return msgViews;
   }
 
+  async getRecentReactions(quantity: number): Promise<string[]> {
+    return this.data.getRecentReactions(quantity);
+  }
+
   watch(obs: web3n.Observer<UpdateEvent>): () => void {
     this.updateEventsObservers.add(obs);
     return () => this.updateEventsObservers.delete(obs);
@@ -808,6 +831,12 @@ export class ChatService implements ChatServiceIPC {
 
   async checkAddressExistenceForASMail(addr: string): Promise<AddressCheckResult> {
     return checkAddressExistenceForASMail(addr);
+  }
+
+  async cancelSendingMessage(deliveryId: string, chatMsgId: ChatMessageId): Promise<void> {
+    await this.msgSending.cancelSendingMessage(deliveryId);
+    await this.msgStatusUpdating.updateMessageStatus(chatMsgId, 'canceled');
+    // TODO change msg status
   }
 
   async getIncomingMessage(msgId: string): Promise<ChatIncomingMessage | undefined> {
@@ -917,6 +946,7 @@ export class ChatService implements ChatServiceIPC {
         : null,
       timestamp: 0,
       removeAfter: 0,
+      settings: null,
       ...msgData,
       chatMessageType,
       chatMessageId,

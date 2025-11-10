@@ -133,9 +133,8 @@ const date = computed(() => {
   width: fit-content;
   max-width: 90%;
   overflow: hidden;
-  height: var(--spacing-l);
+  height: auto;
   margin: var(--spacing-s) auto;
-  //border-radius: var(--spacing-l);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -147,36 +146,10 @@ const date = computed(() => {
   user-select: none;
 
   &.chatMessageSystemMobile {
-    height: auto;
     padding: var(--spacing-xs) var(--spacing-m);
-
-    .text {
-      span {
-        white-space: break-spaces;
-      }
-    }
-
-    .date {
-      flex-grow: 1;
-      min-width: fit-content;
-    }
-
-    &.byCall {
-      .icon {
-        top: auto;
-      }
-    }
   }
 
   &.byCall {
-    padding-left: var(--spacing-l);
-
-    .icon {
-      position: absolute;
-      left: 10px;
-      top: var(--spacing-s);
-    }
-
     .text {
       span {
         color: var(--color-text-block-primary-default)
@@ -194,14 +167,17 @@ const date = computed(() => {
 }
 
 .text {
-  span {
-    color: var(--color-text-block-secondary-default);
+  text-align: center;
 
-    @include mixins.text-overflow-ellipsis();
+  span {
+    white-space: break-spaces;
+    color: var(--color-text-block-secondary-default);
   }
 }
 
 .date {
+  flex-grow: 1;
+  min-width: fit-content;
   color: var(--color-text-chat-bubble-user-sub);
 }
 </style>

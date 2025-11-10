@@ -112,14 +112,18 @@ export interface ChatServiceIPC {
 
   getMessagesByChat(chatId: ChatIdObj): Promise<ChatMessageView[]>;
 
+  getRecentReactions(quantity: number): Promise<string[]>;
+
   sendRegularMessage(
     { chatId, chatMessageId, text, files, relatedMessage }: {
       chatId: ChatIdObj,
       chatMessageId?: string,
       text: string,
-      files: web3n.files.ReadonlyFile[] | undefined,
+      files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined,
       relatedMessage: RelatedMessage | undefined,
     }): Promise<void>;
+
+  cancelSendingMessage(deliveryId: string, chatMsgId: ChatMessageId): Promise<void>;
 
   markMessageAsReadNotifyingSender(chatMessageId: ChatMessageId): Promise<void>;
 
@@ -233,13 +237,15 @@ export type AddressCheckResult =
   | 'not-valid-public-key';
 
 export interface FileLinkStoreService {
-  saveLink(file: web3n.files.ReadonlyFile): Promise<string>;
+  saveFile(data: ArrayBuffer, fileName?: string): Promise<string>;
 
-  getLink(fileId: string): Promise<web3n.files.SymLink | null | undefined>;
+  saveLink(entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS): Promise<string>;
 
-  getFile(fileId: string): Promise<web3n.files.File | null | undefined>;
+  getLink(entityId: string): Promise<web3n.files.SymLink | null | undefined>;
 
-  deleteLink(fileId: string): Promise<void>;
+  getFile(entityId: string): Promise<web3n.files.File | web3n.files.FS | null | undefined>;
+
+  deleteLink(entityId: string): Promise<void>;
 }
 
 /**

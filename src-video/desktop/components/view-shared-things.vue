@@ -18,7 +18,7 @@
 import { computed, inject, nextTick, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import size from 'lodash/size';
-import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
+import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import {
   Ui3nButton,
   Ui3nIcon,
@@ -40,7 +40,7 @@ const props = defineProps<{
   things: (OwnScreen | PeerShared)[];
 }>();
 
-const { $tr } = inject(I18N_KEY)!;
+const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
 const streamsStore = useStreamsStore();
 const { isSharingOwnDeskSound } = storeToRefs(streamsStore);
@@ -58,6 +58,7 @@ const selectedSharedItem = ref<Nullable<OwnScreen | PeerShared>>(processedShared
 function selectSharedItem(index: number) {
   currentSharedItem.value = index;
   selectedSharedItem.value = null;
+
   nextTick(() => {
     selectedSharedItem.value = processedSharedItems.value[currentSharedItem.value];
   });

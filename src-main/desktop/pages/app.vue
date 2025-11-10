@@ -103,7 +103,7 @@ const appStore = useAppStore();
 </template>
 
 <style lang="scss" module>
-@use '../../common/assets/styles/mixins' as mixins;
+@use '@main/common/assets/styles/mixins' as mixins;
 
 .app {
   --main-toolbar-height: calc(var(--spacing-s) * 9);

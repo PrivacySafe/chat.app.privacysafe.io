@@ -17,17 +17,22 @@
 <script lang="ts" setup>
 import { onBeforeUnmount, onMounted } from 'vue';
 import { onBeforeRouteUpdate } from 'vue-router';
-import { Ui3nButton, Ui3nHtml, Ui3nIcon, Ui3nText, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+import isEmpty from 'lodash/isEmpty';
+import { Ui3nButton, Ui3nHtml, Ui3nIcon, Ui3nText, Ui3nTooltip, Ui3nClickOutside } from '@v1nt1248/3nclient-lib';
+import { formatFileSize } from '@v1nt1248/3nclient-lib/utils';
+import type { RegularMsgView } from '~/index';
 import { useChatView } from '@main/common/composables/useChatView';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { useNavigation } from '@main/mobile/composables/useNavigation';
 import ChatHeader from '@main/mobile/components/chat/chat-header.vue';
 import EmoticonsDialog from '@main/common/components/dialogs/emoticons-dialog.vue';
-import ChatAttachment from '@main/common/components/chat/chat-attachment.vue';
+import ChatAttachmentItem from '@main/common/components/chat/chat-attachment-item.vue';
 import ChatMessages from '@main/common/components/messages/chat-messages/chat-messages.vue';
 import ChatMessageInfo from '@main/common/components/messages/chat-message/chat-message-info/chat-message-info.vue';
+import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
 
 const vUi3nHtml = Ui3nHtml;
+const vUi3nClickOutside = Ui3nClickOutside;
 
 const { getContactName } = useContactsStore();
 
@@ -45,8 +50,15 @@ const {
   initialMessage,
   initialMessageType,
   editableMessage,
+  files,
   attachmentsInfo,
+  attachmentsTotal,
   sendBtnDisabled,
+  filteredMembers,
+  activeSuggestionIndex,
+  onInput,
+  selectMention,
+  hideSuggestions,
   clearSelectedMessages,
   onMessageListElementInit,
   deleteMessages,
@@ -54,6 +66,7 @@ const {
   setMsgForWhichInfoIsDisplayed,
   getTextOfEditableOrInitialMsg,
   addFiles,
+  addFilesViaPaste,
   prepareReplyMessage,
   startEditMsgMode,
   onEmoticonSelect,
@@ -76,34 +89,35 @@ onBeforeUnmount(doBeforeUnMount);
   <div :class="$style.chat">
     <chat-header
       v-if="currentChat"
-      :class="$style.chatHeader"
       :chat="currentChat!"
       :messages="currentChatMessages"
     />
 
     <div :class="$style.bodyWrapper">
-      <div :class="$style.messages">
-        <chat-messages
-          v-if="currentChatMessages && currentChat"
-          :chat="currentChat!"
-          :messages="currentChatMessages"
-          :mobile-mode="true"
-          @init="onMessageListElementInit"
-          @reply="prepareReplyMessage"
-          @edit="startEditMsgMode"
-          @show:info="setMsgForWhichInfoIsDisplayed"
-        />
+      <div :class="$style.messagesWrapper">
+        <div :class="$style.messages">
+          <chat-messages
+            v-if="currentChatMessages && currentChat"
+            :chat="currentChat!"
+            :messages="currentChatMessages"
+            :mobile-mode="true"
+            @init="onMessageListElementInit"
+            @reply="prepareReplyMessage"
+            @edit="startEditMsgMode"
+            @show:info="setMsgForWhichInfoIsDisplayed"
+          />
 
-        <ui3n-button
-          v-if="whetherShowButtonDown"
-          type="icon"
-          color="transparent"
-          icon="round-keyboard-arrow-down"
-          icon-size="30"
-          icon-color="var(--color-icon-block-accent-default)"
-          :class="$style.btnDown"
-          @click.stop.prevent="scrollMessageListToEnd"
-        />
+          <ui3n-button
+            v-if="whetherShowButtonDown"
+            type="icon"
+            color="transparent"
+            icon="round-keyboard-arrow-down"
+            icon-size="30"
+            icon-color="var(--color-icon-block-accent-default)"
+            :class="$style.btnDown"
+            @click.stop.prevent="scrollMessageListToEnd"
+          />
+        </div>
       </div>
 
       <div :class="$style.actions">
@@ -114,9 +128,9 @@ onBeforeUnmount(doBeforeUnMount);
           <div :class="$style.emoticonsBtnWrapper">
             <ui3n-button
               type="icon"
-              color="transparent"
+              color="var(--color-bg-block-primary-default)"
               icon="outline-insert-emoticon"
-              icon-size="20"
+              icon-size="24"
               icon-color="var(--color-icon-block-secondary-default)"
               :disabled="disabled || readonly"
               @click.stop.prevent="isEmoticonsDialogOpen = !isEmoticonsDialogOpen"
@@ -131,30 +145,34 @@ onBeforeUnmount(doBeforeUnMount);
 
           <ui3n-button
             type="icon"
-            color="transparent"
+            color="var(--color-bg-block-primary-default)"
             icon="round-attach-file"
-            icon-size="20"
+            icon-size="24"
             icon-color="var(--color-icon-block-secondary-default)"
             :disabled="disabled || readonly"
             @click="addFiles"
           />
 
-          <div :class="$style.inputField">
+          <div
+            :class="$style.inputField"
+            @paste="addFilesViaPaste"
+          >
             <ui3n-text
               v-model:text="msgText"
               :rows="1"
               :max-rows="3"
               :disabled="readonly"
               @init="inputEl = $event"
-              @enter="sendMessage"
+              @input="onInput"
+              @enter="sendMessage($event)"
             />
           </div>
 
           <ui3n-button
             type="icon"
-            color="transparent"
+            color="var(--color-bg-block-primary-default)"
             icon="round-send"
-            icon-size="20"
+            icon-size="24"
             :icon-color="!sendBtnDisabled ? 'var(--color-icon-block-accent-default)' : 'var(--color-icon-block-secondary-default)'"
             :disabled="sendBtnDisabled"
             @click="sendMessage(undefined, true)"
@@ -177,10 +195,10 @@ onBeforeUnmount(doBeforeUnMount);
 
               <div :class="$style.inputAdditionalData">
                 <div :class="$style.inputAdditionalLabel">
-                  {{ getContactName(initialMessage.sender) }}
+                  {{ getContactName((initialMessage as RegularMsgView).sender) }}
                 </div>
                 <div
-                  v-ui3n-html.sanitize="getTextOfEditableOrInitialMsg(initialMessage)"
+                  v-ui3n-html:sanitize="getTextOfEditableOrInitialMsg(initialMessage)"
                   :class="$style.inputAdditionalText"
                 />
               </div>
@@ -215,7 +233,7 @@ onBeforeUnmount(doBeforeUnMount);
                   {{ $tr('chat.message.edit.label') }}
                 </div>
                 <div
-                  v-ui3n-html.sanitize="getTextOfEditableOrInitialMsg(editableMessage)"
+                  v-ui3n-html:sanitize="getTextOfEditableOrInitialMsg(editableMessage)"
                   :class="$style.inputAdditionalText"
                 />
               </div>
@@ -233,25 +251,50 @@ onBeforeUnmount(doBeforeUnMount);
             </div>
 
             <div
-              v-if="attachmentsInfo"
+              v-if="!isEmpty(filteredMembers)"
+              v-ui3n-click-outside="hideSuggestions"
+              :class="$style.members"
+            >
+              <div
+                v-for="(member, index) in filteredMembers"
+                :key="member"
+                :class="[$style.member, index === activeSuggestionIndex && $style.active]"
+                @click.stop.prevent="selectMention(index)"
+              >
+                <chat-avatar
+                  size="24"
+                  :name="member"
+                />
+                {{ member }}
+              </div>
+            </div>
+
+            <div
+              v-if="!isEmpty(attachmentsInfo)"
               :class="$style.attachments"
             >
-              <chat-attachment
-                v-for="(attachmentInfo, index) in attachmentsInfo!"
-                :key="`${attachmentInfo.name}-${attachmentInfo.id || ''}`"
-                :name="attachmentInfo.name"
-                :size="attachmentInfo.size"
-                :deletable="true"
-                @delete="deleteAttachment(index)"
-              />
+              <div :class="$style.attachmentsStat">
+                {{ $tr('chat.total') }}: {{ formatFileSize(attachmentsTotal) }}
+              </div>
+
+              <div :class="$style.attachmentsBody">
+                <chat-attachment-item
+                  v-for="(attachmentInfo, index) in attachmentsInfo!"
+                  :key="`${attachmentInfo.name}-${attachmentInfo.id || ''}`"
+                  :info="attachmentInfo"
+                  :entity="files[index]"
+                  @change:size="attachmentInfo.size = $event"
+                  @delete="deleteAttachment(index)"
+                />
+              </div>
 
               <ui3n-button
-                :class="$style.attachmentsClear"
                 type="icon"
                 color="transparent"
                 icon="round-close"
                 icon-size="16"
                 icon-color="#828282"
+                :class="$style.attachmentsClear"
                 @click="clearAttachments"
               />
             </div>
@@ -330,18 +373,22 @@ onBeforeUnmount(doBeforeUnMount);
   row-gap: var(--spacing-xs);
 }
 
-.messages {
+.messagesWrapper {
   position: relative;
   width: 100%;
   flex-basis: calc(100% - var(--chat-toolbar-height) - var(--spacing-xs));
-  margin-top: var(--spacing-xs);
   overflow-y: auto;
+}
+
+.messages {
+  position: relative;
+  width: 100%;
+  height: calc(100% - 4px);
 }
 
 .actions {
   position: relative;
   width: 100%;
-  min-height: 55px;
   flex-grow: 1;
 }
 
@@ -378,17 +425,38 @@ onBeforeUnmount(doBeforeUnMount);
 .attachments {
   position: relative;
   width: 100%;
+  padding: var(--spacing-ml) var(--spacing-m) var(--spacing-xs);
+  overflow: hidden;
+}
+
+.attachmentsStat {
+  position: absolute;
+  left: var(--spacing-m);
+  top: var(--spacing-xs);
+  height: var(--spacing-m);
   display: flex;
   justify-content: flex-start;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  padding: var(--spacing-s) var(--spacing-m) var(--spacing-xs);
+  align-items: center;
+  font-size: var(--font-13);
+  font-weight: 500;
+  color: var(--color-text-control-primary-default);
+}
+
+.attachmentsBody {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  column-gap: var(--spacing-xs);
+  padding-bottom: var(--spacing-xs);
+  overflow-x: auto;
+
+  @include mixins.scrollbar-horizontal(96px);
 }
 
 .attachmentsClear {
   position: absolute !important;
-  top: 2px;
-  right: 2px;
+  top: 0;
+  right: 4px;
 }
 
 .inputAdditionalBlock {
@@ -397,6 +465,32 @@ onBeforeUnmount(doBeforeUnMount);
   padding: var(--spacing-xs) 2px var(--spacing-xs) var(--spacing-s);
   justify-content: flex-start;
   align-items: center;
+}
+
+.members {
+  position: relative;
+  width: 100%;
+}
+
+.member {
+  position: relative;
+  width: 100%;
+  height: var(--spacing-l);
+  padding: 0 var(--spacing-m);
+  border-radius: var(--spacing-s);
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  column-gap: var(--spacing-s);
+  font-size: var(--font-12);
+  font-weight: 500;
+  color: var(--color-text-control-primary-default);
+  cursor: pointer;
+
+  &.active,
+  &:hover {
+    background-color: var(--color-bg-block-primary-hover);
+  }
 }
 
 .inputAdditionalIcon {

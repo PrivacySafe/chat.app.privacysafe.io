@@ -41,25 +41,23 @@ withDefaults(defineProps<VideoPlaceholderProps>(), {
 
 <style lang="scss" module>
 .videoPlaceholder {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
   position: relative;
-  width: max-content;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   row-gap: var(--spacing-s);
-  font-size: var(--font-16);
+  font-size: var(--font-13);
   font-weight: 500;
   color: var(--color-text-control-primary-default);
   transform: none;
 
   span {
     display: block;
+    box-sizing: border-box;
     position: relative;
     width: 100%;
-    max-width: 100%;
     padding: 0 var(--spacing-s);
     text-align: center;
     word-break: break-all;

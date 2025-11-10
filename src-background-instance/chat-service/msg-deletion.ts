@@ -26,7 +26,6 @@ import { makeDbRecordException } from '../utils/exceptions.ts';
 import { sendSystemMessage } from '../utils/send-chat-msg.ts';
 import { RefsToMsgsDataNoInDB } from '../dataset/versions/v2/msgs-db.ts';
 import { ChatMessageAttachmentsInfo } from '../../types/chat.types.ts';
-import { AUTO_DELETE_MESSAGES_BY_ID } from '../../shared-libs/constants.ts';
 
 export class MsgDeletion {
 
@@ -112,13 +111,7 @@ export class MsgDeletion {
 
   async deleteExpiredMessages(now: number): Promise<void> {
     const expiredMessages = await this.data.getExpiredMessages(now);
-    const messagesToDelete = expiredMessages.filter(msg => {
-      const { timestamp = 0 } = msg;
-      const removeAfter = msg.removeAfter !== 0
-        ? msg.removeAfter
-        : timestamp + AUTO_DELETE_MESSAGES_BY_ID[0].value;
-      return removeAfter < now;
-    }).map(msg => {
+    const messagesToDelete = expiredMessages.map(msg => {
       const { chatMessageId, groupChatId, otoPeerCAddr } = msg;
       const chatId = groupChatId
         ? { isGroupChat: true, chatId: groupChatId! }
@@ -218,7 +211,7 @@ export class MsgDeletion {
       const deletedMsgs = chatMsgIds.map(id => ({
         chatId,
         chatMessageId: id.chatMessageId,
-      }))
+      }));
 
       this.emit.message.removedMultiple(deletedMsgs);
       return;
