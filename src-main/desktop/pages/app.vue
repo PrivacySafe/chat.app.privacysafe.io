@@ -16,7 +16,7 @@
 -->
 <script lang="ts" setup>
 import { Ui3nMenu, Ui3nRipple as vUi3nRipple, Ui3nResize as vUi3nResize } from '@v1nt1248/3nclient-lib';
-import prLogo from '@main/common/assets/images/privacysafe-logo.svg';
+import prLogo from '@main/common/assets/images/privacysafe-logo-new.svg';
 import { useAppView } from '@main/common/composables/useAppView';
 import { useAppStore } from '@main/common/store/app.store';
 import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
@@ -127,20 +127,19 @@ const appStore = useAppStore();
   display: flex;
   justify-content: flex-start;
   align-items: center;
+  column-gap: var(--spacing-m);
 }
 
 .toolbarLogo {
   position: relative;
-  top: -2px;
-  margin-right: var(--spacing-m);
-  height: var(--spacing-l);
+  height: var(--spacing-m);
+  cursor: pointer;
 }
 
 .delimiter {
   font-size: 20px;
   font-weight: 500;
   color: var(--color-text-control-accent-default);
-  margin-right: var(--spacing-m);
   padding-bottom: 2px;
 }
 

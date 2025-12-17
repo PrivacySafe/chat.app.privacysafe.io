@@ -34,12 +34,13 @@ export function useSystemLevelAppConfig() {
   }
 
   function setColorTheme(theme: AvailableColorTheme) {
+    const prevColorThemeCssClass = `${colorTheme.value}-theme`;
     colorTheme.value = theme;
+    const curColorThemeCssClass = `${colorTheme.value}-theme`;
+
     const htmlEl = document.querySelector('html');
     if (!htmlEl) return;
 
-    const prevColorThemeCssClass = theme === 'default' ? 'dark-theme' : 'default-theme';
-    const curColorThemeCssClass = theme === 'default' ? 'default-theme' : 'dark-theme';
     htmlEl.classList.remove(prevColorThemeCssClass);
     htmlEl.classList.add(curColorThemeCssClass);
   }

@@ -53,7 +53,7 @@ const rtcStaticConfig: RTCConfiguration = {
     username: 'chat-app',
     credential: 'WLIvWVDTrxHpy78GknE6tNsNiqjNNFU5mN4qSUU',
   }],
-  iceTransportPolicy: 'relay',
+  iceTransportPolicy: 'all',
 };
 
 const MSG_REMOVAL_DELAY_MILLIS = 10 * 1000;
