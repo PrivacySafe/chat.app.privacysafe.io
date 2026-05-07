@@ -2401,12 +2401,10 @@ async function initSqlJs$1(keepWasm=false) {
 		if (!wasmInBase64) {
 			throw new Error(`Blob with wasm has already been read and removed`);
 		}
-		wasmBlob = await (await fetch(
-			`data:application/octet-stream;base64,${wasmInBase64}`
-		)).blob();
+		wasmBlob = Uint8Array.fromBase64(wasmInBase64);
 		wasmInBase64 = undefined;
 	}
-	const wasmBinary = await wasmBlob.arrayBuffer();
+	const wasmBinary = await wasmBlob.buffer;
 	if (!keepWasm) {
 		wasmBlob = undefined;
 	}

@@ -16,9 +16,8 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 // @deno-types="../../../../shared-libs/sqlite-on-3nstorage/index.d.ts"
-// @deno-types="../../../../shared-libs/sqlite-on-3nstorage/sqljs.d.ts"
 import { Database, SQLiteOn3NStorage } from '../../../../shared-libs/sqlite-on-3nstorage/index.js';
-import { ParamsObject, SqlValue } from '../../../../shared-libs/sqlite-on-3nstorage/sqljs.js';
+import type { ParamsObject, SqlValue } from '../../../../shared-libs/sqlite-on-3nstorage/sqljs.d.ts';
 import { ensureIsAddressString, toCanonicalAddress } from '../../../../shared-libs/address-utils.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
 import type { GroupChatStatus, SingleChatStatus } from '../../../../types/chat.types.ts';
