@@ -18,12 +18,10 @@
 import { onBeforeMount } from 'vue';
 import { Ui3nButton, Ui3nMenu } from '@v1nt1248/3nclient-lib';
 import { useAppView } from '@main/common/composables/useAppView';
-import { useChatsView } from '@main/common/composables/useChatsView.ts';
 import { useAppStore } from '@main/common/store/app.store';
 
 const { appExit } = useAppView();
 const { setMobileMode } = useAppStore();
-const { openCreateChatDialog } = useChatsView();
 
 onBeforeMount(() => {
   setMobileMode(true);
@@ -33,10 +31,6 @@ onBeforeMount(() => {
 <template>
   <section :class="$style.app">
     <div :class="$style.toolbar">
-      <ui3n-button @click.stop.prevent="() => openCreateChatDialog(true)">
-        {{ $tr('btn.text.new') }}
-      </ui3n-button>
-
       <div :class="$style.title">
         {{ $tr('app.title') }}
       </div>
@@ -70,7 +64,6 @@ onBeforeMount(() => {
         </transition>
       </router-view>
     </div>
-
     <div id="notification" />
   </section>
 </template>

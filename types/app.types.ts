@@ -40,7 +40,7 @@ export interface WritableFsWithId extends WritableFS {
 
 export type AvailableLanguage = 'en';
 
-export type AvailableColorTheme = 'default' | 'dark';
+export type AvailableColorTheme = 'default' | 'dark' | 'dark2';
 
 export type ConnectivityStatus = 'offline' | 'online';
 
