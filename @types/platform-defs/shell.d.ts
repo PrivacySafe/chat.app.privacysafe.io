@@ -43,9 +43,19 @@ declare namespace web3n.shell {
 		openFolder?: OpenFolder;
 
 		/**
+		 * Opens given path in mounted folder with apps present in the system.
+		 */
+		openInMounted?: OpenInMountedFolder;
+
+		/**
 		 * Opens URL, or attempts to open given URL with apps/browsers present in the system.
 		 */
 		openURL?: OpenURL;
+
+		/**
+		 * Tells OS to move given device fs item to OS-native trash.
+		 */
+		moveDevFSItemToTrash?: MoveDevFSItemToTrash;
 
 		/**
 		 * Clipboard of the device.
@@ -54,6 +64,9 @@ declare namespace web3n.shell {
 		 * used for predictable results.
 		 */
 		clipboard?: Partial<shell.clipboard.Clipboard>;
+	
+		mounts?: shell.mounts.MountsIntoOS;
+	
 	}
 
 	type GetFSResource = (
@@ -66,7 +79,15 @@ declare namespace web3n.shell {
 
 	type OpenFolder = (fs: web3n.files.FS) => Promise<void>;
 
+	type OpenInMountedFolder = (fs: web3n.files.FS, pathInFS: string[]) => Promise<void>;
+
+	type OpenMountedFolder = (fs: web3n.files.FS) => Promise<void>;
+
+	type OpenMountedFile = (file: web3n.files.File) => Promise<void>;
+
 	type OpenURL = (url: string) => Promise<void>;
+
+	type MoveDevFSItemToTrash = (item: web3n.files.FS|web3n.files.File) => Promise<void>;
 
 	interface FSResourceException extends RuntimeException {
 		type: 'fs-resource';

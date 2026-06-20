@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, inject, nextTick, provide, ref, toRaw, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   NavigationGuardNext,
   RouteLocationNormalized,
@@ -26,14 +27,15 @@ import { storeToRefs } from 'pinia';
 import get from 'lodash/get';
 import size from 'lodash/size';
 import isEmpty from 'lodash/isEmpty';
-import { DIALOGS_KEY, DialogsPlugin, I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { DIALOGS_KEY, DialogsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import type {
   ChatIdObj,
   ChatMessageAttachmentsInfo,
   ChatMessageId,
-  ChatMessageView, GroupChatView,
+  ChatMessageView,
+  GroupChatView,
   RegularMsgView,
   RelatedMessage,
   Ui3nTextEnterEvent,
@@ -70,27 +72,26 @@ interface NavigationUtils {
   route: RouteLocationNormalizedLoadedGeneric;
   router: Router;
   getChatIdFromRoute: (params?: ChatRoute['params'] | RouteChat['params']) => ChatIdObj | undefined;
-  getForwardedMsgIdFromRoute: (query?: ChatWithFwdMsgRef['query'] | RouteChat['query']) => ChatMessageId | undefined;
-  getIncomingCallParamsFromRoute: (route: ChatWithIncomingCall | RouteChat) => {
-    chatId: ChatIdObj,
-    peerAddress: string
-  } | undefined;
+  getForwardedMsgIdFromRoute: (
+    query?: ChatWithFwdMsgRef['query'] | RouteChat['query'],
+  ) => ChatMessageId | undefined;
+  getIncomingCallParamsFromRoute: (route: ChatWithIncomingCall | RouteChat) =>
+    | {
+        chatId: ChatIdObj;
+        peerAddress: string;
+      }
+    | undefined;
 }
 
 export function useChatView(navigationUtils: () => NavigationUtils) {
   const { addTask, cancelTasks } = useTaskRunner();
   provide('task-runner', { addTask });
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
   const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
 
-  const {
-    route,
-    router,
-    getChatIdFromRoute,
-    getForwardedMsgIdFromRoute,
-    getIncomingCallParamsFromRoute,
-  } = navigationUtils();
+  const { route, router, getChatIdFromRoute, getForwardedMsgIdFromRoute, getIncomingCallParamsFromRoute } =
+    navigationUtils();
 
   const { user, appWindowSize, isMobileMode } = storeToRefs(useAppStore());
 
@@ -127,27 +128,29 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     member: null,
   });
   const activeSuggestionIndex = ref(-1);
-  const filteredMembers = computed(() => currentChat.value && (currentChat.value as GroupChatView).members
-    ? Object.keys((currentChat.value as GroupChatView).members).filter(addr => {
-      if (mention.value.member === null) {
-        return false;
-      }
+  const filteredMembers = computed(() =>
+    currentChat.value && (currentChat.value as GroupChatView).members
+      ? Object.keys((currentChat.value as GroupChatView).members).filter(addr => {
+          if (mention.value.member === null) {
+            return false;
+          }
 
-      const mail = toCanonicalAddress(addr.toLowerCase());
-      return mail !== user.value && mail.includes(mention.value.member.toLowerCase());
-    })
-    : [],
+          const mail = toCanonicalAddress(addr.toLowerCase());
+          return mail !== user.value && mail.includes(mention.value.member.toLowerCase());
+        })
+      : [],
   );
 
   watch(
     () => size(filteredMembers.value),
-    val=> {
+    val => {
       setTimeout(() => {
         if (val > 0) {
           activeSuggestionIndex.value = -1;
         }
       }, 100);
-    }, {
+    },
+    {
       immediate: true,
     },
   );
@@ -164,10 +167,14 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   });
 
   const readonly = computed(() => {
-    return !currentChat.value
-      || currentChat.value?.status === 'no-members'
-      || (currentChat.value && ['initiated', 'invited'].includes(currentChat.value.status))
-      || (currentChat.value && currentChat.value.isGroupChat && !get(currentChat.value, ['members', user.value, 'hasAccepted']));
+    return (
+      !currentChat.value ||
+      currentChat.value?.status === 'no-members' ||
+      (currentChat.value && ['initiated', 'invited'].includes(currentChat.value.status)) ||
+      (currentChat.value &&
+        currentChat.value.isGroupChat &&
+        !get(currentChat.value, ['members', user.value, 'hasAccepted']))
+    );
   });
 
   const sendBtnDisabled = computed<boolean>(() => {
@@ -197,35 +204,72 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     }
   }
 
+  function getCharFromTheLeft(event: KeyboardEvent) {
+    const target = event.target as HTMLTextAreaElement;
+    const cursorPosition = target.selectionStart;
+    if (cursorPosition !== null && cursorPosition > 0) {
+      const text = target.value;
+      return text[cursorPosition - 1];
+    }
+
+    return '';
+  }
+
   function onKeydown(event: KeyboardEvent) {
     const { key } = event;
     switch (key) {
       case 'ArrowUp': {
+        const char = getCharFromTheLeft(event);
+        if (char !== '@') {
+          return;
+        }
+
         event.preventDefault();
         const possibleSuggestionIndex = activeSuggestionIndex.value - 1;
-        activeSuggestionIndex.value = possibleSuggestionIndex === -1
-          ? size(filteredMembers.value) - 1
-          : possibleSuggestionIndex;
+        activeSuggestionIndex.value =
+          possibleSuggestionIndex === -1 ? size(filteredMembers.value) - 1 : possibleSuggestionIndex;
         break;
       }
       case 'ArrowDown': {
+        const char = getCharFromTheLeft(event);
+        if (char !== '@') {
+          return;
+        }
+
         event.preventDefault();
         const possibleSuggestionIndex = activeSuggestionIndex.value + 1;
-        activeSuggestionIndex.value = possibleSuggestionIndex === size(filteredMembers.value)
-          ? 0
-          : possibleSuggestionIndex;
+        activeSuggestionIndex.value =
+          possibleSuggestionIndex === size(filteredMembers.value) ? 0 : possibleSuggestionIndex;
         break;
       }
       default:
     }
   }
 
+  function onEscape(event: Event) {
+    event.preventDefault();
+    if (initialMessage.value !== null) {
+      return clearInitialInfo();
+    }
+
+    if (editableMessage.value !== null) {
+      return finishEditMsgMode();
+    }
+
+    // TODO ??? Perhaps it's also worth handling the situation when a user enters a mention of another address in
+    //  the text.
+    // TODO ??? It might also be worthwhile to handle the situation when attachments are attached to a message.
+  }
+
   function selectMention(index: number) {
     const member = filteredMembers.value[index];
     const parsedMember = member.split('@');
     const currentMention = `${parsedMember[0]}[${parsedMember[1]}]`;
-    const newMsgText = msgText.value.slice(0, mention.value.startIndex)
-      + currentMention + msgText.value.slice(mention.value.startIndex + 1) + ' ';
+    const newMsgText =
+      msgText.value.slice(0, mention.value.startIndex) +
+      currentMention +
+      msgText.value.slice(mention.value.startIndex + 1) +
+      ' ';
     msgText.value = newMsgText;
 
     activeSuggestionIndex.value = -1;
@@ -237,9 +281,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   }
 
   function setMessageListElementRect(el: Nullable<HTMLDivElement>) {
-    messageListElementRect.value = el
-      ? el.getBoundingClientRect()
-      : undefined;
+    messageListElementRect.value = el ? el.getBoundingClientRect() : undefined;
   }
 
   function onMessageListElementInit(value: Nullable<HTMLDivElement>) {
@@ -249,8 +291,9 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   }
 
   function onMessageListScroll() {
-    whetherShowButtonDown.value = (messageListElement.value!.scrollHeight - 64)
-      > (messageListElementRect.value!.height + messageListElement.value!.scrollTop);
+    whetherShowButtonDown.value =
+      messageListElement.value!.scrollHeight - 64 >
+      messageListElementRect.value!.height + messageListElement.value!.scrollTop;
   }
 
   function scrollMessageListToEnd() {
@@ -261,34 +304,29 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     msgInfoDisplayed.value = value;
   }
 
-  function deleteMessages() {
+  async function deleteMessages() {
     if (!selectedMessages.value.length) {
       return;
     }
 
-    dialog.$openDialog<typeof MessageDeleteDialog>({
-      component: MessageDeleteDialog,
-      componentProps: {
-        text: $tr('chat.messages.bulk.delete'),
-      },
+    const res = await dialog.$openDialog<boolean>(MessageDeleteDialog, {
+      text: t('chat.messages.bulk.delete'),
       dialogProps: {
-        title: $tr('chat.messages.bulk.delete'),
+        title: t('chat.messages.bulk.delete'),
         ...(isMobileMode.value && { width: 300 }),
-        confirmButtonText: capitalize($tr('btn.text.delete')),
+        confirmButtonText: capitalize(t('app.text.delete')),
         confirmButtonColor: 'var(--color-text-button-secondary-default)',
         confirmButtonBackground: 'var(--color-bg-button-secondary-default)',
         cancelButtonColor: 'var(--color-text-button-primary-default)',
         cancelButtonBackground: 'var(--color-bg-button-primary-default)',
-        onConfirm: deleteForEveryone => {
-          if (!currentChatId.value) {
-            return;
-          }
-
-          deleteMessagesInChat(selectedMessages.value, !!deleteForEveryone);
-          clearSelectedMessages();
-        },
       },
     });
+
+    const { event, data } = res;
+    if (event === 'confirm' && currentChatId.value) {
+      deleteMessagesInChat(selectedMessages.value, data);
+      clearSelectedMessages();
+    }
   }
 
   function getTextOfEditableOrInitialMsg(msg: Nullable<RegularMsgView>) {
@@ -298,16 +336,16 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
 
     const { body, attachments } = msg;
     const attachmentsText = (attachments || []).map(a => a.name).join(', ');
-    return body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`;
+    return body || `<i>${t('text.receive.file')}: ${attachmentsText}</i>`;
   }
 
-  function onEmoticonSelect(emoticon: { id: string, value: string }) {
+  function onEmoticonSelect(emoticon: { id: string; value: string }) {
     msgText.value += emoticon.value;
   }
 
   async function prepareInfoFromForwardedMessage(fwdMsgId: ChatMessageId) {
     const msg = await getChatMessage(fwdMsgId);
-    if (msg && (msg.chatMessageType === 'regular')) {
+    if (msg && msg.chatMessageType === 'regular') {
       initialMessageType.value = 'forward';
       initialMessage.value = msg;
       inputEl.value!.focus();
@@ -333,15 +371,16 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     inputEl.value && inputEl.value.focus();
   }
 
-  async function fileTo3nFile(f: File):
-    Promise<web3n.files.ReadonlyFile | web3n.files.ReadonlyFS | undefined | null> {
+  async function fileTo3nFile(
+    f: File,
+  ): Promise<web3n.files.ReadonlyFile | web3n.files.ReadonlyFS | undefined | null> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = async e => {
         const fileContent = e.target?.result;
         if (fileContent) {
           const fileId = await fileLinkStoreSrv.saveFile(fileContent as ArrayBuffer, f.name);
-          const entity = await fileLinkStoreSrv.getFile(fileId) as web3n.files.ReadonlyFile | null | undefined;
+          const entity = (await fileLinkStoreSrv.getFile(fileId)) as web3n.files.ReadonlyFile | null | undefined;
           resolve(entity);
         }
       };
@@ -367,7 +406,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
       let entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS | null | undefined;
 
       try {
-        const fStats = await w3n.shell!.deviceFiles?.statStandardItem(f)
+        const fStats = await w3n.shell!.deviceFiles?.statStandardItem(f);
 
         entity = fStats!.isFolder
           ? await w3n.shell!.deviceFiles?.standardFileToDeviceFolder!(f)
@@ -502,15 +541,17 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
 
       if (msgText.value) {
         const mentions = msgText.value.match(/@.*?]/g);
-        for (const item of (mentions || [])) {
-          msgText.value =  msgText.value.replace(item, `<a class="mention" data-mention="${item}">${item}</a>`)
+        for (const item of mentions || []) {
+          msgText.value = msgText.value.replace(item, `<a class="mention" data-mention="${item}">${item}</a>`);
         }
 
         const msgTextWithoutTagsA = msgText.value.replace(/<a[^>]*>(.*?)<\/a>/gi, '');
 
-        // eslint-disable-next-line no-useless-escape
-        const urls = msgTextWithoutTagsA.match(/((http|https):\/\/)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/[\w\-\.\?\#=&\/\+\%]+)*\/?/g);
-        for (const url of (urls || [])) {
+        const urls = msgTextWithoutTagsA.match(
+          // eslint-disable-next-line no-useless-escape
+          /((http|https):\/\/)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/[\w\-\.\?\#=&\/\+\%]+)*\/?/g,
+        );
+        for (const url of urls || []) {
           msgText.value = msgText.value.replace(url, `<a class="url" data-href="${url}">${url}</a>`);
         }
       }
@@ -604,13 +645,18 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
 
     scrollToFirstUnreadMessage();
 
-    inputEl.value && inputEl.value.addEventListener('keydown', onKeydown);
+    if (currentChatId.value?.isGroupChat && inputEl.value) {
+      inputEl.value.addEventListener('keydown', onKeydown);
+    }
   }
 
   function doBeforeUnMount() {
     routeQueryWatching.stop();
     messageListElement.value!.removeEventListener('scroll', onMessageListScroll);
-    inputEl.value && inputEl.value.removeEventListener('keydown', onKeydown);
+
+    if (currentChatId.value?.isGroupChat && inputEl.value) {
+      inputEl.value.removeEventListener('keydown', onKeydown);
+    }
   }
 
   async function doBeforeRouteUpdate(
@@ -637,6 +683,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   }
 
   return {
+    t,
     currentChat,
     currentChatMessages,
     selectedMessages,
@@ -662,6 +709,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     deleteMessages,
     onInput,
     onKeydown,
+    onEscape,
     selectMention,
     hideSuggestions,
     onMessageListElementInit,

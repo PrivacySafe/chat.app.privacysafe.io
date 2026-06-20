@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { defineStore } from 'pinia';
 import { includesAddress, toCanonicalAddress } from '@shared/address-utils';
 import { areChatIdsEqual } from '@shared/chat-ids';
@@ -28,16 +29,17 @@ import type { ChatListItemView, GroupChatView, RegularMsgView } from '~/chat.typ
 import type { ChatIdObj, RelatedMessage } from '~/index';
 
 export const useChatStore = defineStore('chat', () => {
+  const { t } = useI18n();
   const appStore = useAppStore();
   const chatsStore = useChatsStore();
 
   const currentChatId = ref<ChatIdObj>();
 
-  const currentChat = computed(() => currentChatId.value ? chatsStore.getChatView(currentChatId.value) : null);
+  const currentChat = computed(() => (currentChatId.value ? chatsStore.getChatView(currentChatId.value) : null));
 
   const isAdminOfGroupChat = computed(() => {
     const chat = currentChat.value;
-    return ((chat && chat.isGroupChat) ? chat.admins.includes(appStore.user) : false);
+    return chat && chat.isGroupChat ? chat.admins.includes(appStore.user) : false;
   });
 
   function isMemberAdminOfGroupChat(user: string): boolean {
@@ -79,23 +81,24 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function ensureAllAddressesExist(members: string[]): Promise<boolean> {
-    const checks = await Promise.all(members.map(async addr => {
-      const { check, exc } = await chatService.checkAddressExistenceForASMail(addr)
-        .then(
+    const checks = await Promise.all(
+      members.map(async addr => {
+        const { check, exc } = await chatService.checkAddressExistenceForASMail(addr).then(
           check => ({ check, exc: undefined }),
           exc => ({ check: undefined, exc }),
         );
-      return { addr, check, exc };
-    }));
+        return { addr, check, exc };
+      }),
+    );
 
-    const failedAddresses = checks.filter(({ check }) => (check !== 'found'));
+    const failedAddresses = checks.filter(({ check }) => check !== 'found');
 
     if (failedAddresses.length > 0) {
       // throw makeChatException({ failedAddresses });
-      let errorText = `${appStore.$i18n.tr('chat.members.update.error')}.`;
+      let errorText = `${t('chat.app_message.error.members_update')}.`;
       for (const item of failedAddresses) {
         const { addr, check } = item;
-        const text = prepareCheckAddrErrorText(addr, check!, appStore.$i18n.tr);
+        const text = prepareCheckAddrErrorText(addr, check!, t);
         errorText += ` ${text}.`;
       }
       appStore.$createNotice({
@@ -109,47 +112,58 @@ export const useChatStore = defineStore('chat', () => {
     return true;
   }
 
-  async function sendMessageInChat(
-    { chatId, chatMessageId, text, files, relatedMessage, withoutCurrentChatCheck }: {
-      chatId: ChatIdObj,
-      chatMessageId?: string,
-      text: string,
-      files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined,
-      relatedMessage: RelatedMessage | undefined,
-      withoutCurrentChatCheck?: boolean,
-    }) {
+  async function sendMessageInChat({
+    chatId,
+    chatMessageId,
+    text,
+    files,
+    relatedMessage,
+    withoutCurrentChatCheck,
+  }: {
+    chatId: ChatIdObj;
+    chatMessageId?: string;
+    text: string;
+    files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined;
+    relatedMessage: RelatedMessage | undefined;
+    withoutCurrentChatCheck?: boolean;
+  }) {
     !withoutCurrentChatCheck && ensureCurrentChatIsSet(chatId);
 
     await chatService.sendRegularMessage({ chatId, chatMessageId, text, files: files ?? [], relatedMessage });
     appStore.$emitter.emit('message:sent', { chatId });
   }
 
-  async function updateEarlySentMessage(
-    { chatId, chatMessageId, updatedBody }:
-    { chatId: ChatIdObj; chatMessageId: string; updatedBody: string },
-  ) {
+  async function updateEarlySentMessage({
+    chatId,
+    chatMessageId,
+    updatedBody,
+  }: {
+    chatId: ChatIdObj;
+    chatMessageId: string;
+    updatedBody: string;
+  }) {
     const chat = chatsStore.getChatView(chatId);
     if (!chat) {
       w3n.log('error', `The chat with id ${JSON.stringify(chatId)} is not found.`);
       return;
     }
 
-    const updatedMessage = await chatService.updateEarlySentMessage({
-      chatId, chatMessageId, updatedBody,
-    }) as RegularMsgView;
+    const updatedMessage = (await chatService.updateEarlySentMessage({
+      chatId,
+      chatMessageId,
+      updatedBody,
+    })) as RegularMsgView;
 
     if (areChatIdsEqual(currentChatId.value, chatId) && updatedMessage) {
       const messagesStore = useMessagesStore();
-      messagesStore.upsertMessageInCurrentChat(
-        chatMessageId,
-        { body: updatedBody, history: updatedMessage.history },
-      );
+      messagesStore.upsertMessageInCurrentChat(chatMessageId, {
+        body: updatedBody,
+        history: updatedMessage.history,
+      });
     }
   }
 
-  async function renameChat(
-    chat: ChatListItemView, newChatName: string,
-  ): Promise<void> {
+  async function renameChat(chat: ChatListItemView, newChatName: string): Promise<void> {
     const chatId = { isGroupChat: chat.isGroupChat, chatId: chat.chatId };
     ensureCurrentChatIsSet(chatId);
     await chatService.renameChat(chatId, newChatName);
@@ -172,34 +186,43 @@ export const useChatStore = defineStore('chat', () => {
       throw new Error(`This function can't remove self from members. Own address should be among new members.`);
     }
 
-    const { members } = (currentChat.value as GroupChatView);
-    const membersToDelete = Object.keys(members).reduce((res, addr) => {
-      if (!includesAddress(Object.keys(newMembers), addr)) {
-        res[addr] = members[addr];
-      }
+    const { members } = currentChat.value as GroupChatView;
+    const membersToDelete = Object.keys(members).reduce(
+      (res, addr) => {
+        if (!includesAddress(Object.keys(newMembers), addr)) {
+          res[addr] = members[addr];
+        }
 
-      return res;
-    }, {} as Record<string, { hasAccepted: boolean }>);
+        return res;
+      },
+      {} as Record<string, { hasAccepted: boolean }>,
+    );
 
-    const membersUntouched = Object.keys(members).reduce((res, addr) => {
-      if (!includesAddress(Object.keys(membersToDelete), addr)) {
-        res[addr] = members[addr];
-      }
+    const membersUntouched = Object.keys(members).reduce(
+      (res, addr) => {
+        if (!includesAddress(Object.keys(membersToDelete), addr)) {
+          res[addr] = members[addr];
+        }
 
-      return res;
-    }, {} as Record<string, { hasAccepted: boolean }>);
+        return res;
+      },
+      {} as Record<string, { hasAccepted: boolean }>,
+    );
 
-    const membersToAdd = Object.keys(newMembers).reduce((res, addr) => {
-      if (!includesAddress(Object.keys(members), addr)) {
-        res[addr] = newMembers[addr];
-      }
+    const membersToAdd = Object.keys(newMembers).reduce(
+      (res, addr) => {
+        if (!includesAddress(Object.keys(members), addr)) {
+          res[addr] = newMembers[addr];
+        }
 
-      return res;
-    }, {} as Record<string, { hasAccepted: boolean }>);
+        return res;
+      },
+      {} as Record<string, { hasAccepted: boolean }>,
+    );
 
-    const checkResult = await ensureAllAddressesExist(Object.keys(membersToAdd).filter(
-      member => (toCanonicalAddress(member) !== toCanonicalAddress(appStore.user)),
-    ));
+    const checkResult = await ensureAllAddressesExist(
+      Object.keys(membersToAdd).filter(member => toCanonicalAddress(member) !== toCanonicalAddress(appStore.user)),
+    );
     if (!checkResult) {
       return false;
     }
@@ -209,10 +232,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     const membersAfterUpdate = { ...membersUntouched, ...membersToAdd };
 
-    await chatService.updateGroupMembers(
-      chatIdObj,
-      { membersToDelete, membersToAdd, membersAfterUpdate },
-    );
+    await chatService.updateGroupMembers(chatIdObj, { membersToDelete, membersToAdd, membersAfterUpdate });
     return true;
   }
 
@@ -220,7 +240,7 @@ export const useChatStore = defineStore('chat', () => {
     const chatIdObj = { isGroupChat: true, chatId };
     ensureCurrentChatIsSet(chatIdObj);
 
-    const { admins = [] } = (currentChat.value as GroupChatView);
+    const { admins = [] } = currentChat.value as GroupChatView;
     const adminsToDelete = admins.reduce((res, addr) => {
       if (!includesAddress(newAdmins, addr)) {
         res.push(addr);
@@ -250,10 +270,7 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const adminsAfterUpdate = [...adminsUntouched, ...adminsToAdd];
-    await chatService.updateGroupAdmins(
-      chatIdObj,
-      { adminsToDelete, adminsToAdd, adminsAfterUpdate },
-    );
+    await chatService.updateGroupAdmins(chatIdObj, { adminsToDelete, adminsToAdd, adminsAfterUpdate });
   }
 
   return {

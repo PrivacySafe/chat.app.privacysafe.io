@@ -15,35 +15,36 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
-import { useVaSetup } from '@video/common/composables/use-va-setup';
-import VideoPlaceholder from '@video/common/components/video-placeholder.vue';
+  import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
+  import { useVaSetup } from '@video/common/composables/use-va-setup';
+  import VideoPlaceholder from '@video/common/components/video-placeholder.vue';
 
-const {
-  user,
-  isAnyOneConnected,
-  haveCamerasToChoose,
-  webcamMenuChoices,
-  haveVideo,
-  isMicOn,
-  isCamOn,
-  ownVA,
-  cancel,
-  startChatCall,
-  toggleMicStatus,
-  toggleCamStatus,
-  changeVideoDeviceTo,
-} = useVaSetup();
+  const {
+    t,
+    user,
+    isAnyOneConnected,
+    haveCamerasToChoose,
+    webcamMenuChoices,
+    haveVideo,
+    isMicOn,
+    isCamOn,
+    ownVA,
+    cancel,
+    startChatCall,
+    toggleMicStatus,
+    toggleCamStatus,
+    changeVideoDeviceTo,
+  } = useVaSetup();
 </script>
 
 <template>
   <div :class="$style.vaSetup">
     <div :class="$style.header">
       <ui3n-button @click.stop.prevent="startChatCall">
-        {{ isAnyOneConnected ? $tr('va.presettings.btn.join') : $tr('va.presettings.btn.start') }}
+        {{ isAnyOneConnected ? t('va.presettings.btn.join') : t('va.presettings.btn.start') }}
       </ui3n-button>
 
-      <span>{{ $tr('va.setup.title') }}</span>
+      <span>{{ t('va.setup.title') }}</span>
 
       <ui3n-button
         type="custom"
@@ -51,7 +52,7 @@ const {
         text-color="var(--error-fill-default)"
         @click.stop.prevent="cancel"
       >
-        {{ $tr('dialog.cancel.button.default') }}
+        {{ t('dialog.button.default.cancel') }}
       </ui3n-button>
     </div>
 
@@ -120,83 +121,83 @@ const {
 </template>
 
 <style lang="scss" module>
-.vaSetup {
-  --va-setup-header-height: 48px;
-  --va-setup-settings-height: 48px;
+  .vaSetup {
+    --va-setup-header-height: 48px;
+    --va-setup-settings-height: 48px;
 
-  position: fixed;
-  inset: 0;
-  background-color: var(--color-bg-block-primary-default);
-}
-
-.header {
-  display: flex;
-  width: 100%;
-  height: var(--va-setup-header-height);
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 var(--spacing-m);
-  border-bottom: 1px solid var(--color-border-block-primary-default);
-}
-
-.content {
-  position: relative;
-  width: 100%;
-  height: calc(100% - var(--va-setup-header-height) - var(--spacing-s));
-}
-
-.body {
-  position: relative;
-  width: 100%;
-  height: calc(100% - var(--va-setup-settings-height));
-  background-color: var(--color-bg-control-secondary-default);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.video {
-  position: relative;
-  width: calc(100% - var(--spacing-xs));
-  height: calc(100% - var(--spacing-xs));
-  border-radius: var(--spacing-s);
-  transform: rotateY(180deg);
-  background-color: var(--color-bg-control-secondary-default);
-}
-
-.settings {
-  display: flex;
-  width: 100%;
-  height: var(--va-setup-settings-height);
-  justify-content: center;
-  align-items: center;
-  column-gap: var(--spacing-m);
-}
-
-.settingsBtn {
-  padding: 0 var(--spacing-s) !important;
-  column-gap: 0 !important;
-}
-
-.currentWebcam {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  column-gap: var(--spacing-xs);
-  color: var(--color-icon-button-tritery-default);
-  background-color: var(--color-bg-button-tritery-default);
-  padding: var(--spacing-s);
-  cursor: pointer;
-}
-
-.webcamChoice {
-  color: var(--color-icon-button-tritery-default);
-  background-color: var(--color-bg-button-tritery-default);
-  padding: var(--spacing-s);
-  cursor: pointer;
-
-  &:hover {
-    background-color: var(--color-bg-control-primary-hover);
+    position: fixed;
+    inset: 0;
+    background-color: var(--color-bg-block-primary-default);
   }
-}
+
+  .header {
+    display: flex;
+    width: 100%;
+    height: var(--va-setup-header-height);
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 var(--spacing-m);
+    border-bottom: 1px solid var(--color-border-block-primary-default);
+  }
+
+  .content {
+    position: relative;
+    width: 100%;
+    height: calc(100% - var(--va-setup-header-height) - var(--spacing-s));
+  }
+
+  .body {
+    position: relative;
+    width: 100%;
+    height: calc(100% - var(--va-setup-settings-height));
+    background-color: var(--color-bg-control-secondary-default);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .video {
+    position: relative;
+    width: calc(100% - var(--spacing-xs));
+    height: calc(100% - var(--spacing-xs));
+    border-radius: var(--spacing-s);
+    transform: rotateY(180deg);
+    background-color: var(--color-bg-control-secondary-default);
+  }
+
+  .settings {
+    display: flex;
+    width: 100%;
+    height: var(--va-setup-settings-height);
+    justify-content: center;
+    align-items: center;
+    column-gap: var(--spacing-m);
+  }
+
+  .settingsBtn {
+    padding: 0 var(--spacing-s) !important;
+    column-gap: 0 !important;
+  }
+
+  .currentWebcam {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    column-gap: var(--spacing-xs);
+    color: var(--color-icon-button-tritery-default);
+    background-color: var(--color-bg-button-tritery-default);
+    padding: var(--spacing-s);
+    cursor: pointer;
+  }
+
+  .webcamChoice {
+    color: var(--color-icon-button-tritery-default);
+    background-color: var(--color-bg-button-tritery-default);
+    padding: var(--spacing-s);
+    cursor: pointer;
+
+    &:hover {
+      background-color: var(--color-bg-control-primary-hover);
+    }
+  }
 </style>

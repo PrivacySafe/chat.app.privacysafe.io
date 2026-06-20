@@ -14,16 +14,16 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { type ComputedRef, inject } from 'vue';
+import type { ComputedRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import isEmpty from 'lodash/isEmpty';
 import dayjs from 'dayjs';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import type { ChatMessageHistoryChange } from '~/index';
 
 const dateTimeFormat = 'YYYY-MM-DD HH:mm:ss';
 
 export function useInfoChanges(changes: ComputedRef<ChatMessageHistoryChange[]>, ts: number) {
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
 
   function getTimeForBlockNow() {
     return isEmpty(changes.value) ? ts : changes.value[0].timestamp;
@@ -31,22 +31,21 @@ export function useInfoChanges(changes: ComputedRef<ChatMessageHistoryChange[]>,
 
   function prepareTimeForBlockNow() {
     const currentTS = getTimeForBlockNow();
-    return `${$tr('chat.message.info.since')} ${dayjs(currentTS).format(dateTimeFormat)}`;
+    return `${t('chat.message.info.since')} ${dayjs(currentTS).format(dateTimeFormat)}`;
   }
 
   function prepareTimeForBlockHistory(ind: number) {
-    const fromTs = ind === (changes.value.length - 1)
-      ? ts
-      : changes.value[ind + 1].timestamp;
+    const fromTs = ind === changes.value.length - 1 ? ts : changes.value[ind + 1].timestamp;
     const toTs = ind === 0 ? getTimeForBlockNow() : changes.value[ind].timestamp;
 
-    return $tr('chat.message.info.between', {
+    return t('chat.message.info.between', {
       from: dayjs(fromTs).format(dateTimeFormat),
       to: dayjs(toTs).format(dateTimeFormat),
     });
   }
 
   return {
+    t,
     prepareTimeForBlockNow,
     prepareTimeForBlockHistory,
   };

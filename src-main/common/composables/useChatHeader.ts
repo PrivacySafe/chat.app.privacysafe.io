@@ -15,12 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, type ComputedRef, inject, onBeforeUnmount, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import {
   DIALOGS_KEY,
   DialogsPlugin,
-  I18N_KEY,
-  I18nPlugin,
   NOTIFICATIONS_KEY,
   NotificationsPlugin,
 } from '@v1nt1248/3nclient-lib/plugins';
@@ -54,16 +53,18 @@ interface ChatActionHandlers {
   };
 }
 
-export function useChatHeader(
-  { chat, messages, goToChats, isMobileMode }:
-  {
-    chat: ComputedRef<ChatListItemView>;
-    messages: ComputedRef<ChatMessageView[]>;
-    goToChats: () => Promise<void>;
-    isMobileMode?: boolean;
-  },
-) {
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+export function useChatHeader({
+  chat,
+  messages,
+  goToChats,
+  isMobileMode,
+}: {
+  chat: ComputedRef<ChatListItemView>;
+  messages: ComputedRef<ChatMessageView[]>;
+  goToChats: () => Promise<void>;
+  isMobileMode?: boolean;
+}) {
+  const { t } = useI18n();
   const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
   const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
@@ -88,9 +89,8 @@ export function useChatHeader(
 
   const isGroupChat = computed(() => chat.value.isGroupChat);
   const currentChatObjId = computed(() => ({ isGroupChat: isGroupChat.value, chatId: chat.value.chatId }));
-  const isIncomingCall = computed(() => !!chat.value.incomingCall
-    && !!chat.value.incomingCall.chatId
-    && !!chat.value.incomingCall.peerAddress,
+  const isIncomingCall = computed(
+    () => !!chat.value.incomingCall && !!chat.value.incomingCall.chatId && !!chat.value.incomingCall.peerAddress,
   );
   const chatWithCall = computed(() => !!chat.value.callStart);
 
@@ -106,7 +106,7 @@ export function useChatHeader(
 
   async function runChatHistoryExporting() {
     const result = await exportChatMessages({
-      $tr,
+      t,
       ownAddr: user.value!,
       chat: chat.value,
       messages: messages.value,
@@ -115,59 +115,56 @@ export function useChatHeader(
       notification.$createNotice({
         type: result ? 'success' : 'error',
         content: result
-          ? $tr('chat.export.result.success', { file: `${chat.value?.name}.txt` })
-          : $tr('chat.export.result.error', { file: `${chat.value?.name}.txt` }),
+          ? t('chat.app_message.success.export', { file: `${chat.value?.name}.txt` })
+          : t('chat.app_message.error.export', { file: `${chat.value?.name}.txt` }),
       });
     }
   }
 
   async function runChatHistoryCleaning() {
-    dialog.$openDialog<typeof ConfirmationDialog>({
-      component: ConfirmationDialog,
+    const res = await dialog.$openDialog<boolean>(ConfirmationDialog, {
       dialogProps: {
-        title: $tr('chat.history.clean.dialog.title'),
+        title: t('chat.dialog.clean_history.title'),
         ...(isMobileMode && { width: 300 }),
-        onConfirm: async () => {
-          await deleteAllMessagesInChat(chat.value);
-        },
       },
     });
+
+    const { event } = res;
+    if (event === 'confirm') {
+      await deleteAllMessagesInChat(chat.value);
+    }
   }
 
-  function openChatInfoDialog() {
-    dialog.$openDialog<typeof ChatInfoDialog>({
-      component: ChatInfoDialog,
+  async function openChatInfoDialog() {
+    await dialog.$openDialog<void>(ChatInfoDialog, {
+      chat: chat.value,
+      isMobileMode,
       dialogProps: {
-        title: $tr('chat.info.dialog.title'),
+        title: t('chat.dialog.info.title'),
         ...(isMobileMode && { width: 300 }),
         confirmButton: false,
         cancelButton: false,
       },
-      componentProps: {
-        chat: chat.value,
-        isMobileMode,
-      },
     });
   }
 
-  function runChatRenaming() {
-    dialog.$openDialog<typeof ChatRenameDialog>({
-      component: ChatRenameDialog,
-      componentProps: {
-        chatName: chat.value.name,
-      },
+  async function runChatRenaming() {
+    const res = await dialog.$openDialog<{ oldName: string; newName: string }>(ChatRenameDialog, {
+      chatName: chat.value.name,
       dialogProps: {
-        title: $tr('chat.rename.dialog.title'),
+        title: t('chat.dialog.rename.title'),
         ...(isMobileMode && { width: 300 }),
-        confirmButtonText: $tr('chat.rename.dialog.button.text'),
-        onConfirm: async value => {
-          const { oldName, newName } = value as { oldName: string, newName: string };
-          if (newName !== oldName) {
-            await renameChat(chat.value, newName);
-          }
-        },
+        confirmButtonText: t('chat.dialog.rename.btn'),
       },
     });
+
+    const { event, data } = res;
+    if (event === 'confirm' && data) {
+      const { oldName, newName } = data;
+      if (newName !== oldName) {
+        await renameChat(chat.value, newName);
+      }
+    }
   }
 
   async function closeChat() {
@@ -175,30 +172,29 @@ export function useChatHeader(
     await goToChats();
   }
 
-  function runChatDeleting() {
-    dialog.$openDialog<typeof ConfirmationDialog>({
-      component: ConfirmationDialog,
-      componentProps: {
-        dialogText: $tr('chat.delete.dialog.text', { chatName: chat.value.name }),
-      },
+  async function runChatDeleting() {
+    const res = await dialog.$openDialog<boolean>(ConfirmationDialog, {
+      dialogText: t('chat.dialog.delete.text', { chatName: chat.value.name }),
       dialogProps: {
-        title: $tr('chat.delete.dialog.title'),
+        title: t('chat.dialog.delete.title'),
         ...(isMobileMode && { width: 300 }),
-        confirmButtonText: capitalize($tr('chat.delete.dialog.button')),
+        confirmButtonText: capitalize(t('chat.dialog.delete.btn')),
         confirmButtonColor: 'var(--color-text-button-secondary-default)',
         confirmButtonBackground: 'var(--color-bg-button-secondary-default)',
         cancelButtonColor: 'var(--color-text-button-primary-default)',
         cancelButtonBackground: 'var(--color-bg-button-primary-default)',
-        onConfirm: async () => {
-          await deleteChat(chat.value, false);
-          if (areChatIdsEqual(currentChatId.value, chat.value)) {
-            resetCurrentChat();
-            await goToChats();
-          }
-          await refreshChatList();
-        },
       },
     });
+
+    const { event } = res;
+    if (event === 'confirm') {
+      await deleteChat(chat.value, false);
+      if (areChatIdsEqual(currentChatId.value, chat.value)) {
+        resetCurrentChat();
+        await goToChats();
+      }
+      await refreshChatList();
+    }
   }
 
   async function setMessagesAutoDelete(autoDeleteMessageId: string) {
@@ -250,9 +246,9 @@ export function useChatHeader(
     [() => chat.value.chatId, () => chatWithCall.value],
     ([newChatId, newFlagVal], [oldChatId, oldFlagVal]) => {
       if (
-        (newChatId === oldChatId && newFlagVal !== oldFlagVal)
-        || (newChatId !== oldChatId && newFlagVal !== oldFlagVal)
-        || (newChatId !== oldChatId && newFlagVal === oldFlagVal)
+        (newChatId === oldChatId && newFlagVal !== oldFlagVal) ||
+        (newChatId !== oldChatId && newFlagVal !== oldFlagVal) ||
+        (newChatId !== oldChatId && newFlagVal === oldFlagVal)
       ) {
         if (newFlagVal) {
           timer.value && clearInterval(timer.value);
@@ -264,12 +260,14 @@ export function useChatHeader(
           timer.value = undefined;
         }
       }
-    }, {
+    },
+    {
       immediate: true,
     },
   );
 
   return {
+    t,
     text,
     isGroupChat,
     currentChatObjId,

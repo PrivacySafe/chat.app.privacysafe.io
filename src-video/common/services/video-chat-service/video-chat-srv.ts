@@ -17,7 +17,7 @@
 // @deno-types="@shared/ipc/ipc-service.d.ts"
 import { shallowRef } from 'vue';
 import { makeSyncedFunc, SingleProc } from '@v1nt1248/3nclient-lib/utils';
-import { fstIsPolite } from '@bg/utils/for-perfect-negotiation';
+import { fstIsPolite } from '@deno/utils/for-perfect-negotiation';
 import { useAppStore } from '@video/common/store/app.store';
 import { useStreamsStore } from '@video/common/store/streams.store';
 import { toCanonicalAddress } from '@shared/address-utils';

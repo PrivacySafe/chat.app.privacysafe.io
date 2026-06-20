@@ -16,9 +16,9 @@
 -->
 
 <script lang="ts" setup>
-import { computed, inject, onBeforeUnmount, onMounted, useTemplateRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, useTemplateRef } from 'vue';
+import { useI18n } from 'vue-i18n';
 import size from 'lodash/size';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { type Nullable, Ui3nIcon, Ui3nRadio } from '@v1nt1248/3nclient-lib';
 import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
@@ -40,7 +40,7 @@ const emits = defineEmits<{
   (event: 'select', value: string): void;
 }>();
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+const { t } = useI18n();
 const chatStore = useChatStore();
 const messagesStore = useMessagesStore();
 const { markMessageAsRead } = messagesStore;
@@ -157,7 +157,7 @@ onBeforeUnmount(() => {
     >
       <hr :class="$style.unredInfoLine">
       <span :class="$style.unredInfoText">
-        {{ $tr('chat.message.unread.text', { messages: `${chatStore.currentChat?.unread || ''}` }) }}
+        {{ t('chat.message.label.unread', { messages: `${chatStore.currentChat?.unread || ''}` }) }}
       </span>
     </div>
 

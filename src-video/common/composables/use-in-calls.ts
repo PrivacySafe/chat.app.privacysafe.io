@@ -16,29 +16,21 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 import { computed, type ComputedRef, inject, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import isEmpty from 'lodash/isEmpty';
 import difference from 'lodash/difference';
-import {
-  I18N_KEY,
-  DIALOGS_KEY,
-  VUEBUS_KEY,
-  VueBusPlugin,
-  I18nPlugin,
-  DialogsPlugin,
-} from '@v1nt1248/3nclient-lib/plugins';
+import { DIALOGS_KEY, VUEBUS_KEY, VueBusPlugin, DialogsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { useAppStore } from '@video/common/store/app.store';
 import { useStreamsStore } from '@video/common/store/streams.store';
 import type { PeerVideo } from '~/index';
 import type { PeerEvents } from '@video/common/types/events';
 import type { SharedStream } from '@video/common/types';
-import ScreenShareChoiceDialog
-  from '@video/desktop/components/dialogs/screen-share-choice-dialog/screen-share-choice-dialog.vue';
-
+import ScreenShareChoiceDialog from '@video/desktop/components/dialogs/screen-share-choice-dialog/screen-share-choice-dialog.vue';
 
 export function useInCalls() {
   const { $emitter } = inject<VueBusPlugin<PeerEvents>>(VUEBUS_KEY)!;
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
   const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
 
   const { user: ownName } = useAppStore();
@@ -50,8 +42,8 @@ export function useInCalls() {
   const screenShareMode = ref<'row' | 'column'>('row');
   const isParticipantListOpen = ref(false);
 
-  const peerVideos = computed(
-    () => peers.value.map(({ peerAddr, peerName }, i) => ({
+  const peerVideos = computed(() =>
+    peers.value.map(({ peerAddr, peerName }, i) => ({
       peerAddr,
       peerName,
       vaStream: streams.getPeerStreams(peerAddr, 'camera+mic')![0],
@@ -60,15 +52,16 @@ export function useInCalls() {
     })),
   ) as ComputedRef<PeerVideo[]>;
   const activePeerVideos = computed(() => peerVideos.value.filter(item => item.vaStream));
-  const activePeerVideosForObservation = computed(() => JSON.stringify(
-    activePeerVideos.value.map(p => p.peerAddr),
-  ));
+  const activePeerVideosForObservation = computed(() =>
+    JSON.stringify(activePeerVideos.value.map(p => p.peerAddr)),
+  );
 
-  const peerSharedStreams = computed(
-    () => peers.value.flatMap(({ peerAddr, peerName }) => [
-      ...streams.getPeerStreams(peerAddr, 'screen'),
-      ...streams.getPeerStreams(peerAddr, 'window'),
-    ].map(stream => ({ peerAddr, peerName, stream }))),
+  const peerSharedStreams = computed(() =>
+    peers.value.flatMap(({ peerAddr, peerName }) =>
+      [...streams.getPeerStreams(peerAddr, 'screen'), ...streams.getPeerStreams(peerAddr, 'window')].map(
+        stream => ({ peerAddr, peerName, stream }),
+      ),
+    ),
   );
 
   function toggleMicStatus() {
@@ -99,41 +92,40 @@ export function useInCalls() {
     screenShareMode.value = screenShareMode.value === 'row' ? 'column' : 'row';
   }
 
-  function openScreenShareChoice() {
+  async function openScreenShareChoice() {
     isParticipantListOpen.value = false;
-    dialog.$openDialog<typeof ScreenShareChoiceDialog>({
-      component: ScreenShareChoiceDialog,
-      componentProps: {
+    const res = await dialog.$openDialog<{ selected: SharedStream[]; selectedDeskSound: boolean }>(
+      ScreenShareChoiceDialog,
+      {
         initiallyShared: ownScreens.value ? ownScreens.value.concat() : [],
         initialDeskSoundShared: isSharingOwnDeskSound.value,
-      },
-      dialogProps: {
-        title: $tr('sharing.choice.title'),
-        cssStyle: {
-          width: '95%',
-          height: '95%',
+        dialogProps: {
+          title: t('call.sharing.title'),
+          cssStyle: {
+            width: '95vw',
+            height: '95dvh',
+          },
+          closeOnClickOverlay: false,
         },
-        closeOnClickOverlay: false,
-        onConfirm: (data: unknown) => {
-          if (!data) {
-            return;
-          }
+      },
+    );
 
-          const { selected, selectedDeskSound } = data as { selected: SharedStream[]; selectedDeskSound: boolean };
-          // unshare those not among selected
-          ownScreens.value
-            ?.filter(({ srcId }) => !selected.find(s => (s.srcId === srcId)))
-            .forEach(({ srcId }) => removeOwnScreen(srcId));
-          // add selected if not already shared
-          for (const { srcId, stream, type, name } of selected) {
-            if (!ownScreens.value?.find(s => (s.srcId === srcId))) {
-              addOwnScreen(stream, type, srcId, name);
-            }
-          }
-          setOwnDeskSoundSharing(ownScreens.value ? selectedDeskSound : false);
-        },
-      },
-    });
+    const { event, data } = res;
+    if (event === 'confirm' && data) {
+      const { selected, selectedDeskSound } = data;
+      // unshare those not among selected
+      ownScreens.value
+        ?.filter(({ srcId }) => !selected.find(s => s.srcId === srcId))
+        .forEach(({ srcId }) => removeOwnScreen(srcId));
+
+      // add selected if not already shared
+      for (const { srcId, stream, type, name } of selected) {
+        if (!ownScreens.value?.find(s => s.srcId === srcId)) {
+          addOwnScreen(stream, type, srcId, name);
+        }
+      }
+      setOwnDeskSoundSharing(ownScreens.value ? selectedDeskSound : false);
+    }
   }
 
   function doOnMounted() {
@@ -161,19 +153,23 @@ export function useInCalls() {
         const dif = difference(valueAsArray, oldValueAsArray);
         if (!isEmpty(dif)) {
           const streamId = ownVA.value.stream.id;
-          peers.value.forEach(({ channel }) => channel.signalOwnStreamState({
-            streamId,
-            audio: isMicOn.value,
-            video: isCamOn.value,
-          }));
+          peers.value.forEach(({ channel }) =>
+            channel.signalOwnStreamState({
+              streamId,
+              audio: isMicOn.value,
+              video: isCamOn.value,
+            }),
+          );
         }
       }
-    }, {
+    },
+    {
       immediate: true,
     },
   );
 
   return {
+    t,
     ownName,
     isGroupChat,
     isFullscreen,

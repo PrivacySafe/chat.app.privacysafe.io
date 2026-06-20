@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2018, 2020 - 2022, 2024 3NSoft Inc.
+ Copyright (C) 2017 - 2018, 2020 - 2022, 2024 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -21,12 +21,14 @@
 /// <reference path="./shell-clipboard.d.ts" />
 /// <reference path="./shell-notifications.d.ts" />
 /// <reference path="./shell-commands.d.ts" />
+/// <reference path="./shell-mounts.d.ts" />
 /// <reference path="./connectivity.d.ts" />
 /// <reference path="./rpc.d.ts" />
 /// <reference path="./ui.d.ts" />
 /// <reference path="./manifest.d.ts" />
 /// <reference path="./media.d.ts" />
 /// <reference path="./test-stand.d.ts" />
+/// <reference path="./w3n-startup.d.ts" />
 
 declare namespace web3n.caps {
 

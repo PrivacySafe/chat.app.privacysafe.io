@@ -17,7 +17,7 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 import { useStreamsStore } from '@video/common/store/streams.store';
 import type {
   ChatIncomingMessage,
-  ChatMessageJsonBodyV1,
+  ChatMessageJsonBody,
   ChatSystemMsgV1,
   WebRTCMsgBodySysMsgData,
 } from '~/asmail-msgs.types';
@@ -27,7 +27,10 @@ export function useHandleSystemMessages() {
 
   async function handleSystemMessages(msg: web3n.asmail.IncomingMessage | ChatIncomingMessage) {
     const { msgType, jsonBody = {} } = msg;
-    if (msgType !== 'chat' || (msgType === 'chat' && (jsonBody as ChatMessageJsonBodyV1)?.chatMessageType !== 'system')) {
+    if (
+      msgType !== 'chat' ||
+      (msgType === 'chat' && (jsonBody as ChatMessageJsonBody)?.chatMessageType !== 'system')
+    ) {
       return;
     }
 
@@ -38,7 +41,7 @@ export function useHandleSystemMessages() {
       case 'webrtc-call': {
         const { subType, sender } = value;
         if (subType === 'incoming-call-cancelled') {
-          await streamsStore.handlePeerDisconnected(sender)
+          await streamsStore.handlePeerDisconnected(sender);
         }
         break;
       }
@@ -58,5 +61,5 @@ export function useHandleSystemMessages() {
 
   return {
     initializeSystemMessagesHandler,
-  }
+  };
 }

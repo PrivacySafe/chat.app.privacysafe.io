@@ -24,6 +24,10 @@ export const messageDeliveryStatuses: Record<OutgoingMessageStatus, MessageDeliv
     icon: 'round-refresh',
     color: 'var(--color-icon-chat-bubble-user-quote)',
   },
+  syncing_self: {
+    icon: 'round-refresh',
+    color: 'var(--color-icon-chat-bubble-user-quote)',
+  },
   sent: {
     icon: 'round-check',
     color: 'var(--success-content-default)',
@@ -52,7 +56,7 @@ export const chatMenuItems: ChatMenuItem[] = [
   {
     icon: 'outline-timer',
     action: 'chat:timer',
-    text: 'chat.action.menu.txt.timer',
+    text: 'chat.action.menu.txt.timer.label',
     chatTypes: ['single', 'group&admin'],
     disable: ['chat-with-call'],
     subMenu: [
@@ -133,76 +137,76 @@ export const chatMenuItems: ChatMenuItem[] = [
 ];
 
 /*
-* condition - {part1}:{part2}:{part3}
-* part1 (message type): 'incoming'|'outgoing' OR '' (if it does not matter)
-* part2 (message delivery status): lists the MessageStatus separated by commas OR '' (if it does not matter)
-* part3 (attachments):  true OR false OR '' (if it does not matter)
-* part4 (lifetime): '' if it does not matter OR a string like '>1000' or '<1000' ('>' or '<' is the comparison
-*  condition and then the value in ms
-* */
+ * condition - {part1}:{part2}:{part3}
+ * part1 (message type): 'incoming'|'outgoing' OR '' (if it does not matter)
+ * part2 (message delivery status): lists the MessageStatus separated by commas OR '' (if it does not matter)
+ * part3 (attachments):  true OR false OR '' (if it does not matter)
+ * part4 (lifetime): '' if it does not matter OR a string like '>1000' or '<1000' ('>' or '<' is the comparison
+ *  condition and then the value in ms
+ * */
 export const messageActions: ChatMessageAction[] = [
   {
     id: 'reaction',
     icon: { name: 'outline-heart-plus' },
-    title: 'chat.message.actions.menu.txt.reaction',
+    title: 'chat.message.menu.reaction',
     conditions: [':sent,read::'],
   },
   {
     id: 'reply',
     icon: { name: 'outline-reply' },
-    title: 'chat.message.actions.menu.txt.reply',
-    conditions: ['incoming:sent,read::']
+    title: 'chat.message.menu.reply',
+    conditions: ['incoming:sent,read::'],
   },
   {
     id: 'copy',
     icon: { name: 'round-content-copy' },
-    title: 'chat.message.actions.menu.txt.copy',
+    title: 'chat.message.menu.copy',
     conditions: ['incoming:::', 'outgoing:sent,read,error,canceled::'],
     allowInReadonlyMode: true,
   },
   {
     id: 'forward',
     icon: { name: 'outline-reply', horizontalFlip: true },
-    title: 'chat.message.actions.menu.txt.forward',
+    title: 'chat.message.menu.forward',
     conditions: ['incoming:::', 'outgoing:sent,read,error,canceled::'],
   },
   {
     id: 'edit',
     icon: { name: 'outline-edit' },
-    title: 'chat.message.actions.menu.txt.edit',
+    title: 'chat.message.menu.edit',
     conditions: ['outgoing:sent,read,error,canceled::<86400000'],
   },
   {
     id: 'download',
     icon: { name: 'outline-download-for-offline' },
-    title: 'chat.message.actions.menu.txt.download',
+    title: 'chat.message.menu.download',
     conditions: ['incoming::true:', 'outgoing:sent,read,error,canceled:true:'],
     allowInReadonlyMode: true,
   },
   {
     id: 'resend',
     icon: { name: 'round-refresh' },
-    title: 'chat.message.actions.menu.txt.resend',
-    conditions: ['outgoing:error::', 'outgoing:canceled::']
+    title: 'chat.message.menu.resend',
+    conditions: ['outgoing:error::', 'outgoing:canceled::'],
   },
   {
     id: 'select',
     icon: { name: 'round-check-circle-outline' },
-    title: 'chat.message.actions.menu.txt.select',
+    title: 'chat.message.menu.select',
     conditions: [':::'],
     allowInReadonlyMode: true,
   },
   {
     id: 'info',
     icon: { name: 'outline-info', rotateIcon: 2 },
-    title: 'chat.message.actions.menu.txt.info',
+    title: 'chat.message.menu.info',
     conditions: [':::'],
     allowInReadonlyMode: true,
   },
   {
     id: 'delete_message',
     icon: { name: 'outline-delete' },
-    title: 'chat.message.actions.menu.txt.delete_message',
+    title: 'chat.message.menu.delete_message',
     conditions: ['incoming:::', 'outgoing:sent,read,error,canceled::'],
     allowInReadonlyMode: true,
     blockStart: true,
@@ -211,7 +215,7 @@ export const messageActions: ChatMessageAction[] = [
   {
     id: 'cancel_sending',
     icon: { name: 'round-cancel-schedule-send' },
-    title: 'chat.message.actions.menu.txt.cancel_sending',
+    title: 'chat.message.menu.cancel_sending',
     conditions: ['outgoing:sending::'],
     allowInReadonlyMode: true,
     blockStart: true,

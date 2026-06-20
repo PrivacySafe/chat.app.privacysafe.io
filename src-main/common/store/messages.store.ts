@@ -33,10 +33,11 @@ import type {
   ChatMessageId,
   ChatMessageSendingProgressEvent,
   ChatMessageView,
-  ReadonlyFile, ReadonlyFS,
+  ReadonlyFile,
+  ReadonlyFS,
   RegularMsgView,
 } from '~/index';
-import type { DbRecordException } from '@bg/utils/exceptions';
+import type { DbRecordException } from '@deno/utils/exceptions';
 
 const recentReactionsLimit = 5;
 
@@ -52,8 +53,7 @@ export const useMessagesStore = defineStore('messages', () => {
   const recentReactions = ref<string[]>([]);
 
   const currentChatMessages = computed(() =>
-    Object.values(objOfCurrentChatMessages.value)
-      .sort((a, b) => a.timestamp - b.timestamp),
+    Object.values(objOfCurrentChatMessages.value).sort((a, b) => a.timestamp - b.timestamp),
   );
 
   function setCurrentChatMessages(messages: ChatMessageView[] = []) {
@@ -89,9 +89,13 @@ export const useMessagesStore = defineStore('messages', () => {
     selectedMessages.value = [];
   }
 
-  async function cancelSendingMessage(
-    { deliveryId, chatMsgId }: { deliveryId: string; chatMsgId: ChatMessageId },
-  ): Promise<void> {
+  async function cancelSendingMessage({
+    deliveryId,
+    chatMsgId,
+  }: {
+    deliveryId: string;
+    chatMsgId: ChatMessageId;
+  }): Promise<void> {
     return await chatService.cancelSendingMessage(deliveryId, chatMsgId);
   }
 
@@ -167,9 +171,7 @@ export const useMessagesStore = defineStore('messages', () => {
     }
   }
 
-  async function deleteAllMessagesInChat(
-    chatId: ChatIdObj, deleteForEveryone?: boolean,
-  ): Promise<void> {
+  async function deleteAllMessagesInChat(chatId: ChatIdObj, deleteForEveryone?: boolean): Promise<void> {
     chatStore.ensureCurrentChatIsSet(chatId);
     await chatService.deleteMessagesInChat(chatId, !!deleteForEveryone);
     await fetchMessages();
@@ -177,7 +179,8 @@ export const useMessagesStore = defineStore('messages', () => {
 
   async function markMessageAsRead(chatId: ChatIdObj, chatMessageId: string): Promise<void> {
     await chatService.markMessageAsReadNotifyingSender({
-      chatId, chatMessageId,
+      chatId,
+      chatMessageId,
     });
   }
 
@@ -213,20 +216,23 @@ export const useMessagesStore = defineStore('messages', () => {
     return entities;
   }
 
-  async function changeMessageReaction(
-    { msg, reaction }:
-    { msg: ChatMessageView; reaction: Nullable<{ id: string; value: string }> },
-  ): Promise<void> {
+  async function changeMessageReaction({
+    msg,
+    reaction,
+  }: {
+    msg: ChatMessageView;
+    reaction: Nullable<{ id: string; value: string }>;
+  }): Promise<void> {
     const msgReactions = cloneDeep((msg as RegularMsgView).reactions || {});
     const isThereReactionFromUser = has(msgReactions, appStore.user);
     if (isThereReactionFromUser && reaction === null) {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete msgReactions[appStore.user];
     } else {
-      reaction && (msgReactions[appStore.user] = {
-        type: 'emoji',
-        name: reaction.id,
-      });
+      reaction &&
+        (msgReactions[appStore.user] = {
+          type: 'emoji',
+          name: reaction.id,
+        });
     }
 
     const updatedMsg = await chatService.changeMessageReaction({
@@ -259,7 +265,6 @@ export const useMessagesStore = defineStore('messages', () => {
 
   async function handleRemovedMsg(msg: ChatMessageId): Promise<void> {
     if (areChatIdsEqual(chatStore.currentChatId, msg.chatId)) {
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete objOfCurrentChatMessages.value[msg.chatMessageId];
     }
     await chatsStore.refreshChatViewData(msg.chatId);
@@ -273,7 +278,6 @@ export const useMessagesStore = defineStore('messages', () => {
     const { chatId } = chatMsgIds[0];
     if (areChatIdsEqual(chatStore.currentChatId, chatId)) {
       for (const id of chatMsgIds) {
-        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
         delete objOfCurrentChatMessages.value[id.chatMessageId];
       }
     }
@@ -294,7 +298,7 @@ export const useMessagesStore = defineStore('messages', () => {
         uiOutgoingStore.updateSendingProgressesList(event as ChatMessageSendingProgressEvent);
         break;
       default:
-        w3n.log('error', 'Unknown update event from ChatService. ' , event);
+        w3n.log('error', 'Unknown update event from ChatService. ', event);
         break;
     }
   }

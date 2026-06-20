@@ -23,7 +23,7 @@ import type { PersonView } from '~/index';
 import ContactListItem from './contact-list-item.vue';
 
 interface ContactListProps {
-  contactList: (PersonView & { displayName: string })[];
+  contactList?: (PersonView & { displayName: string })[];
   searchText?: string;
   selectedContacts?: (PersonView & { displayName: string })[];
   nonSelectableContacts?: (PersonView & { displayName: string })[];

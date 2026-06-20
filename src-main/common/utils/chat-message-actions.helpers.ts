@@ -36,7 +36,7 @@ export async function copyMessageToClipboard(message: RegularMsgView | undefined
 
 export async function downloadAttachments(
   message: RegularMsgView | undefined,
-  $tr: (key: string, placeholders?: Record<string, string>) => string,
+  t: (key: string, placeholders?: Record<string, string>) => string,
 ): Promise<boolean | undefined> {
   if (!message || !message.attachments) {
     return;
@@ -52,8 +52,8 @@ export async function downloadAttachments(
     if (entities && size(entities) > 0) {
       const targetFolderName = `${chatStore.currentChat?.name}_${sender}_${dayjs(timestamp).format('YYYY-MM-DD')}`;
       const targetFs = await w3n.shell?.fileDialogs?.saveFolderDialog!(
-        $tr('chat.message.attachments.download.title'),
-        $tr('app.ok'),
+        t('chat.message.dialog.attachments_download.title'),
+        t('app.ok'),
         targetFolderName,
       );
 
@@ -76,7 +76,7 @@ export async function downloadAttachments(
       return false;
     }
   } catch (err) {
-    w3n.log('error', $tr('chat.message.file.download.error'), err);
+    w3n.log('error', t('chat.message.action_message.error.file_download'), err);
     return false;
   }
 }

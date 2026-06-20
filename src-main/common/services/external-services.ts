@@ -14,79 +14,78 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-
-import { makeOutgoingFileLinkStore } from '@bg/dataset/versions/v0-none/attachments.ts';
+import { fileStoreService } from '@deno/services/file-store-service/file-store-service.ts';
 import { makeServiceCaller } from '@shared/ipc/ipc-service-caller';
-import type { ContactsService, ChatServiceIPC, FileLinkStoreService, VideoGUIOpener } from '~/index.ts';
+import type { ChatSrv, FileStoreService } from '@deno/types/index.ts';
+import type { ContactsService, VideoGUIOpener } from '~/index.ts';
 
-export let fileLinkStoreSrv: FileLinkStoreService;
+export let fileLinkStoreSrv: FileStoreService;
 export let appContactsSrv: ContactsService;
-export let chatService: ChatServiceIPC;
+export let chatService: ChatSrv;
 export let videoOpenerSrv: VideoGUIOpener;
 
 export async function initializeServices() {
   try {
+    [fileLinkStoreSrv, appContactsSrv, chatService, videoOpenerSrv] = await Promise.all([
+      fileStoreService(),
 
-    ([
-      fileLinkStoreSrv,
-      appContactsSrv,
-      chatService,
-      videoOpenerSrv,
-    ] = await Promise.all([
+      w3n.rpc!.otherAppsRPC!('contacts.app.privacysafe.io', 'AppContacts').then(
+        srvConn =>
+          makeServiceCaller<ContactsService>(srvConn, [
+            'isThereContactWithTheMail',
+            'getContactByMail',
+            'getContact',
+            'getContactList',
+            'upsertContact',
+            'insertContact',
+          ]) as ContactsService,
+      ),
 
-      makeOutgoingFileLinkStore(),
+      w3n.rpc!.thisApp!('AppChatsInternal').then(
+        srvConn =>
+          makeServiceCaller<ChatSrv>(
+            srvConn,
+            [
+              'createOneToOneChat',
+              'createGroupChat',
+              'acceptChatInvitation',
+              'getChat',
+              'getChatList',
+              'renameChat',
+              'chatSetUp',
+              'deleteChat',
+              'updateGroupMembers',
+              'updateGroupAdmins',
+              'deleteMessagesInChat',
+              'deleteMessage',
+              'deleteMessages',
+              'deleteExpiredMessages',
+              'getMessage',
+              'getMessagesByChat',
+              'getRecentReactions',
+              'sendRegularMessage',
+              'markMessageAsReadNotifyingSender',
+              'checkAddressExistenceForASMail',
+              'cancelSendingMessage',
+              'getIncomingMessage',
+              'updateEarlySentMessage',
+              'changeMessageReaction',
+              'sendSystemDeletableMessage',
+              'makeAndSaveMsgToDb',
+            ],
+            ['watch'],
+          ) as ChatSrv,
+      ),
 
-      w3n.rpc!.otherAppsRPC!('contacts.app.privacysafe.io', 'AppContacts')
-      .then(srvConn => makeServiceCaller<ContactsService>(srvConn, [
-        'isThereContactWithTheMail',
-        'getContactByMail',
-        'getContact',
-        'getContactList',
-        'upsertContact',
-        'insertContact'
-      ]) as ContactsService),
-
-      w3n.rpc!.thisApp!('AppChatsInternal')
-      .then(srvConn => makeServiceCaller<ChatServiceIPC>(srvConn, [
-        'createOneToOneChat',
-        'createGroupChat',
-        'acceptChatInvitation',
-        'getChat',
-        'getChatList',
-        'renameChat',
-        'chatSetUp',
-        'deleteChat',
-        'updateGroupMembers',
-        'updateGroupAdmins',
-        'deleteMessagesInChat',
-        'deleteMessage',
-        'deleteMessages',
-        'deleteExpiredMessages',
-        'getMessage',
-        'getMessagesByChat',
-        'getRecentReactions',
-        'sendRegularMessage',
-        'markMessageAsReadNotifyingSender',
-        'checkAddressExistenceForASMail',
-        'cancelSendingMessage',
-        'getIncomingMessage',
-        'updateEarlySentMessage',
-        'changeMessageReaction',
-        'sendSystemDeletableMessage',
-        'makeAndSaveMsgToDb',
-      ], [
-        'watch'
-      ]) as ChatServiceIPC),
-
-      w3n.rpc!.thisApp!('VideoGUIOpener')
-      .then(srvConn => makeServiceCaller<VideoGUIOpener>(srvConn, [
-        'startVideoCallForChatRoom',
-        'joinOrDismissCallInRoom',
-        'endVideoCallInChatRoom',
-      ], [
-        'watchVideoChats',
-      ]) as VideoGUIOpener),
-    ]));
+      w3n.rpc!.thisApp!('VideoGUIOpener').then(
+        srvConn =>
+          makeServiceCaller<VideoGUIOpener>(
+            srvConn,
+            ['startVideoCallForChatRoom', 'joinOrDismissCallInRoom', 'endVideoCallInChatRoom'],
+            ['watchVideoChats'],
+          ) as VideoGUIOpener,
+      ),
+    ]);
 
     console.info('<- SERVICES ARE INITIALIZED ->');
   } catch (err) {

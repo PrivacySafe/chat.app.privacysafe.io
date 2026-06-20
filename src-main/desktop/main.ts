@@ -17,47 +17,29 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 
-import {
-  dialogs,
-  i18n,
-  I18nOptions,
-  notifications,
-  storeVueBus,
-  storeI18n,
-  storeNotifications,
-  vueBus,
-} from '@v1nt1248/3nclient-lib/plugins';
+import { dialogs, notifications, storeVueBus, storeNotifications, vueBus } from '@v1nt1248/3nclient-lib/plugins';
 
 import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
 import '@main/common/assets/styles/main.css';
 
 import { router } from './router';
+import i18n from '@main/common/data/i18';
 import { initializeServices } from '@main/common/services/external-services';
 
 import App from '@main/desktop/pages/app.vue';
-import en from '@main/common/data/i18/en.json';
 
-initializeServices()
-  .then(async () => {
-    const pinia = createPinia();
-    pinia.use(storeVueBus);
-    pinia.use(storeI18n);
-    pinia.use(storeNotifications);
+initializeServices().then(async () => {
+  const pinia = createPinia();
+  pinia.use(storeVueBus);
+  pinia.use(storeNotifications);
 
-    const app = createApp(App);
+  const app = createApp(App);
 
-    app.config.globalProperties.$router = router;
-    app.config.compilerOptions.isCustomElement = tag => {
-      return tag.startsWith('ui3n-');
-    };
+  app.config.globalProperties.$router = router;
+  app.config.compilerOptions.isCustomElement = tag => {
+    return tag.startsWith('ui3n-');
+  };
 
-    app
-      .use(pinia)
-      .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
-      .use(vueBus)
-      .use(dialogs)
-      .use(notifications)
-      .use(router)
-      .mount('#main');
-  });
+  app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#main');
+});

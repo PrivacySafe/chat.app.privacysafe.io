@@ -15,95 +15,98 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { computed, inject, ref } from 'vue';
-import { isFileAudio, isFileImage, isFileVideo } from '@v1nt1248/3nclient-lib/utils';
-import { Ui3nIcon, Ui3nProgressCircular, type Nullable } from '@v1nt1248/3nclient-lib';
-import type { Task } from '~/index';
-import { createPdfThumbnail } from '@main/common/utils/create-thumbnail/create-pdf-thumbnail';
-import { createImageThumbnail } from '@main/common/utils/create-thumbnail/create-image-thumbnail';
-import { createVideoThumbnail } from '@main/common/utils/create-thumbnail/create-video-thumbnail';
-import { useOpenAttachment } from './useOpenAttachment';
-import type { AttachmentViewInfo } from './types';
-import ChatMessageAttachmentView from './chat-message-attachment-view.vue';
+  import { computed, inject, ref } from 'vue';
+  import { isFileAudio, isFileImage, isFileVideo } from '@v1nt1248/3nclient-lib/utils';
+  import { Ui3nIcon, Ui3nProgressCircular, type Nullable } from '@v1nt1248/3nclient-lib';
+  import type { Task } from '~/index';
+  import { createPdfThumbnail } from '@main/common/utils/create-thumbnail/create-pdf-thumbnail';
+  import { createImageThumbnail } from '@main/common/utils/create-thumbnail/create-image-thumbnail';
+  import { createVideoThumbnail } from '@main/common/utils/create-thumbnail/create-video-thumbnail';
+  import { useOpenAttachment } from './useOpenAttachment';
+  import type { AttachmentViewInfo } from './types';
+  import ChatMessageAttachmentView from './chat-message-attachment-view.vue';
 
-const props = defineProps<{
-  item: AttachmentViewInfo;
-  incomingMsgId?: string;
-}>();
+  const props = defineProps<{
+    item: AttachmentViewInfo;
+    incomingMsgId?: string;
+  }>();
 
-const { addTask } = inject('task-runner') as { addTask: (task: Task) => void };
+  const { addTask } = inject('task-runner') as { addTask: (task: Task) => void };
 
-const { openEntity } = useOpenAttachment(props);
+  const { openEntity } = useOpenAttachment(props);
 
-const thumbnail = ref<Nullable<string>>(null);
-const isThumbnailCreationProcessGoingOn = ref(false);
-const isViewOpen = ref(false);
+  const thumbnail = ref<Nullable<string>>(null);
+  const isThumbnailCreationProcessGoingOn = ref(false);
+  const isViewOpen = ref(false);
 
-const attachmentsItemPreviewSize = 96;
-const attachmentsItemPreviewSizeCss = computed(() => `${attachmentsItemPreviewSize}px`);
+  const attachmentsItemPreviewSize = 96;
+  const attachmentsItemPreviewSizeCss = computed(() => `${attachmentsItemPreviewSize}px`);
 
-const isThumbnailAvailable = computed(() => isFileImage({ fullName: props.item.name })
-  || isFileVideo({ fullName: props.item.name })
-  || props.item.ext === 'pdf'
-);
-const previewStyle = computed(() => {
-  if (!isThumbnailAvailable.value || !thumbnail.value) {
-    return {};
-  }
-
-  return {
-    backgroundImage: `url('${thumbnail.value}')`,
-  }
-});
-
-async function onAttachmentElementClick() {
-  if (props.item.isActionAvailable) {
-    isViewOpen.value = true;
-    return;
-  }
-
-  if (!props.incomingMsgId) {
-    await openEntity();
-  }
-}
-
-async function makeThumbnailTask() {
-  const { ext } = props.item;
-
-  try {
-    if (isFileImage({ fullName: props.item.name })) {
-      thumbnail.value = await createImageThumbnail({
-        fileId: props.item.id!,
-        incomingMsgId: props.incomingMsgId,
-      });
-    } else if (isFileVideo({ fullName: props.item.name })) {
-      thumbnail.value = await createVideoThumbnail({
-        fileId: props.item.id!,
-        incomingMsgId: props.incomingMsgId,
-      });
-    } else if (ext === 'pdf') {
-      thumbnail.value = await createPdfThumbnail({
-        fileId: props.item.id!,
-        incomingMsgId: props.incomingMsgId,
-      });
+  const isThumbnailAvailable = computed(
+    () =>
+      (isFileImage({ fullName: props.item.name }) ||
+        isFileVideo({ fullName: props.item.name }) ||
+        props.item.ext === 'pdf') &&
+      !!props.item.size,
+  );
+  const previewStyle = computed(() => {
+    if (!isThumbnailAvailable.value || !thumbnail.value) {
+      return {};
     }
-  } catch (e) {
-    w3n.log('error', `The thumbnail making error for the file ${props.item.name}.`, e)
-  } finally {
-    isThumbnailCreationProcessGoingOn.value = false;
+
+    return {
+      backgroundImage: `url('${thumbnail.value}')`,
+    };
+  });
+
+  async function onAttachmentElementClick() {
+    if (props.item.isActionAvailable) {
+      isViewOpen.value = true;
+      return;
+    }
+
+    if (!props.incomingMsgId) {
+      await openEntity();
+    }
   }
-}
 
-async function makeThumbnail() {
-  if (!isThumbnailAvailable.value) {
-    return;
+  async function makeThumbnailTask() {
+    const { ext } = props.item;
+
+    try {
+      if (isFileImage({ fullName: props.item.name })) {
+        thumbnail.value = await createImageThumbnail({
+          fileId: props.item.id!,
+          incomingMsgId: props.incomingMsgId,
+        });
+      } else if (isFileVideo({ fullName: props.item.name })) {
+        thumbnail.value = await createVideoThumbnail({
+          fileId: props.item.id!,
+          incomingMsgId: props.incomingMsgId,
+        });
+      } else if (ext === 'pdf') {
+        thumbnail.value = await createPdfThumbnail({
+          fileId: props.item.id!,
+          incomingMsgId: props.incomingMsgId,
+        });
+      }
+    } catch (e) {
+      w3n.log('error', `The thumbnail making error for the file ${props.item.name}.`, e);
+    } finally {
+      isThumbnailCreationProcessGoingOn.value = false;
+    }
   }
 
-  isThumbnailCreationProcessGoingOn.value = true;
-  addTask(makeThumbnailTask);
-}
+  async function makeThumbnail() {
+    if (!isThumbnailAvailable.value) {
+      return;
+    }
 
-makeThumbnail();
+    isThumbnailCreationProcessGoingOn.value = true;
+    addTask(makeThumbnailTask);
+  }
+
+  makeThumbnail();
 </script>
 
 <template>
@@ -122,13 +125,13 @@ makeThumbnail();
         <ui3n-progress-circular
           v-if="isThumbnailCreationProcessGoingOn"
           indeterminate
-          :size="attachmentsItemPreviewSize / 4 * 3"
+          :size="(attachmentsItemPreviewSize / 4) * 3"
         />
 
         <ui3n-icon
           v-if="!isThumbnailCreationProcessGoingOn && !thumbnail"
           icon="file-remove-outline"
-          :size="attachmentsItemPreviewSize / 5 * 4"
+          :size="(attachmentsItemPreviewSize / 5) * 4"
         />
       </div>
     </div>
@@ -140,26 +143,26 @@ makeThumbnail();
       <ui3n-icon
         v-if="isFileAudio({ fullName: item.name })"
         icon="sound-wave-circle"
-        size="24"
+        :size="attachmentsItemPreviewSize"
       />
 
       <ui3n-icon
         v-else-if="item.isFolder"
         icon="round-folder"
-        size="24"
+        :size="attachmentsItemPreviewSize"
       />
 
       <ui3n-icon
         v-else-if="item.ext === 'zip'"
         icon="file-zip"
-        size="24"
+        :size="attachmentsItemPreviewSize"
       />
 
       <ui3n-icon
         v-else
         :class="$style.icon"
         icon="round-attach-file"
-        size="24"
+        :size="attachmentsItemPreviewSize"
       />
     </div>
 
@@ -186,22 +189,23 @@ makeThumbnail();
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/mixins' as mixins;
+  @use '@main/common/assets/styles/mixins' as mixins;
 
-.chatMessageAttachment {
-  --attachments-item-min-height: 20px;
-  --attachments-item-preview-size: v-bind(attachmentsItemPreviewSizeCss);
+  .chatMessageAttachment {
+    --attachments-item-min-height: 20px;
+    --attachments-item-preview-size: v-bind(attachmentsItemPreviewSizeCss);
 
-  position: relative;
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  min-height: var(--attachments-item-min-height);
-  font-size: var(--font-14);
-  font-weight: 400;
-  color: var(--color-text-chat-bubble-user-default);
+    position: relative;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: 6px;
+    min-height: var(--attachments-item-min-height);
+    font-size: var(--font-14);
+    font-weight: 400;
+    color: var(--color-text-chat-bubble-user-default);
 
-  //&.chatMessageAttachmentClickable {
+    //&.chatMessageAttachmentClickable {
     pointer-events: all;
 
     &:hover {
@@ -211,48 +215,46 @@ makeThumbnail();
         --ui3n-icon-color: var(--color-icon-chat-bubble-user-quote);
       }
     }
-  //}
-}
+    //}
+  }
 
-.previewWrap {
-  position: relative;
-  padding-right: var(--spacing-s);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-}
+  .previewWrap {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+  }
 
-.preview {
-  position: relative;
-  min-width: var(--attachments-item-preview-size);
-  width: var(--attachments-item-preview-size);
-  height: var(--attachments-item-preview-size);
-  border-radius: var(--spacing-xs);
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
+  .preview {
+    position: relative;
+    min-width: var(--attachments-item-preview-size);
+    width: var(--attachments-item-preview-size);
+    height: var(--attachments-item-preview-size);
+    border-radius: var(--spacing-xs);
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
 
-.icon {
-  position: relative;
-  padding-right: var(--spacing-xs);
-}
+  .icon {
+    position: relative;
+  }
 
-.chatMessageAttachmentName {
-  position: relative;
-  height: var(--attachments-item-height);
-  text-align: left;
-  flex-shrink: 1;
-  line-height: var(--font-20);
-  @include mixins.text-overflow-ellipsis();
-}
+  .chatMessageAttachmentName {
+    position: relative;
+    height: var(--attachments-item-height);
+    text-align: left;
+    flex-shrink: 1;
+    line-height: var(--font-20);
+    @include mixins.text-overflow-ellipsis();
+  }
 
-.chatMessageAttachmentExt {
-  flex-shrink: 0;
-  line-height: var(--font-20);
-}
+  .chatMessageAttachmentExt {
+    flex-shrink: 0;
+    line-height: var(--font-20);
+  }
 </style>

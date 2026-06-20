@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -43,6 +43,7 @@ declare namespace web3n.files {
 		notImplemented?: true;
 		attrsNotEnabledInFS?: true;
 		versionMismatch?: true;
+		storageIsNotSyncedType?: true;
 		isEndless?: true;
 		storageClosed?: true;
 		remoteNotSet?: true;
@@ -71,6 +72,7 @@ declare namespace web3n.files {
 		localVersion?: number;
 		remoteVersion?: number;
 		alreadyUploading?: true;
+		uploadTaskId?: number;
 		versionNotFound?: true;
 		childNeverUploaded?: true;
 		childName?: string;
@@ -81,6 +83,9 @@ declare namespace web3n.files {
 		notSynced?: true;
 		remoteIsArchived?: true;
 		remoteFolderItemNotFound?: true;
+		overlapsLocalItem?: true;
+		nameOverlaps?: string[];
+		noNamePostfixGiven?: true;
 	}
 
 	/**
@@ -147,7 +152,17 @@ declare namespace web3n.files {
 		 */
 		version?: number;
 
+		/**
+		 * This gives a number of bytes that should be downloaded to have file
+		 * completly on a device.
+		 */
+		bytesNeedDownload?: number;
+
+		versionSyncBranch?: SyncBranch;
+
 	}
+
+	type SyncBranch = 'local' | 'synced' | 'remote';
 
 	/**
 	 * Sync status contains info about possible version branches with possible
@@ -169,6 +184,7 @@ declare namespace web3n.files {
 		local?: LocalVersion;
 		remote?: SyncVersionsBranch;
 		existsInSyncedParent?: boolean;
+		uploading?: UploadingState;
 	}
 
 	interface LocalVersion {
@@ -183,6 +199,24 @@ declare namespace web3n.files {
 	}
 
 	type SyncState = 'synced' | 'behind' | 'unsynced' | 'conflicting';
+
+	interface UploadingState {
+		/**
+		 * Local version that is uploaded to server.
+		 * If it is an upload of object removal, version is -1.
+		 */
+		localVersion: number;
+		/**
+		 * New remote version that is uploaded to server.
+		 * If it is an upload of object removal, version is -1.
+		 */
+		remoteVersion: number;
+		/**
+		 * Bytes left to upload.
+		 */
+		bytesLeftToUpload: number;
+		uploadStarted: boolean;
+	}
 
 	interface FileByteSource {
 
@@ -381,7 +415,7 @@ declare namespace web3n.files {
 		 */
 		getByteSource(): Promise<FileByteSource>;
 
-		watch(observer: Observer<FileEvent|RemoteEvent>): () => void;
+		watch(observer: Observer<FileEvent|RemoteEvent|UploadEvent|DownloadEvent>): () => void;
 
 	}
 
@@ -445,6 +479,12 @@ declare namespace web3n.files {
 
 	interface ReadonlyFileVersionedAPI {
 
+		/**
+		 * This returns a promise, resolvable to stats of the file.
+		 * @param flags are optional flags to read archived or remote versions.
+		 */
+		stat(flags?: VersionedReadFlags): Promise<Stats>;
+
 		getXAttr(
 			xaName: string, flags?: VersionedReadFlags
 		): Promise<{ attr: any; version: number; }>;
@@ -497,6 +537,8 @@ declare namespace web3n.files {
 		listVersions(
 			flags?: VersionedReadFlags
 		): Promise<{ current?: number; archived?: number[]; }>;
+		// XXX
+		// ): Promise<{ current?: number; archived?: number[]; synced?: number; conflictingRemote?: number[]; }>;
 
 		/**
 		 * File from synced storage has this api
@@ -581,6 +623,12 @@ declare namespace web3n.files {
 	interface ReadonlyFileSyncAPI {
 
 		/**
+		 * When connection exception is caught, use this to await connection to continue.
+		 * This returns a promise, resolvable when connected to storage server.
+		 */
+		whenConnected(): Promise<void>;
+
+		/**
 		 * Returns synchronization status of this object.
 		 * @param skipServerCheck is optional parameter to skip server check, that may be handy in offline 
 		 * situations. Default is false.
@@ -599,7 +647,7 @@ declare namespace web3n.files {
 		 * This downloads bytes onto disk, skipping decryption, as file content isn't read here.
 		 * @param version 
 		 */
-		download(version: number): Promise<void>;
+		startDownload(version: number): Promise<{ downloadTaskId: number; }|undefined>;
 
 		/**
 		 * Adopts remote version.
@@ -607,6 +655,13 @@ declare namespace web3n.files {
 		 * @param opts options let one to pass exact remote version.
 		 */
 		adoptRemote(opts?: OptionsToAdopteRemote): Promise<void>;
+
+		/**
+		 * Calculates diff between current and remote states of file at given path.
+		 * @param path 
+		 * @param opts 
+		 */
+		diffCurrentAndRemoteVersions(opts?: OptionsToDiffFileVersions): Promise<FileDiff|undefined>;
 
 	}
 
@@ -618,10 +673,30 @@ declare namespace web3n.files {
 		remoteVersion?: number;
 	}
 
+	interface OptionsToDiffFileVersions {
+		remoteVersion?: number;
+		// XXX implicit assumption that mtime changes only when file content changes
+		compareContentIfSameMTime?: boolean;
+	}
+
 	interface WritableFileSyncAPI extends ReadonlyFileSyncAPI {
 
 		/**
+		 * This starts/schedules an upload, if it hasn't been already.
 		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * Undefined is returned when upload is not needed, e.g. version is already synced.
+		 * Upload version and upload task id are returned together with an indicator of whether
+		 * this call has started upload, or it has already been going on.
+		 * Upload task id can be used to filter watched events.
+		 * @param opts 
+		 */
+		startUpload(
+			opts?: OptionsToUploadLocal
+		): Promise<{ uploadVersion: number; uploadTaskId: number; }|undefined>;
+
+		/**
+		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * This upload will not be generating upload events.
 		 * @param opts 
 		 */
 		upload(opts?: OptionsToUploadLocal): Promise<number|undefined>;
@@ -711,16 +786,16 @@ declare namespace web3n.files {
 		readLink(path: string): Promise<SymLink>;
 
 		watchFolder(
-			path: string, observer: Observer<FolderEvent|RemoteEvent>
+			path: string, observer: Observer<FolderEvent|RemoteEvent|UploadEvent|DownloadEvent>
 		): () => void;
 
 		watchFile(
-			path: string, observer: Observer<FileEvent|RemoteEvent>
+			path: string, observer: Observer<FileEvent|RemoteEvent|UploadEvent|DownloadEvent>
 		): () => void;
 
 		watchTree(
 			path: string, depth: number|undefined,
-			observer: Observer<FolderEvent|FileEvent|RemoteEvent>
+			observer: Observer<FolderEvent|FileEvent|RemoteEvent|UploadEvent|DownloadEvent>
 		): () => void;
 
 		close(): Promise<void>;
@@ -1050,6 +1125,132 @@ declare namespace web3n.files {
 
 	}
 
+	interface FSEvent {
+		path: string;
+	}
+
+	interface FSChangeEvent {
+		path: string;
+		src: 'local'|'sync';
+	}
+
+	interface RemovedEvent extends FSChangeEvent {
+		type: 'removed';
+	}
+
+	interface VersionChangeOnUpload extends FSChangeEvent {
+		type: 'version-change-on-upload';
+		src: 'sync';
+		newVersion: number;
+	}
+
+	type FolderEvent = EntryRemovalEvent | EntryAdditionEvent |
+		EntryRenamingEvent | RemovedEvent | VersionChangeOnUpload;
+
+	interface EntryRemovalEvent extends FSChangeEvent {
+		type: 'entry-removal';
+		name: string;
+		moveLabel?: number;
+		newVersion?: number;
+	}
+
+	interface EntryAdditionEvent extends FSChangeEvent {
+		type: 'entry-addition';
+		entry: ListingEntry;
+		moveLabel?: number;
+		newVersion?: number;
+	}
+
+	interface EntryRenamingEvent extends FSChangeEvent {
+		type: 'entry-renaming';
+		oldName: string;
+		newName: string;
+		newVersion?: number;
+	}
+
+	type FileEvent = FileChangeEvent | RemovedEvent | VersionChangeOnUpload;
+
+	interface FileChangeEvent extends FSChangeEvent {
+		type: 'file-change';
+		newVersion?: number;
+	}
+
+	type RemoteEvent = RemoteVersionArchivalEvent | RemoteArchVerRemovalEvent |
+		RemoteRemovalEvent | RemoteChangeEvent;
+
+	interface RemoteVersionArchivalEvent extends FSEvent {
+		type: 'remote-version-archival';
+		archivedVersion: number;
+		syncStatus: SyncStatus;
+	}
+
+	interface RemoteArchVerRemovalEvent extends FSEvent {
+		type: 'remote-arch-ver-removal';
+		removedArchVer: number;
+		syncStatus: SyncStatus;
+	}
+
+	interface RemoteRemovalEvent extends FSEvent {
+		type: 'remote-removal';
+		syncStatus: SyncStatus;
+	}
+
+	interface RemoteChangeEvent extends FSEvent {
+		type: 'remote-change';
+		newRemoteVersion: number;
+		syncStatus: SyncStatus;
+	}
+
+	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDisconnectedEvent | UploadDoneEvent;
+
+	interface UploadEventBase extends FSEvent {
+		uploadTaskId: number;
+		localVersion: number;
+		uploadVersion: number;
+	}
+
+	interface UploadStartEvent extends UploadEventBase {
+		type: 'upload-started';
+		isRestart: boolean;
+		totalBytesToUpload: number;
+	}
+
+	interface UploadProgressEvent extends UploadEventBase {
+		type: 'upload-progress';
+		totalBytesToUpload: number;
+		bytesLeftToUpload: number;
+	}
+
+	interface UploadDisconnectedEvent extends UploadEventBase {
+		type: 'upload-disconnected';
+	}
+
+	interface UploadDoneEvent extends UploadEventBase {
+		type: 'upload-done';
+	}
+
+	type DownloadEvent = DownloadStartEvent | DownloadProgressEvent | DownloadDoneEvent;
+
+	interface DownloadEventBase extends FSEvent {
+		downloadTaskId: number;
+		version: number;
+	}
+
+	interface DownloadStartEvent extends DownloadEventBase {
+		type: 'download-started';
+		totalBytesToDownload: number;
+	}
+
+	interface DownloadDoneEvent extends DownloadEventBase {
+		type: 'download-done';
+	}
+
+	interface DownloadProgressEvent extends DownloadEventBase {
+		type: 'download-progress';
+		totalBytesToDownload: number;
+		bytesLeftToDownload: number;
+	}
+
 	interface VersionedFileWriteFlags extends FileFlags {
 
 		/**
@@ -1062,6 +1263,14 @@ declare namespace web3n.files {
 	}
 
 	interface ReadonlyFSVersionedAPI {
+
+		/**
+		 * This returns a promise, resolvable to stats of an entity at a given
+		 * path.
+		 * @param path
+		 * @param flags are optional flags to read archived or remote versions.
+		 */
+		stat(path: string, flags?: VersionedReadFlags): Promise<Stats>;
 
 		getXAttr(
 			path: string, xaName: string, flags?: VersionedReadFlags
@@ -1208,6 +1417,12 @@ declare namespace web3n.files {
 	interface ReadonlyFSSyncAPI {
 
 		/**
+		 * When connection exception is caught, use this to await connection to continue.
+		 * This returns a promise, resolvable when connected to storage server.
+		 */
+		whenConnected(): Promise<void>;
+
+		/**
 		 * Returns synchronization status of item at given path.
 		 * @param path
 		 * @param skipServerCheck is optional parameter to skip server check, that may be handy in offline 
@@ -1219,16 +1434,14 @@ declare namespace web3n.files {
 		 * Returns a state of on-disk cache of an item in fs.
 		 * @param version 
 		 */
-		isRemoteVersionOnDisk(
-			path: string, version: number
-		): Promise<'partial'|'complete'|'none'>;
+		isRemoteVersionOnDisk(path: string, version: number): Promise<'partial'|'complete'|'none'>;
 
 		/**
 		 * This downloads bytes onto disk, skipping decryption, as item's content isn't read here.
 		 * @param path 
 		 * @param version 
 		 */
-		download(path: string, version: number): Promise<void>;
+		startDownload(path: string, version: number): Promise<{ downloadTaskId: number; }|undefined>;
 
 		/**
 		 * Adopts remote version of fs object at given path.
@@ -1239,138 +1452,290 @@ declare namespace web3n.files {
 		adoptRemote(path: string, opts?: OptionsToAdopteRemote): Promise<void>;
 
 		/**
-		 * Calculates diff between current local and remote states of folder at given path.
+		 * Calculates diff between current and remote states of folder at given path.
 		 * @param path 
 		 * @param remoteVersion 
 		 */
-		diffCurrentAndRemoteFolderVersions(
-			path: string, remoteVersion?: number
-		): Promise<FolderDiff|undefined>;
+		diffCurrentAndRemoteFolderVersions(path: string, remoteVersion?: number): Promise<FolderDiff|undefined>;
+
+		/**
+		 * Calculates diff between current and remote states of file at given path.
+		 * @param path 
+		 * @param opts 
+		 */
+		diffCurrentAndRemoteFileVersions(
+			path: string, opts?: OptionsToDiffFileVersions
+		): Promise<FileDiff|undefined>;
+
+		/**
+		 * Returns stats of a child from remote version of a folder.
+		 * @param path of folder
+		 * @param remoteItemName 
+		 * @param remoteVersion of folder. Default is current remote.
+		 */
+		statRemoteItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<Stats>;
+
+		/**
+		 * Lists child folder from remote version of a folder.
+		 * @param path of folder
+		 * @param remoteItemName 
+		 * @param remoteVersion of folder. Default is current remote.
+		 */
+		listRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ListingEntry[]>;
+
+		/**
+		 * Returns child file from remote version of a folder.
+		 * @param path of folder
+		 * @param remoteItemName 
+		 * @param remoteVersion of folder. Default is current remote.
+		 */
+		getRemoteFileItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFile>;
+
+		/**
+		 * Returns child folder from remote version of a folder.
+		 * @param path of folder
+		 * @param remoteItemName 
+		 * @param remoteVersion of folder. Default is current remote.
+		 */
+		getRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFS>;
+
+		// compareLocalAndRemoteFileItems(path: string, itemName: string, remoteVersion?: number): Promise<FileDiff>;
+
+		// compareLocalAndRemoteFolderItems(
+		// 	path: string, itemName: string, remoteVersion?: number
+		// ): Promise<FolderContentDiff>;
+
+		// XXX method to work around damaged files
+		// reloadFromServer(path: string): Promise<SyncStatus>;
 
 	}
 
-	interface FolderDiff {
+	interface CommonDiff {
+		/**
+		 * Current version against which this diff is done.
+		 */
 		currentVersion: number;
+
+		/**
+		 * Flag indicating if current version is local, i.e. never uploaded.
+		 */
 		isCurrentLocal: boolean;
+
+		/**
+		 * Remote version against which this diff is done.
+		 */
 		remoteVersion?: number;
-		isRemoteArchived: boolean;
-		inCurrent?: ListingEntry[];
-		inRemote?: ListingEntry[];
-		nameOverlaps?: string[];
-		ctime: {
-			remote?: Date;
+
+		/**
+		 * Flag indicating if remote version is removed, i.e. has no current version.
+		 * If remote is removed, it has nothing inside, and with this implicit
+		 * understanding there is no need to have other data fields populated here.
+		 */
+		isRemoteRemoved: boolean;
+
+		/**
+		 * Synced version against which this diff is done.
+		 */
+		syncedVersion?: number;
+
+		/**
+		 * Creation time should always be same, but if not, this field will show different values.
+		 * If remote is removed, this field will be undefined.
+		 */
+		ctime?: {
+			remote: Date;
 			current: Date;
+			synced: Date;
 		};
-		mtime: {
-			remote?: Date;
+
+		/**
+		 * This field shows different modification times. If they are same, field will be undefined.
+		 * If remote is removed, this field will be undefined.
+		 */
+		mtime?: {
+			remote: Date;
 			current: Date;
+			synced: Date;
 		};
+
+		/**
+		 * Difference between xattrs. Same xattrs in both versions are not included.
+		 */
 		xattrs?: {
-			inCurrent?: { name: string; value: any; }[];
-			inRemote?: { name: string; value: any; }[];
-			nameOverlaps?: string[];
+			[name: string]: {
+				addedIn?: 'l'|'r'|'l&r';
+				removedIn?: 'l'|'r';
+				changedIn?: 'l'|'r'|'l&r';
+			};
 		};
 	}
+
+	/**
+	 * Difference of remote and local folder versions expressed as changes relative to synced version.
+	 * 
+	 * Consider the following example.
+	 * There is an item in local version, but not in remote.
+	 * Such difference can come about in two ways: addition in local branch, or removal in remote.
+	 * 
+	 * Contexts where versions are compared need information about change actions in folder.
+	 * Hence, this diff is a three point comparison, yielding richer info.
+	 */
+	interface FolderDiff extends CommonDiff {
+
+		/**
+		 * Items that were removed.
+		 * 
+		 * Consider the following example.
+		 * Item that is removed in local version is present in both remote and synced versions.
+		 * Hence, difference between local and remote versions is due to removal in local branch.
+		 */
+		removed?: {
+			inRemote?: string[];
+			inLocal?: string[];
+		};
+
+		/**
+		 * Items that were renamed. Pointing to where renaming is done in remote (r), or local (l) branches.
+		 * 
+		 * When item is renamed local branch, then local name was changed from synced value,
+		 * while remote name is still equal to synced (older) value.
+		 */
+		renamed?: {
+			local: string;
+			remote: string;
+			renamedIn: 'l'|'r'|'l&r';
+		}[];
+
+		/**
+		 * Items that were added.
+		 * 
+		 * When item added in remote branch, then it is present in remote version under the referenced name.
+		 * Synced (older) state of folder doesn't have it, and neither does local.
+		 */
+		added?: {
+			inRemote?: string[];
+			inLocal?: string[];
+		};
+
+		/**
+		 * Items that reencrypted and now have different keys.
+		 */
+		rekeyed?: {
+			local: string;
+			remote: string;
+			rekeyedIn: 'l'|'r'|'l&r';
+		}[];
+
+		/**
+		 * Name overlaps are items with same name, but different node objects underneath.
+		 */
+		nameOverlaps?: string[];
+	}
+
+	interface FileDiff extends CommonDiff {
+		areContentsSame: boolean;
+		/**
+		 * If sizes are different this field will have respective values.
+		 */
+		size?: {
+			remote: number;
+			current: number;
+		};
+	}
+
+	// interface FolderContentDiff extends CommonDiff {
+	// 	local: ({
+
+	// 	} & ListingEntry)[];
+	// 	remote: ({} & ListingEntry)[];
+	// }
 
 	interface WritableFSSyncAPI extends ReadonlyFSSyncAPI {
 
 		/**
+		 * This starts/schedules an upload, if it hasn't been already.
 		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * Undefined is returned when upload is not needed, e.g. version is already synced.
+		 * Upload version and upload task id are returned together with an indicator of whether
+		 * this call has started upload, or it has already been going on.
+		 * Upload task id can be used to filter watched events.
 		 * @param path 
 		 * @param opts 
 		 */
-		upload(
+		startUpload(
 			path: string, opts?: OptionsToUploadLocal
-		): Promise<number|undefined>;
+		): Promise<{ uploadVersion: number; uploadTaskId: number; }|undefined>;
+
+		/**
+		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * This upload will not be generating upload events.
+		 * @param path 
+		 * @param opts 
+		 */
+		upload(path: string, opts?: OptionsToUploadLocal): Promise<number|undefined>;
 
 		/**
 		 * This method is for resolving conflicts on folders.
-		 * It adopts some folder items, and not the whole folder state.
+		 * It adopts given folder item, that is present in remote version and is missing in local version.
+		 * Returns new local version.
 		 * @param path 
-		 * @param itemName 
+		 * @param remoteItemName 
 		 * @param opts 
 		 */
 		adoptRemoteFolderItem(
-			path: string, itemName: string, opts?: OptionsToAdoptRemoteItem
+			path: string, remoteItemName: string, opts?: OptionsToAdoptRemoteItem
 		): Promise<number>;
+
+		/**
+		 * This method is for resolving conflicts on folders.
+		 * It absorbs folder changes done in remote version.
+		 * Returns new local version, if there were remote items to adopt and their were added to local state.
+		 * @param path 
+		 * @param opts
+		 */
+		absorbRemoteFolderChanges(
+			path: string, opts?: OptionsToAdoptRemoteFolderChanges
+		): Promise<number|undefined>;
+
+		// XXX
+		// makeSnapshot(path: string); // -> snapshot points and archives current versions of tree elements
 
 	}
 
 	interface OptionsToAdoptRemoteItem {
+		/**
+		 * Folder's local version. If not given, current local version is used.
+		 */
 		localVersion?: number;
+		/**
+		 * Folder's remote version. If not given, current remote version is used.
+		 */
 		remoteVersion?: number;
+		/**
+		 * Flag to force replacement of locally referenced item under the same item name (or new name).
+		 * If not given, and there is an overlapping local, an exception is thrown.
+		 */
+		replaceLocalItem?: boolean;
+		/**
+		 * Name for item when it is added into local folder version.
+		 */
+		newItemName?: string;
 	}
 
-	interface FSEvent {
-		path: string;
-	}
-
-	interface FSChangeEvent {
-		path: string;
-		src: 'local'|'sync';
-	}
-
-	interface RemovedEvent extends FSChangeEvent {
-		type: 'removed';
-	}
-
-	interface VersionChangeOnUpload extends FSChangeEvent {
-		type: 'version-change-on-upload';
-		src: 'sync';
-		newVersion: number;
-	}
-
-	type FolderEvent = EntryRemovalEvent | EntryAdditionEvent |
-		EntryRenamingEvent | RemovedEvent | VersionChangeOnUpload;
-
-	interface EntryRemovalEvent extends FSChangeEvent {
-		type: 'entry-removal';
-		name: string;
-		moveLabel?: number;
-		newVersion?: number;
-	}
-
-	interface EntryAdditionEvent extends FSChangeEvent {
-		type: 'entry-addition';
-		entry: ListingEntry;
-		moveLabel?: number;
-		newVersion?: number;
-	}
-
-	interface EntryRenamingEvent extends FSChangeEvent {
-		type: 'entry-renaming';
-		oldName: string;
-		newName: string;
-		newVersion?: number;
-	}
-
-	type FileEvent = FileChangeEvent | RemovedEvent | VersionChangeOnUpload;
-
-	interface FileChangeEvent extends FSChangeEvent {
-		type: 'file-change';
-		newVersion?: number;
-	}
-
-	type RemoteEvent = RemoteVersionArchivalEvent | RemoteArchVerRemovalEvent |
-		RemoteRemovalEvent | RemoteChangeEvent;
-
-	interface RemoteVersionArchivalEvent extends FSEvent {
-		type: 'remote-version-archival';
-		archivedVersion: number;
-	}
-
-	interface RemoteArchVerRemovalEvent extends FSEvent {
-		type: 'remote-arch-ver-removal';
-		removedArchVer: number;
-	}
-
-	interface RemoteRemovalEvent extends FSEvent {
-		type: 'remote-removal';
-	}
-
-	interface RemoteChangeEvent extends FSEvent {
-		type: 'remote-change';
-		newVersion: number;
+	interface OptionsToAdoptRemoteFolderChanges {
+		/**
+		 * Folder's local version. If not given, current local version is used.
+		 */
+		localVersion?: number;
+		/**
+		 * Folder's remote version. If not given, current remote version is used.
+		 */
+		remoteVersion?: number;
+		/**
+		 * Postfix to add to remote item names that have overlapping names with existing local items.
+		 * If there are name overlaps and postfix isn't given, then exception is thrown.
+		 */
+		postfixForNameOverlaps?: string;
 	}
 
 }

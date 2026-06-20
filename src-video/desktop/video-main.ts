@@ -18,24 +18,17 @@
 import { createApp } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { createPinia } from 'pinia';
-import {
-  dialogs,
-  i18n,
-  I18nOptions,
-  notifications,
-  storeVueBus,
-  vueBus,
-} from '@v1nt1248/3nclient-lib/plugins';
+import { dialogs, notifications, storeVueBus, vueBus } from '@v1nt1248/3nclient-lib/plugins';
 
 import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
 import '@main/common/assets/styles/main.css';
 
+import i18n from '@main/common/data/i18';
+
 import VideoApp from '@video/desktop/pages/video-app.vue';
 import VASetup from '@video/desktop/pages/va-setup.vue';
 import Call from '@video/desktop/pages/call/call.vue';
-
-import en from '@main/common/data/i18/en.json';
 
 const app = createApp(VideoApp);
 const pinia = createPinia();
@@ -64,11 +57,4 @@ app.config.compilerOptions.isCustomElement = tag => {
   return tag.startsWith('ui3n-');
 };
 
-app
-  .use(pinia)
-  .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
-  .use(vueBus)
-  .use(dialogs)
-  .use(notifications)
-  .use(router)
-  .mount('#video-main');
+app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#video-main');

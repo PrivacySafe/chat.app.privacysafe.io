@@ -16,48 +16,48 @@
 -->
 
 <script lang="ts" setup>
+  import { computed } from 'vue';
+  import { Ui3nButton, Ui3nHtml } from '@v1nt1248/3nclient-lib';
+  import { useChatHeader } from '@main/common/composables/useChatHeader.ts';
+  import { useRouting } from '@main/desktop/composables/useRouting.ts';
+  import { getChatName } from '@main/common/utils/chat-ui.helper.ts';
+  import type { ChatMessageView, ChatListItemView } from '~/index.ts';
+  import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
+  import ChatHeaderActions from './chat-header-actions.vue';
 
-import { computed } from 'vue';
-import { Ui3nButton, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { useChatHeader } from '@main/common/composables/useChatHeader.ts';
-import { useRouting } from '@main/desktop/composables/useRouting.ts';
-import { getChatName } from '@main/common/utils/chat-ui.helper.ts';
-import type { ChatMessageView, ChatListItemView } from '~/index.ts';
-import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
-import ChatHeaderActions from './chat-header-actions.vue';
+  const vUi3nHtml = Ui3nHtml;
 
-const vUi3nHtml = Ui3nHtml;
+  const props = defineProps<{
+    chat: ChatListItemView;
+    messages: ChatMessageView[];
+    readonly?: boolean;
+  }>();
 
-const props = defineProps<{
-  chat: ChatListItemView;
-  messages: ChatMessageView[];
-  readonly?: boolean;
-}>();
+  const chatVal = computed(() => props.chat);
+  const chatMessagesVal = computed(() => props.messages);
 
-const chatVal = computed(() => props.chat);
-const chatMessagesVal = computed(() => props.messages);
+  const { goToChatsRoute } = useRouting();
 
-const { goToChatsRoute } = useRouting();
-
-const {
-  text,
-  isGroupChat,
-  currentChatObjId,
-  isIncomingCall,
-  chatWithCall,
-  callDuration,
-  selectAction,
-  joinIncomingCall,
-  dismissIncomingCall,
-  startCall,
-  endCall,
-} = useChatHeader({
-  chat: chatVal,
-  messages: chatMessagesVal,
-  // @ts-expect-error
-  goToChats: () => goToChatsRoute(),
-  isMobileMode: false,
-});
+  const {
+    t,
+    text,
+    isGroupChat,
+    currentChatObjId,
+    isIncomingCall,
+    chatWithCall,
+    callDuration,
+    selectAction,
+    joinIncomingCall,
+    dismissIncomingCall,
+    startCall,
+    endCall,
+  } = useChatHeader({
+    chat: chatVal,
+    messages: chatMessagesVal,
+    // @ts-expect-error
+    goToChats: () => goToChatsRoute(),
+    isMobileMode: false,
+  });
 </script>
 
 <template>
@@ -78,12 +78,12 @@ const {
         v-if="chatWithCall"
         :class="$style.chatHeaderInfo"
       >
-        {{ $tr('chat.header.call.duration') }}: {{ callDuration }}
+        {{ t('chat.header.call.duration') }}: {{ callDuration }}
       </div>
 
       <div
         v-else
-        v-ui3n-html:sanitize="chat.lastMsg?.timestamp ? $tr('chat.header.info', { date: text }) : ''"
+        v-ui3n-html:sanitize="chat.lastMsg?.timestamp ? t('chat.header.info', { date: text }) : ''"
         :class="$style.chatHeaderInfo"
       />
     </div>
@@ -98,7 +98,7 @@ const {
       icon-position="left"
       @click.stop.prevent="() => endCall(currentChatObjId)"
     >
-      {{ $tr('va.end.call') }}
+      {{ t('va.btn.end_call') }}
     </ui3n-button>
 
     <template v-else-if="isIncomingCall">
@@ -112,7 +112,7 @@ const {
         icon-position="left"
         @click.stop.prevent="() => joinIncomingCall(currentChatObjId, chat.incomingCall!.peerAddress)"
       >
-        {{ $tr('va.presettings.btn.join') }}
+        {{ t('va.presettings.btn.join') }}
       </ui3n-button>
 
       <ui3n-button
@@ -125,7 +125,7 @@ const {
         icon-position="left"
         @click.stop.prevent="() => dismissIncomingCall(currentChatObjId, false)"
       >
-        {{ $tr('va.presettings.btn.decline') }}
+        {{ t('va.presettings.btn.decline') }}
       </ui3n-button>
     </template>
 
@@ -150,50 +150,50 @@ const {
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/_mixins.scss' as mixins;
+  @use '@main/common/assets/styles/_mixins.scss' as mixins;
 
-.chatHeader {
-  position: relative;
-  width: 100%;
-  min-height: calc(var(--spacing-l) * 2);
-  height: calc(var(--spacing-l) * 2);
-  background-color: var(--color-bg-block-primary-default);
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  padding: 0 var(--spacing-m);
-  column-gap: var(--spacing-s);
-}
+  .chatHeader {
+    position: relative;
+    width: 100%;
+    min-height: calc(var(--spacing-l) * 2);
+    height: calc(var(--spacing-l) * 2);
+    background-color: var(--color-bg-block-primary-default);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    padding: 0 var(--spacing-m);
+    column-gap: var(--spacing-s);
+  }
 
-.chatHeaderContent {
-  position: relative;
-  flex-grow: 1;
-  flex-shrink: 1;
-}
+  .chatHeaderContent {
+    position: relative;
+    flex-grow: 1;
+    flex-shrink: 1;
+  }
 
-.chatHeaderName,
-.chatHeaderInfo {
-  position: relative;
-  @include mixins.text-overflow-ellipsis();
-}
+  .chatHeaderName,
+  .chatHeaderInfo {
+    position: relative;
+    @include mixins.text-overflow-ellipsis();
+  }
 
-.chatHeaderName {
-  font-size: var(--font-16);
-  font-weight: 600;
-  line-height: 22px;
-  color: var(--color-text-block-primary-default);
-}
+  .chatHeaderName {
+    font-size: var(--font-16);
+    font-weight: 600;
+    line-height: 22px;
+    color: var(--color-text-block-primary-default);
+  }
 
-.chatHeaderInfo {
-  min-height: 14px;
-  font-size: var(--font-12);
-  font-weight: 400;
-  line-height: 14px;
-  color: var(--color-text-block-secondary-default);
-}
+  .chatHeaderInfo {
+    min-height: 14px;
+    font-size: var(--font-12);
+    font-weight: 400;
+    line-height: 14px;
+    color: var(--color-text-block-secondary-default);
+  }
 
-.videoCallBtn {
-  padding: 0 var(--spacing-s) !important;
-  column-gap: 0 !important;
-}
+  .videoCallBtn {
+    padding: 0 var(--spacing-s) !important;
+    column-gap: 0 !important;
+  }
 </style>

@@ -15,58 +15,58 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-import { watch } from 'vue';
-import { storeToRefs } from 'pinia';
-import {
-  Ui3nButton,
-  Ui3nIcon,
-  Ui3nProgressCircular,
-  Ui3nSlider,
-  Ui3nSwitch,
-  Ui3nTooltip,
-} from '@v1nt1248/3nclient-lib';
-import { useAppStore } from '@main/common/store/app.store';
-import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
-import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
-import { useAudioView } from './useAudioView';
+  import { watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
+  import {
+    Ui3nButton,
+    Ui3nIcon,
+    Ui3nProgressCircular,
+    Ui3nSlider,
+    Ui3nSwitch,
+    Ui3nTooltip,
+  } from '@v1nt1248/3nclient-lib';
+  import { useAppStore } from '@main/common/store/app.store';
+  import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
+  import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
+  import { useAudioView } from './useAudioView';
 
-export interface AttachmentAudioViewEmits {
-  (event: 'error'): void;
-}
+  export interface AttachmentAudioViewEmits {
+    (event: 'error'): void;
+  }
 
-const props = defineProps<{
-  item: AttachmentViewInfo;
-  incomingMsgId?: string;
-  isMobileMode?: boolean;
-}>();
-const emits = defineEmits<AttachmentAudioViewEmits>();
+  const props = defineProps<{
+    item: AttachmentViewInfo;
+    incomingMsgId?: string;
+    isMobileMode?: boolean;
+  }>();
+  const emits = defineEmits<AttachmentAudioViewEmits>();
 
-const { appWindowSize } = storeToRefs(useAppStore());
+  const { t } = useI18n();
 
-const {
-  isProcessing,
-  isPlaying,
-  canvasRef,
-  audioPlayerRef,
-  duration,
-  durationAsText,
-  volume,
-  currentTime,
-  currentTimeAsText,
-  currentAudioVisualization,
-  updateVolume,
-  updateCurrentTime,
-  play,
-  pause,
-} = useAudioView({ item: props.item, incomingMsgId: props.incomingMsgId, emits });
+  const { appWindowSize } = storeToRefs(useAppStore());
 
-watch(
-  appWindowSize,
-  () => {
+  const {
+    isProcessing,
+    isPlaying,
+    canvasRef,
+    audioPlayerRef,
+    duration,
+    durationAsText,
+    volume,
+    currentTime,
+    currentTimeAsText,
+    currentAudioVisualization,
+    updateVolume,
+    updateCurrentTime,
+    play,
+    pause,
+  } = useAudioView({ item: props.item, incomingMsgId: props.incomingMsgId, emits });
+
+  watch(appWindowSize, () => {
     canvasRef.value!.width = canvasRef.value!.clientWidth;
     canvasRef.value!.height = canvasRef.value!.clientHeight;
-  },
-);
+  });
 </script>
 
 <template>
@@ -84,9 +84,7 @@ watch(
     <div :class="$style.audioPlayer">
       <div :class="$style.audioPlayerBody">
         <div :class="$style.audioPlayerActionsAdditional">
-          <ui3n-icon
-            icon="round-volume-mute"
-          />
+          <ui3n-icon icon="round-volume-mute" />
 
           <div :class="$style.volume">
             <ui3n-slider
@@ -106,7 +104,7 @@ watch(
 
         <div :class="$style.audioPlayerActions">
           <ui3n-tooltip
-            :content="$tr('chat.player.play')"
+            :content="t('chat.viewer.tooltip.play')"
             placement="top-end"
             position-strategy="fixed"
           >
@@ -120,7 +118,7 @@ watch(
           </ui3n-tooltip>
 
           <ui3n-tooltip
-            :content="$tr('chat.player.pause')"
+            :content="t('chat.viewer.tooltip.pause')"
             placement="top-end"
             position-strategy="fixed"
           >
@@ -138,7 +136,7 @@ watch(
           <span>Mode 2</span>
 
           <ui3n-tooltip
-            :content="$tr('chat.audio.player.visual.setting')"
+            :content="t('chat.viewer.tooltip.visual_setting')"
             placement="top"
             position-strategy="fixed"
           >
@@ -146,7 +144,7 @@ watch(
               :model-value="currentAudioVisualization === 1"
               size="16"
               :disabled="isPlaying || isProcessing || !audioPlayerRef?.src"
-              @change="(v: number) => currentAudioVisualization = v ? 1 : 2"
+              @change="v => (currentAudioVisualization = v ? 1 : 2)"
             />
           </ui3n-tooltip>
 
@@ -184,91 +182,91 @@ watch(
 </template>
 
 <style lang="scss" module>
-.audioView {
-  --audio-view-padding: 48px 16px 104px 16px;
-  --audio-player-height: 64px;
+  .audioView {
+    --audio-view-padding: 48px 16px 104px 16px;
+    --audio-player-height: 64px;
 
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding: var(--audio-view-padding);
-}
-
-.audioPlayerHidden {
-  position: absolute;
-  visibility: hidden;
-  top: -100px;
-}
-
-.canvas {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.audioPlayer {
-  position: absolute;
-  left: 0;
-  bottom: 24px;
-  width: 100%;
-  height: var(--audio-panel-height);
-  padding: 0 var(--spacing-m);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.audioPlayerBody {
-  display: flex;
-  width: 100%;
-  height: 32px;
-  justify-content: space-between;
-  align-items: center;
-  column-gap: var(--spacing-s);
-}
-
-.audioPlayerTime {
-  position: relative;
-  width: 72px;
-  font-size: var(--font-18);
-  font-weight: 500;
-  color: var(--color-text-block-primary-default);
-  text-align: left;
-
-  &.right {
-    text-align: right;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: var(--audio-view-padding);
   }
-}
 
-.audioPlayerActions,
-.audioPlayerActionsAdditional {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  column-gap: var(--spacing-xs);
-}
-
-.audioPlayerActionsAdditional {
-  width: 140px;
-  color: var(--color-text-block-primary-default);
-
-  span {
-    font-size: var(--font-12);
+  .audioPlayerHidden {
+    position: absolute;
+    visibility: hidden;
+    top: -100px;
   }
-}
 
-.volume {
-  flex-grow: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
+  .canvas {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
 
-.loader {
-  position: absolute;
-  z-index: 5500;
-  left: calc(50% - 54px);
-  top: 50%;
-  transform: translateY(-50%);
-}
+  .audioPlayer {
+    position: absolute;
+    left: 0;
+    bottom: 24px;
+    width: 100%;
+    height: var(--audio-panel-height);
+    padding: 0 var(--spacing-m);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .audioPlayerBody {
+    display: flex;
+    width: 100%;
+    height: 32px;
+    justify-content: space-between;
+    align-items: center;
+    column-gap: var(--spacing-s);
+  }
+
+  .audioPlayerTime {
+    position: relative;
+    width: 72px;
+    font-size: var(--font-18);
+    font-weight: 500;
+    color: var(--color-text-block-primary-default);
+    text-align: left;
+
+    &.right {
+      text-align: right;
+    }
+  }
+
+  .audioPlayerActions,
+  .audioPlayerActionsAdditional {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    column-gap: var(--spacing-xs);
+  }
+
+  .audioPlayerActionsAdditional {
+    width: 140px;
+    color: var(--color-text-block-primary-default);
+
+    span {
+      font-size: var(--font-12);
+    }
+  }
+
+  .volume {
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .loader {
+    position: absolute;
+    z-index: 5500;
+    left: calc(50% - 54px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
 </style>

@@ -20,10 +20,15 @@ import { ChatMessageSendingProgressEvent } from '~/services.types.ts';
 import { LocalMetadataInDelivery } from '~/chat.types.ts';
 
 export const useUiOutgoingStore = defineStore('ui-outgoing', () => {
-  const msgsSendingProgress = ref<Record<string, {
-    deliveryId: string;
-    progress: number;
-  }>>({});
+  const msgsSendingProgress = ref<
+    Record<
+      string,
+      {
+        deliveryId: string;
+        progress: number;
+      }
+    >
+  >({});
 
   function updateSendingProgressesList(event: ChatMessageSendingProgressEvent) {
     const { data } = event;
@@ -41,20 +46,18 @@ export const useUiOutgoingStore = defineStore('ui-outgoing', () => {
       return;
     }
 
-    const bytesSent = Object.values(recipients)
-      .reduce((res, item) => {
-        res += item.bytesSent;
-        return res;
-      }, 0);
+    const bytesSent = Object.values(recipients).reduce((res, item) => {
+      res += item.bytesSent;
+      return res;
+    }, 0);
 
     msgsSendingProgress.value[chatMsgInfo] = {
       deliveryId,
-      progress: Math.min(Math.round(bytesSent / msgSize * 100), 100)
+      progress: Math.min(Math.round((bytesSent / msgSize) * 100), 100),
     };
   }
 
   function removeRecordFromSendingProgressesList(msgInfo: string) {
-    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
     delete msgsSendingProgress.value[msgInfo];
   }
 

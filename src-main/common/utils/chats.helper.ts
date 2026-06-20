@@ -28,8 +28,10 @@ import type {
   ChatMessageView,
   FileWithId,
   ReadonlyFsWithId,
-  MessageStatus, ReadonlyFS,
+  MessageStatus,
+  ReadonlyFS,
 } from '~/index';
+import { getFileStat, getEntityStat } from '@shared/get-stats-safely';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from './chat-ui.helper';
 
@@ -40,25 +42,29 @@ export async function prepareAttachmentEntityInfo(
     return;
   }
 
+  const isFolder = !!(entity as ReadonlyFS).listFolder;
+  const attachmentStat = isFolder
+    ? { isFolder, size: 0, writable: false }
+    : await getFileStat(entity as FileWithId);
+
   return {
     name: entity.name,
-    size: (entity as ReadonlyFS).listFolder
-      ? 0
-      : (await (entity as FileWithId).stat()).size!,
-    isFolder: !!(entity as ReadonlyFS).listFolder,
+    size: attachmentStat.size!,
+    isFolder,
     ...((entity as ReadonlyFsWithId).id && { id: (entity as ReadonlyFsWithId).id }),
     ...((entity as FileWithId).fileId && { id: (entity as FileWithId).fileId }),
   };
 }
 
-export async function getAttachmentFilesInfo(
-  { files, incomingAttachments, outgoingAttachments }:
-  {
-    files?: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[],
-    incomingAttachments?: web3n.files.ReadonlyFS,
-    outgoingAttachments?: AttachmentsContainer
-  },
-): Promise<ChatMessageAttachmentsInfo[] | undefined> {
+export async function getAttachmentFilesInfo({
+  files,
+  incomingAttachments,
+  outgoingAttachments,
+}: {
+  files?: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[];
+  incomingAttachments?: web3n.files.ReadonlyFS;
+  outgoingAttachments?: AttachmentsContainer;
+}): Promise<ChatMessageAttachmentsInfo[] | undefined> {
   if (isEmpty(files) && isEmpty(incomingAttachments) && isEmpty(outgoingAttachments)) {
     return;
   }
@@ -67,9 +73,8 @@ export async function getAttachmentFilesInfo(
   if (!isEmpty(incomingAttachments)) {
     const entities = await incomingAttachments.listFolder('/');
     for (const entity of entities) {
-      const entityStat = await incomingAttachments.stat(entity.name);
-      const size = entityStat.isFolder ? 0 : entityStat.size;
-      attachmentsInfo.push({ name: entity.name, size: size || 0 });
+      const entityStat = await getEntityStat(incomingAttachments, entity.name, entity.isFile);
+      attachmentsInfo.push({ name: entity.name, size: entityStat.size || 0 });
     }
   } else {
     const processedEntities = !isEmpty(files)
@@ -78,16 +83,17 @@ export async function getAttachmentFilesInfo(
     for (const entity of processedEntities!) {
       const entityStat = (entity as ReadonlyFsWithId).listFolder
         ? {
-          name: entity.name,
-          size: 0,
-          isFolder: true,
-          ...((entity as ReadonlyFsWithId).id && { id: (entity as ReadonlyFsWithId).id }),
-        } : {
-          name: entity.name,
-          size: (await (entity as FileWithId).stat()).size!,
-          isFolder: false,
-          ...((entity as FileWithId).fileId && { id: (entity as FileWithId).fileId }),
-        };
+            name: entity.name,
+            size: 0,
+            isFolder: true,
+            ...((entity as ReadonlyFsWithId).id && { id: (entity as ReadonlyFsWithId).id }),
+          }
+        : {
+            name: entity.name,
+            size: (await getFileStat(entity as FileWithId)).size!,
+            isFolder: false,
+            ...((entity as FileWithId).fileId && { id: (entity as FileWithId).fileId }),
+          };
 
       attachmentsInfo.push(entityStat);
     }
@@ -101,12 +107,7 @@ function prepareMsgDataToExport(
   ownAddr: string,
   getContactName: (val: string) => string,
 ): string {
-  const {
-    chatMessageType: type,
-    isIncomingMsg,
-    timestamp,
-    sender,
-  } = msg;
+  const { chatMessageType: type, isIncomingMsg, timestamp, sender } = msg;
 
   const dateValue = dayjs(timestamp);
 
@@ -114,17 +115,17 @@ function prepareMsgDataToExport(
 
   const author = getContactName(isIncomingMsg ? sender : ownAddr);
 
-  const text = type === 'system'
-    ? getTextForChatSystemMessage(msg, msg.chatId.isGroupChat, ownAddr)
-    : type === 'invitation' ? getTextForChatInvitationMessage(msg) : html2text(msg.body);
+  const text =
+    type === 'system'
+      ? getTextForChatSystemMessage(msg, msg.chatId.isGroupChat, ownAddr)
+      : type === 'invitation'
+        ? getTextForChatInvitationMessage(msg)
+        : html2text(msg.body);
 
-  const attachInfo = type !== 'regular' || isEmpty(msg.attachments)
-    ? ''
-    : msg.attachments!.map(i => i.name).join(', ');
+  const attachInfo =
+    type !== 'regular' || isEmpty(msg.attachments) ? '' : msg.attachments!.map(i => i.name).join(', ');
 
-  let value = type === 'regular'
-    ? `${dateTime} ${author}(${isIncomingMsg ? sender : ownAddr})`
-    : `${dateTime}`;
+  let value = type === 'regular' ? `${dateTime} ${author}(${isIncomingMsg ? sender : ownAddr})` : `${dateTime}`;
 
   if (text) {
     value += `\n${text}`;
@@ -139,15 +140,17 @@ function prepareMsgDataToExport(
   return value;
 }
 
-export async function exportChatMessages(
-  { $tr, chat, messages = [], ownAddr }:
-  {
-    $tr: (key: string, placeholders?: Record<string, string>) => string,
-    chat: ChatListItemView,
-    messages: ChatMessageView[],
-    ownAddr: string,
-  },
-): Promise<boolean | undefined> {
+export async function exportChatMessages({
+  t,
+  chat,
+  messages = [],
+  ownAddr,
+}: {
+  t: (key: string, placeholders?: Record<string, string>) => string;
+  chat: ChatListItemView;
+  messages: ChatMessageView[];
+  ownAddr: string;
+}): Promise<boolean | undefined> {
   const { name: chatName } = chat;
 
   const { getContactName } = useContactsStore();
@@ -158,7 +161,7 @@ export async function exportChatMessages(
 
   if (w3n.shell?.fileDialogs?.saveFileDialog) {
     const outFile = await w3n.shell?.fileDialogs?.saveFileDialog(
-      $tr('chat.export.dialog.title'),
+      t('chat.dialog.export.title'),
       '',
       `${chatName}.txt`,
     );
@@ -174,51 +177,46 @@ export async function exportChatMessages(
   }
 }
 
-function checkAction(
-  { messageType, status, hasAttachments, condition, timestamp }: {
-    messageType: 'incoming' | 'outgoing';
-    status: MessageStatus | undefined;
-    hasAttachments: boolean;
-    condition: string;
-    timestamp: number;
-  }): boolean {
-  const [msgType, msgStatusAsString, areAttachmentsPresent, lifetime] = condition.split(':') as ['incoming' | 'outgoing' | '', string, 'true' | 'false' | '', string];
+function checkAction({
+  messageType,
+  status,
+  hasAttachments,
+  condition,
+  timestamp,
+}: {
+  messageType: 'incoming' | 'outgoing';
+  status: MessageStatus | undefined;
+  hasAttachments: boolean;
+  condition: string;
+  timestamp: number;
+}): boolean {
+  const [msgType, msgStatusAsString, areAttachmentsPresent, lifetime] = condition.split(':') as [
+    'incoming' | 'outgoing' | '',
+    string,
+    'true' | 'false' | '',
+    string,
+  ];
 
   const typeMatches = msgType ? messageType === msgType : true;
-  let statusMatches = false;
-  let attachmentsMatches = false;
-  let timestampMatches = false;
 
-  if (!msgStatusAsString || !status) {
-    statusMatches = true;
-  } else {
-    const statuses = msgStatusAsString.split(',') as MessageStatus[];
-    statusMatches = statuses.includes(status);
-  }
+  const statusMatches =
+    !msgStatusAsString || !status ? true : (msgStatusAsString.split(',') as MessageStatus[]).includes(status);
 
-  if (!areAttachmentsPresent) {
-    attachmentsMatches = true;
-  } else {
-    attachmentsMatches = (hasAttachments && areAttachmentsPresent === 'true')
-      || (!hasAttachments && areAttachmentsPresent === 'false');
-  }
+  const attachmentsMatches = !areAttachmentsPresent
+    ? true
+    : (hasAttachments && areAttachmentsPresent === 'true') ||
+      (!hasAttachments && areAttachmentsPresent === 'false');
 
-  if (
-    !lifetime
-    || (
-      lifetime
-      && (!lifetime.includes('>') && !lifetime.includes('<'))
-    )
-  ) {
+  let timestampMatches;
+  if (!lifetime || (lifetime && !lifetime.includes('>') && !lifetime.includes('<'))) {
     timestampMatches = true;
   } else {
     const timestampCondition = lifetime[0] as '>' | '<';
     const timestampValueAsString = lifetime.slice(1);
     const timestampValue = isNaN(Number(timestampValueAsString)) ? Date.now() : Number(timestampValueAsString);
     const timestampDiff = Date.now() - timestamp;
-    timestampMatches = timestampCondition === '>'
-      ? timestampDiff > timestampValue
-      : timestampDiff < timestampValue;
+    timestampMatches =
+      timestampCondition === '>' ? timestampDiff > timestampValue : timestampDiff < timestampValue;
   }
 
   return typeMatches && statusMatches && attachmentsMatches && timestampMatches;
@@ -226,7 +224,7 @@ function checkAction(
 
 export function getMessageActions(
   msg: ChatMessageView,
-  $tr: (txt: string) => string,
+  t: (txt: string) => string,
   readonly?: boolean,
 ): Omit<ChatMessageAction, 'conditions'>[] {
   const { isIncomingMsg, status, timestamp } = msg;
@@ -248,9 +246,9 @@ export function getMessageActions(
 
       let isAllowedAction = false;
       for (const condition of conditions) {
-        const hasAttachments = (msg.chatMessageType === 'regular') && !!size(msg.attachments);
-        isAllowedAction = isAllowedAction
-          || checkAction({ messageType, status, hasAttachments, condition, timestamp });
+        const hasAttachments = msg.chatMessageType === 'regular' && !!size(msg.attachments);
+        isAllowedAction =
+          isAllowedAction || checkAction({ messageType, status, hasAttachments, condition, timestamp });
         if (isAllowedAction) {
           break;
         }
@@ -260,7 +258,7 @@ export function getMessageActions(
     })
     .map(item => ({
       ...item,
-      title: $tr(item.title),
+      title: t(item.title),
     }));
 }
 
@@ -275,27 +273,27 @@ export function makeChatException(fields: Partial<ChatException>): ChatException
 export function prepareCheckAddrErrorText(
   addr: string,
   cause: AddressCheckResult,
-  $tr: (txt: string, placeholder?: Record<string, string>) => string,
+  t: (txt: string, placeholder?: Record<string, string>) => string,
 ) {
   if (cause === 'not-present-at-domain') {
-    return $tr('check.addr.error.unknownRecipient', { addr });
+    return t('validation.text.unknownRecipient', { addr });
   }
 
   if (cause === 'found') {
-    return $tr('check.addr.error.inboxIsFull', { addr });
+    return t('validation.text.inboxIsFull', { addr });
   }
 
   if (cause === 'found-but-access-restricted') {
-    return $tr('check.addr.error.senderNotAllowed', { addr });
+    return t('validation.text.senderNotAllowed', { addr });
   }
 
   if (cause === 'not-valid-public-key') {
-    return $tr('check.addr.error.recipientPubKeyFailsValidation', { addr });
+    return t('validation.text.recipientPubKeyFailsValidation', { addr });
   }
 
   if (cause === 'no-service-for-domain') {
-    return $tr('check.addr.error.serviceLocating', { addr });
+    return t('validation.text.serviceLocating', { addr });
   }
 
-  return $tr('check.addr.error.unknown', { addr });
+  return t('validation.text.unknown', { addr });
 }

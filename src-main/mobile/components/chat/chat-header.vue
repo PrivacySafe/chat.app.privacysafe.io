@@ -15,47 +15,48 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { computed } from 'vue';
-import { Ui3nButton, Ui3nHtml as vUi3nHtml } from '@v1nt1248/3nclient-lib';
-import { getChatName } from '@main/common/utils/chat-ui.helper';
-import { useChatHeader } from '@main/common/composables/useChatHeader';
-import { useNavigation } from '@main/mobile/composables/useNavigation';
-import type { ChatListItemView, ChatMessageView } from '~/chat.types';
-import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
-import ChatHeaderActions from './chat-header-actions.vue';
+  import { computed } from 'vue';
+  import { Ui3nButton, Ui3nHtml as vUi3nHtml } from '@v1nt1248/3nclient-lib';
+  import { getChatName } from '@main/common/utils/chat-ui.helper';
+  import { useChatHeader } from '@main/common/composables/useChatHeader';
+  import { useNavigation } from '@main/mobile/composables/useNavigation';
+  import type { ChatListItemView, ChatMessageView } from '~/chat.types';
+  import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
+  import ChatHeaderActions from './chat-header-actions.vue';
 
-const props = defineProps<{
-  chat: ChatListItemView;
-  messages: ChatMessageView[];
-}>();
+  const props = defineProps<{
+    chat: ChatListItemView;
+    messages: ChatMessageView[];
+  }>();
 
-const chatVal = computed(() => props.chat);
-const chatMessagesVal = computed(() => props.messages);
+  const chatVal = computed(() => props.chat);
+  const chatMessagesVal = computed(() => props.messages);
 
-const { navigateToChats } = useNavigation();
+  const { navigateToChats } = useNavigation();
 
-const {
-  text,
-  isGroupChat,
-  currentChatObjId,
-  isIncomingCall,
-  chatWithCall,
-  callDuration,
-  selectAction,
-  joinIncomingCall,
-  dismissIncomingCall,
-  startCall,
-  endCall,
-} = useChatHeader({
-  chat: chatVal,
-  messages: chatMessagesVal,
-  goToChats,
-  isMobileMode: true,
-});
+  const {
+    t,
+    text,
+    isGroupChat,
+    currentChatObjId,
+    isIncomingCall,
+    chatWithCall,
+    callDuration,
+    selectAction,
+    joinIncomingCall,
+    dismissIncomingCall,
+    startCall,
+    endCall,
+  } = useChatHeader({
+    chat: chatVal,
+    messages: chatMessagesVal,
+    goToChats,
+    isMobileMode: true,
+  });
 
-async function goToChats() {
-  await navigateToChats();
-}
+  async function goToChats() {
+    await navigateToChats();
+  }
 </script>
 
 <template>
@@ -85,12 +86,12 @@ async function goToChats() {
         v-if="chatWithCall"
         :class="$style.headerInfo"
       >
-        {{ $tr('chat.header.call.duration') }}: {{ callDuration }}
+        {{ t('chat.header.call.duration') }}: {{ callDuration }}
       </div>
 
       <div
         v-else
-        v-ui3n-html:sanitize="chat.lastMsg?.timestamp ? $tr('chat.header.info', { date: text }) : ''"
+        v-ui3n-html:sanitize="chat.lastMsg?.timestamp ? t('chat.header.info', { date: text }) : ''"
         :class="$style.headerInfo"
       />
     </div>
@@ -141,45 +142,45 @@ async function goToChats() {
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/_mixins.scss' as mixins;
+  @use '@main/common/assets/styles/_mixins.scss' as mixins;
 
-.chatHeader {
-  --chat-header-height: 48px;
+  .chatHeader {
+    --chat-header-height: 48px;
 
-  display: flex;
-  width: 100%;
-  height: var(--chat-header-height);
-  justify-content: space-between;
-  align-items: center;
-  column-gap: var(--spacing-xs);
-  padding: 0 12px;
-  background-color: var(--color-bg-block-primary-default);
-}
+    display: flex;
+    width: 100%;
+    height: var(--chat-header-height);
+    justify-content: space-between;
+    align-items: center;
+    column-gap: var(--spacing-xs);
+    padding: 0 12px;
+    background-color: var(--color-bg-block-primary-default);
+  }
 
-.content {
-  position: relative;
-  flex-grow: 1;
-  flex-shrink: 1;
-}
+  .content {
+    position: relative;
+    flex-grow: 1;
+    flex-shrink: 1;
+  }
 
-.headerName,
-.headerInfo {
-  position: relative;
-  @include mixins.text-overflow-ellipsis();
-}
+  .headerName,
+  .headerInfo {
+    position: relative;
+    @include mixins.text-overflow-ellipsis();
+  }
 
-.headerName {
-  font-size: var(--font-16);
-  font-weight: 600;
-  line-height: 22px;
-  color: var(--color-text-block-primary-default);
-}
+  .headerName {
+    font-size: var(--font-16);
+    font-weight: 600;
+    line-height: 22px;
+    color: var(--color-text-block-primary-default);
+  }
 
-.headerInfo {
-  min-height: 14px;
-  font-size: var(--font-12);
-  font-weight: 400;
-  line-height: 14px;
-  color: var(--color-text-block-secondary-default);
-}
+  .headerInfo {
+    min-height: 14px;
+    font-size: var(--font-12);
+    font-weight: 400;
+    line-height: 14px;
+    color: var(--color-text-block-secondary-default);
+  }
 </style>

@@ -15,24 +15,24 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { onBeforeMount } from 'vue';
-import { Ui3nButton, Ui3nMenu } from '@v1nt1248/3nclient-lib';
-import { useAppView } from '@main/common/composables/useAppView';
-import { useAppStore } from '@main/common/store/app.store';
+  import { onBeforeMount } from 'vue';
+  import { Ui3nDialogProvider, Ui3nButton, Ui3nMenu } from '@v1nt1248/3nclient-lib';
+  import { useAppView } from '@main/common/composables/useAppView';
+  import { useAppStore } from '@main/common/store/app.store';
 
-const { appExit } = useAppView();
-const { setMobileMode } = useAppStore();
+  const { appExit, t } = useAppView();
+  const { setMobileMode } = useAppStore();
 
-onBeforeMount(() => {
-  setMobileMode(true);
-});
+  onBeforeMount(() => {
+    setMobileMode(true);
+  });
 </script>
 
 <template>
   <section :class="$style.app">
     <div :class="$style.toolbar">
       <div :class="$style.title">
-        {{ $tr('app.title') }}
+        {{ t('app.title') }}
       </div>
 
       <ui3n-menu>
@@ -50,7 +50,7 @@ onBeforeMount(() => {
               :class="$style.menuItem"
               @click="appExit"
             >
-              {{ $tr('app.exit') }}
+              {{ t('app.exit') }}
             </div>
           </div>
         </template>
@@ -64,86 +64,89 @@ onBeforeMount(() => {
         </transition>
       </router-view>
     </div>
+
     <div id="notification" />
+
+    <ui3n-dialog-provider />
   </section>
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/_mixins.scss' as mixins;
+  @use '@main/common/assets/styles/_mixins.scss' as mixins;
 
-.app {
-  --main-toolbar-height: 48px;
+  .app {
+    --main-toolbar-height: 48px;
 
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-}
-
-.toolbar {
-  width: 100%;
-  padding: 0 var(--spacing-m);
-  height: var(--main-toolbar-height);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: var(--color-bg-block-primary-default);
-  border-bottom: 1px solid var(--color-border-block-primary-default);
-}
-
-.title {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: var(--font-16);
-  font-weight: 700;
-  color: var(--color-text-block-primary-default);
-  column-gap: var(--spacing-s);
-}
-
-.body {
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: calc(var(--main-toolbar-height) + 1px);
-  bottom: 0;
-}
-
-.menu {
-  position: relative;
-  background-color: var(--color-bg-control-secondary-default);
-  width: max-content;
-  border-radius: var(--spacing-xs);
-  @include mixins.elevation(1);
-}
-
-.menuItem {
-  position: relative;
-  width: 60px;
-  height: var(--spacing-l);
-  padding: 0 var(--spacing-s);
-  font-size: var(--font-13);
-  font-weight: 500;
-  color: var(--color-text-control-primary-default);
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  cursor: pointer;
-
-  &:hover {
-    background-color: var(--color-bg-control-primary-hover);
-    color: var(--color-text-control-accent-default);
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
   }
-}
 
-#notification {
-  position: fixed;
-  bottom: var(--spacing-xs);
-  left: var(--spacing-m);
-  right: var(--spacing-m);
-  z-index: 5000;
-  height: auto;
-  display: flex;
-  justify-content: center;
-  align-content: center;
-}
+  .toolbar {
+    width: 100%;
+    padding: 0 var(--spacing-m);
+    height: var(--main-toolbar-height);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--color-bg-block-primary-default);
+    border-bottom: 1px solid var(--color-border-block-primary-default);
+  }
+
+  .title {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: var(--font-16);
+    font-weight: 700;
+    color: var(--color-text-block-primary-default);
+    column-gap: var(--spacing-s);
+  }
+
+  .body {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: calc(var(--main-toolbar-height) + 1px);
+    bottom: 0;
+  }
+
+  .menu {
+    position: relative;
+    background-color: var(--color-bg-control-secondary-default);
+    width: max-content;
+    border-radius: var(--spacing-xs);
+    @include mixins.elevation(1);
+  }
+
+  .menuItem {
+    position: relative;
+    width: 60px;
+    height: var(--spacing-l);
+    padding: 0 var(--spacing-s);
+    font-size: var(--font-13);
+    font-weight: 500;
+    color: var(--color-text-control-primary-default);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    cursor: pointer;
+
+    &:hover {
+      background-color: var(--color-bg-control-primary-hover);
+      color: var(--color-text-control-accent-default);
+    }
+  }
+
+  #notification {
+    position: fixed;
+    bottom: var(--spacing-xs);
+    left: var(--spacing-m);
+    right: var(--spacing-m);
+    z-index: 5000;
+    height: auto;
+    display: flex;
+    justify-content: center;
+    align-content: center;
+  }
 </style>

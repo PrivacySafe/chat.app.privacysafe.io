@@ -14,8 +14,8 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import type { ChatMessageReaction, OutgoingMessageStatus } from '~/chat.types.ts';
-import type { ChatSettings } from '@bg/dataset/versions/v2/chats-db.ts';
+import type { ChatMessageReaction, OutgoingMessageStatus } from './chat.types.ts';
+import type { ChatSettings } from '../src-deno/types/index.ts';
 
 export type ASMailSendException = web3n.asmail.ASMailSendException;
 export type ServLocException = web3n.ServLocException;
@@ -46,7 +46,6 @@ export interface ChatMessageJsonBodyV1Base {
    * Invitations don't have this field.
    */
   groupChatId?: string;
-
 }
 
 export interface ChatSystemMsgV1 extends ChatMessageJsonBodyV1Base {
@@ -93,7 +92,21 @@ export interface ChatInvitationMsgV1 extends ChatMessageJsonBodyV1Base {
   inviteData: InvitationProcessMsgData;
 }
 
-export type InvitationProcessMsgData = GroupChatParameters
+export interface PhantomSyncMsgDataBasedOnRegularMsgV1 extends ChatRegularMsgV1 {
+  text: string;
+  attachments: ChatOutgoingMessage['attachments'];
+}
+
+export interface ChatSyncMsgV1 extends ChatMessageJsonBodyV1Base {
+  chatMessageType: 'synchronization';
+  sourceDeviceId: string;
+  chatId: ChatIdObj;
+  value: PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1;
+  timestamp: number;
+}
+
+export type InvitationProcessMsgData =
+  | GroupChatParameters
   | OneToOneChatParameters
   | AcceptedInvitationReference
   | UpdatedMembersInvitationData;
@@ -116,10 +129,11 @@ export interface OneToOneChatParameters {
   name: string;
 }
 
-export type StoredInvitationParams = AcceptedInvitationReference
+export type StoredInvitationParams =
+  | AcceptedInvitationReference
   | ((GroupChatParameters | OneToOneChatParameters) & {
-  neverContactedInitiator?: boolean;
-});
+      neverContactedInitiator?: boolean;
+    });
 
 export interface AcceptedInvitationReference {
   type: 'invite-acceptance';
@@ -156,29 +170,14 @@ export interface ChatWebRTCMsgV1 extends ChatMessageJsonBodyV1Base {
   webrtcMsg: WebRTCMsg;
 }
 
-
-export type ChatMessageJsonBodyV1 =
-  ChatSystemMsgV1
+export type ChatMessageJsonBody =
+  | ChatSystemMsgV1
   | ChatRegularMsgV1
   | ChatInvitationMsgV1
-  | ChatWebRTCMsgV1;
+  | ChatWebRTCMsgV1
+  | ChatSyncMsgV1;
 
-export interface ChatMessageJsonBodyPreV {
-  v?: undefined;
-  chatId: string;
-  chatName?: string;
-  chatMessageType?: ChatMessageJsonBodyV1['chatMessageType'];
-  chatMessageId: string;
-  members: string[];
-  admins: string[];
-  initialMessageId?: string;
-  chatSystemData?: ChatSystemMessageData;
-  webrtcMsg?: WebRTCMsg;
-}
-
-export type ChatMessageJsonBody = ChatMessageJsonBodyV1 | ChatMessageJsonBodyPreV;
-
-export type ChatMessageType = 'regular' | 'system' | 'invitation' | 'webrtc-call';
+export type ChatMessageType = 'regular' | 'system' | 'invitation' | 'webrtc-call' | 'synchronization';
 
 export interface RelatedMessage {
   replyTo?: {
@@ -292,7 +291,7 @@ export interface CallMsgBodySysMsgData {
     sender: string;
     direction: 'incoming' | 'outgoing';
     endTimestamp?: number | null;
-  },
+  };
 }
 
 export interface WebRTCMsgBodySysMsgData {
@@ -301,11 +300,11 @@ export interface WebRTCMsgBodySysMsgData {
     sender: string;
     subType: 'outgoing-call-cancelled' | 'incoming-call-cancelled';
     chatId: ChatIdObj;
-  },
+  };
 }
 
 export type ChatSystemMessageData =
-  UpdateMembersSysMsgData
+  | UpdateMembersSysMsgData
   | UpdateAdminsSysMsgData
   | MemberRemovalSysMsgData
   | MemberLeftSysMsgData
@@ -320,7 +319,6 @@ export type ChatSystemMessageData =
   | WebRTCMsgBodySysMsgData;
 
 export interface WebRTCMsg {
-
   // XXX should we have more explicit stages here?
   // XXX explicit start and explicit close on non-webrtc will be more reliable
 
@@ -363,7 +361,6 @@ export interface ChatOutgoingMessage extends web3n.asmail.OutgoingMessage {
  * potential renegotiation process.
  */
 export interface ChatIdObj {
-
   isGroupChat: boolean;
 
   /**

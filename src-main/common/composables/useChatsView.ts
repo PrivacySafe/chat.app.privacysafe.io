@@ -15,7 +15,8 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { inject, watch } from 'vue';
-import { DIALOGS_KEY, DialogsPlugin, I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { useI18n } from 'vue-i18n';
+import { DIALOGS_KEY, DialogsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { useRouting } from '@main/desktop/composables/useRouting';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { useChatStore } from '@main/common/store/chat.store';
@@ -23,7 +24,7 @@ import type { ChatIdObj } from '~/asmail-msgs.types';
 import ChatCreateDialog from '@main/common/components/dialogs/chat-create-dialog.vue';
 
 export function useChatsView() {
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
   const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
 
   const { route, goToChatRoute, goToChatsRoute, hasCreateNewChatFlagInRoute } = useRouting();
@@ -31,26 +32,27 @@ export function useChatsView() {
   const { fetchContacts } = useContactsStore();
   const { resetCurrentChat } = useChatStore();
 
-  function openCreateChatDialog(isMobileMode?: boolean) {
-    dialog.$openDialog<typeof ChatCreateDialog>({
-      component: ChatCreateDialog,
+  async function openCreateChatDialog(isMobileMode?: boolean) {
+    const res = await dialog.$openDialog<ChatIdObj>(ChatCreateDialog, {
       dialogProps: {
-        title: $tr('chat.create.dialog.title'),
+        title: t('chat.create.dialog.title'),
         width: isMobileMode ? 300 : 360,
         confirmButton: false,
         cancelButton: false,
         closeOnClickOverlay: false,
-        onClose: async () => {
-          await closeNewChatDialog();
-        },
-        onConfirm: async chatId => {
-          await closeNewChatDialog(chatId as ChatIdObj);
-        },
-        onCancel: async () => {
-          await closeNewChatDialog();
-        },
       },
     });
+
+    const { event, data } = res;
+    switch (event) {
+      case 'close':
+      case 'cancel':
+        await closeNewChatDialog();
+        break;
+      case 'confirm':
+        await closeNewChatDialog(data!);
+        break;
+    }
   }
 
   async function closeNewChatDialog(chatId?: ChatIdObj) {

@@ -15,23 +15,26 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-import { computed } from 'vue';
-import { Ui3nButton, Ui3nIcon, Ui3nChip } from '@v1nt1248/3nclient-lib';
-import { useAppStore } from '@video/common/store/app.store';
-import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
-import type { PeerVideo } from '~/index';
+  import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { Ui3nButton, Ui3nIcon, Ui3nChip } from '@v1nt1248/3nclient-lib';
+  import { useAppStore } from '@video/common/store/app.store';
+  import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
+  import type { PeerVideo } from '~/index';
 
-const props = defineProps<{
-  peerVideos: PeerVideo[];
-}>();
-const emits = defineEmits<{
-  (event: 'close'): void;
-}>();
+  const props = defineProps<{
+    peerVideos: PeerVideo[];
+  }>();
+  const emits = defineEmits<{
+    (event: 'close'): void;
+  }>();
 
-const appStore = useAppStore();
+  const { t } = useI18n();
 
-const activePeerVideos = computed(() => props.peerVideos.filter(item => item.vaStream));
-const notActivePeerVideos = computed(() => props.peerVideos.filter(item => !item.vaStream));
+  const appStore = useAppStore();
+
+  const activePeerVideos = computed(() => props.peerVideos.filter(item => item.vaStream));
+  const notActivePeerVideos = computed(() => props.peerVideos.filter(item => !item.vaStream));
 </script>
 
 <template>
@@ -43,7 +46,7 @@ const notActivePeerVideos = computed(() => props.peerVideos.filter(item => !item
           size="16"
         />
 
-        {{ $tr('va.participants') }}
+        {{ t('va.text.participants') }}
       </div>
 
       <ui3n-button
@@ -77,7 +80,7 @@ const notActivePeerVideos = computed(() => props.peerVideos.filter(item => !item
               color="var(--info-fill-default)"
               text-color="var(--info-content-default)"
             >
-              {{ $tr('text.msg-sender.you') }}
+              {{ t('app.text.msg_sender.you') }}
             </ui3n-chip>
           </div>
         </div>
@@ -127,118 +130,118 @@ const notActivePeerVideos = computed(() => props.peerVideos.filter(item => !item
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/mixins' as mixins;
+  @use '@main/common/assets/styles/mixins' as mixins;
 
-.callParticipants {
-  --call-participants-block-width: 240px;
-  --call-participants-header: var(--spacing-xl);
-  --call-participants-item-height: var(--spacing-xl);
+  .callParticipants {
+    --call-participants-block-width: 240px;
+    --call-participants-header: var(--spacing-xl);
+    --call-participants-item-height: var(--spacing-xl);
 
-  position: fixed;
-  top: var(--spacing-m);
-  right: var(--spacing-m);
-  bottom: 64px;
-  width: var(--call-participants-block-width);
-  border-radius: var(--spacing-m);
-  background-color: var(--color-bg-control-secondary-default);
-  box-shadow: 0 0 2px 2px var(--shadow-key-1);
-}
-
-.header {
-  display: flex;
-  width: 100%;
-  height: var(--call-participants-header);
-  border-top-left-radius: var(--spacing-m);
-  border-top-right-radius: var(--spacing-m);
-  border-bottom: 1px solid var(--color-border-block-primary-pressed);
-  justify-content: space-between;
-  align-items: center;
-  padding-left: var(--spacing-m);
-  padding-right: var(--spacing-xs);
-}
-
-.title {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  column-gap: var(--spacing-xs);
-  font-size: var(--font-12);
-  font-weight: 600;
-  color: var(--color-text-block-primary-default);
-}
-
-.body {
-  position: relative;
-  width: 100%;
-  height: calc(100% - var(--call-participants-header));
-  overflow-y: auto;
-
-  .block:first-child {
-    margin-bottom: var(--spacing-m);
+    position: fixed;
+    top: var(--spacing-m);
+    right: var(--spacing-m);
+    bottom: 64px;
+    width: var(--call-participants-block-width);
+    border-radius: var(--spacing-m);
+    background-color: var(--color-bg-control-secondary-default);
+    box-shadow: 0 0 2px 2px var(--shadow-key-1);
   }
-}
 
-.block {
-  position: relative;
-  width: 100%;
-}
+  .header {
+    display: flex;
+    width: 100%;
+    height: var(--call-participants-header);
+    border-top-left-radius: var(--spacing-m);
+    border-top-right-radius: var(--spacing-m);
+    border-bottom: 1px solid var(--color-border-block-primary-pressed);
+    justify-content: space-between;
+    align-items: center;
+    padding-left: var(--spacing-m);
+    padding-right: var(--spacing-xs);
+  }
 
-.participant {
-  display: flex;
-  width: 100%;
-  height: var(--call-participants-item-height);
-  justify-content: space-between;
-  align-items: center;
-  column-gap: var(--spacing-s);
-  padding-left: calc(var(--spacing-s) * 1.5);
-  padding-right: var(--spacing-s);
-}
+  .title {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-xs);
+    font-size: var(--font-12);
+    font-weight: 600;
+    color: var(--color-text-block-primary-default);
+  }
 
-.participantBlock {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  column-gap: var(--spacing-s);
-  flex-grow: 1;
-}
+  .body {
+    position: relative;
+    width: 100%;
+    height: calc(100% - var(--call-participants-header));
+    overflow-y: auto;
 
-.name {
-  font-size: var(--font-12);
-  font-weight: 500;
-  @include mixins.text-overflow-ellipsis();
-}
+    .block:first-child {
+      margin-bottom: var(--spacing-m);
+    }
+  }
 
-.active {
-  color: var(--color-text-control-primary-default);
-}
+  .block {
+    position: relative;
+    width: 100%;
+  }
 
-.notActive {
-  color: var(--color-text-control-primary-disabled);
-}
+  .participant {
+    display: flex;
+    width: 100%;
+    height: var(--call-participants-item-height);
+    justify-content: space-between;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    padding-left: calc(var(--spacing-s) * 1.5);
+    padding-right: var(--spacing-s);
+  }
 
-.flag {
-  position: relative;
-  min-width: 36px;
-  display: flex;
-  justify-content: flex-end;
-}
+  .participantBlock {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    flex-grow: 1;
+  }
 
-.activeFlag {
-  position: relative;
-  width: var(--spacing-s);
-  height: var(--spacing-s);
-  border-radius: 50%;
-  background-color: var(--success-fill-default);
+  .name {
+    font-size: var(--font-12);
+    font-weight: 500;
+    @include mixins.text-overflow-ellipsis();
+  }
 
-  &::after {
-    position: absolute;
-    content: '';
-    width: var(--spacing-xs);
-    height: var(--spacing-xs);
+  .active {
+    color: var(--color-text-control-primary-default);
+  }
+
+  .notActive {
+    color: var(--color-text-control-primary-disabled);
+  }
+
+  .flag {
+    position: relative;
+    min-width: 36px;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .activeFlag {
+    position: relative;
+    width: var(--spacing-s);
+    height: var(--spacing-s);
     border-radius: 50%;
-    top: 2px;
-    left: 2px;
-    background-color: var(--success-content-default);
+    background-color: var(--success-fill-default);
+
+    &::after {
+      position: absolute;
+      content: '';
+      width: var(--spacing-xs);
+      height: var(--spacing-xs);
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      background-color: var(--success-content-default);
+    }
   }
-}
 </style>

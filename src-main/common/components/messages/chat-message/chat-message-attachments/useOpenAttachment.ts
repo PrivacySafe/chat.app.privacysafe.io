@@ -15,7 +15,8 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { inject } from 'vue';
-import { I18N_KEY, I18nPlugin, NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { useI18n } from 'vue-i18n';
+import { NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import type { AttachmentViewInfo } from './types';
 import { getFileByInfoFromMsg } from '@main/common/utils/files.helper.ts';
 
@@ -23,13 +24,13 @@ export function useOpenAttachment(
   props: { item: AttachmentViewInfo; incomingMsgId?: string },
   emits?: { (event: 'close'): void },
 ) {
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
   const { $createNotice } = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   function showError() {
     $createNotice({
       type: 'error',
-      content: $tr('chat.message.file.not-found.error'),
+      content: t('chat.message.action_message.error.file_notfound'),
       duration: 3000,
     });
 
@@ -56,9 +57,9 @@ export function useOpenAttachment(
   }
 
   return {
-    $tr,
+    t,
     $createNotice,
     showError,
     openEntity,
-  }
+  };
 }

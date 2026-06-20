@@ -16,97 +16,94 @@
 -->
 
 <script lang="ts" setup>
-import { computed, inject, watch } from 'vue';
-import { storeToRefs } from 'pinia';
-import dayjs from 'dayjs';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
-import { Ui3nBadge, Ui3nButton, Ui3nIcon, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from '@main/common/utils/chat-ui.helper';
-import { useAppStore } from '@main/common/store/app.store';
-import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
-import { useChatStore } from '@main/common/store/chat.store';
-import type { ChatListItemView, OutgoingMessageStatus } from '~/index';
-import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
-import ChatMessageStatus from '@main/common/components/messages/chat-message/chat-message-status.vue';
+  import { computed, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
+  import dayjs from 'dayjs';
+  import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
+  import { Ui3nBadge, Ui3nButton, Ui3nIcon, Ui3nHtml } from '@v1nt1248/3nclient-lib';
+  import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from '@main/common/utils/chat-ui.helper';
+  import { useAppStore } from '@main/common/store/app.store';
+  import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
+  import { useChatStore } from '@main/common/store/chat.store';
+  import type { ChatListItemView, OutgoingMessageStatus } from '~/index';
+  import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
+  import ChatMessageStatus from '@main/common/components/messages/chat-message/chat-message-status.vue';
 
-const vUi3nHtml = Ui3nHtml;
+  const vUi3nHtml = Ui3nHtml;
 
-const props = defineProps<{
-  data: ChatListItemView & { displayName: string };
-}>();
-const emit = defineEmits(['click']);
+  const props = defineProps<{
+    data: ChatListItemView & { displayName: string };
+  }>();
+  const emit = defineEmits(['click']);
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-const { user: ownAddr } = storeToRefs(useAppStore());
-const { currentChatId } = storeToRefs(useChatStore());
-const { toggleRinging, joinIncomingCall, dismissIncomingCall, endCall } = useUiIncomingStore();
+  const { t } = useI18n();
+  const { user: ownAddr } = storeToRefs(useAppStore());
+  const { currentChatId } = storeToRefs(useChatStore());
+  const { toggleRinging, joinIncomingCall, dismissIncomingCall, endCall } = useUiIncomingStore();
 
-const selectedChatId = computed<string>(() => currentChatId.value ? currentChatId.value.chatId : '');
+  const selectedChatId = computed<string>(() => (currentChatId.value ? currentChatId.value.chatId : ''));
 
-const isGroupChat = computed<boolean>(() => props.data.isGroupChat);
-const currentChatObjId = computed(() => ({ isGroupChat: isGroupChat.value, chatId: props.data.chatId }));
-const isIncomingCall = computed(() => props.data.incomingCall && props.data.incomingCall.chatId && props.data.incomingCall.peerAddress);
-const chatWithCall = computed(() => !!props.data.callStart);
+  const isGroupChat = computed<boolean>(() => props.data.isGroupChat);
+  const currentChatObjId = computed(() => ({ isGroupChat: isGroupChat.value, chatId: props.data.chatId }));
+  const isIncomingCall = computed(
+    () => props.data.incomingCall && props.data.incomingCall.chatId && props.data.incomingCall.peerAddress,
+  );
+  const chatWithCall = computed(() => !!props.data.callStart);
 
-const isLastMsgIncoming = computed(() => {
-  if (!props.data.lastMsg) return true;
-  return props.data.lastMsg.isIncomingMsg;
-});
-const lastMsgStatus = computed(() => {
-  if (isLastMsgIncoming.value || props.data.lastMsg?.chatMessageType !== 'regular') return undefined;
+  const isLastMsgIncoming = computed(() => {
+    if (!props.data.lastMsg) return true;
+    return props.data.lastMsg.isIncomingMsg;
+  });
+  const lastMsgStatus = computed(() => {
+    if (isLastMsgIncoming.value || props.data.lastMsg?.chatMessageType !== 'regular') return undefined;
 
-  return props.data.lastMsg?.status as OutgoingMessageStatus;
-});
+    return props.data.lastMsg?.status as OutgoingMessageStatus;
+  });
 
-const message = computed<string>(() => {
-  const lastMsg = props.data.lastMsg;
-  if (!lastMsg) return ' ';
+  const message = computed<string>(() => {
+    const lastMsg = props.data.lastMsg;
+    if (!lastMsg) return ' ';
 
-  switch (lastMsg.chatMessageType) {
-    case 'regular': {
-      const { attachments, isIncomingMsg, body } = lastMsg;
-      const attachmentsText = attachments?.map(a => a.name).join(', ') || ' ';
-      if (isIncomingMsg) {
-        return body || `<i>${$tr('text.receive.file')}: ${attachmentsText}</i>`;
+    switch (lastMsg.chatMessageType) {
+      case 'regular': {
+        const { attachments, isIncomingMsg, body } = lastMsg;
+        const attachmentsText = attachments?.map(a => a.name).join(', ') || ' ';
+        if (isIncomingMsg) {
+          return body || `<i>${t('app.text.receive.file')}: ${attachmentsText}</i>`;
+        }
+
+        return `<b>${t('app.text.msg_sender.you')}: </b>${body || `<i>${t('app.text.send.file')}: ${attachmentsText}</i>`}`;
       }
 
-      return `<b>${$tr('text.msg-sender.you')}: </b>${body || `<i>${$tr('text.send.file')}: ${attachmentsText}</i>`}`;
+      case 'system':
+        return `<i>${getTextForChatSystemMessage(lastMsg, props.data.isGroupChat, ownAddr.value)}</i>`;
+
+      case 'invitation':
+        return `<i>${getTextForChatInvitationMessage(lastMsg, props.data.status)}</i>`;
+
+      default:
+        return ' ';
+    }
+  });
+
+  const date = computed<string>(() => {
+    const chatLastDate = props.data.lastMsg?.timestamp ? props.data.lastMsg.timestamp : props.data.createdAt;
+
+    return prepareDateAsSting(chatLastDate!);
+  });
+
+  const callInOnSince = computed(() => {
+    if (chatWithCall.value) {
+      return dayjs(props.data.callStart).format('HH:mm');
     }
 
-    case 'system':
-      return `<i>${getTextForChatSystemMessage(lastMsg, props.data.isGroupChat, ownAddr.value)}</i>`;
+    return '';
+  });
 
-    case 'invitation':
-      return `<i>${getTextForChatInvitationMessage(lastMsg, props.data.status)}</i>`;
-
-    default:
-      return ' ';
-  }
-});
-
-const date = computed<string>(() => {
-  const chatLastDate = props.data.lastMsg?.timestamp
-    ? props.data.lastMsg.timestamp
-    : props.data.createdAt;
-
-  return prepareDateAsSting(chatLastDate!);
-});
-
-const callInOnSince = computed(() => {
-  if (chatWithCall.value) {
-    return dayjs(props.data.callStart).format('HH:mm');
-  }
-
-  return '';
-});
-
-watch(
-  isIncomingCall,
-  async (val) => {
+  watch(isIncomingCall, async val => {
     await toggleRinging(!!val);
-  },
-);
+  });
 </script>
 
 <template>
@@ -139,8 +136,8 @@ watch(
           v-if="chatWithCall || isIncomingCall"
           :class="$style.chatListItemMessage"
         >
-          <i v-if="chatWithCall">{{ $tr('va.call.in.progress') }} {{ callInOnSince }}</i>
-          <i v-else>{{ $tr('va.presettings.incoming.call', { address: data.incomingCall!.peerAddress }) }}</i>
+          <i v-if="chatWithCall">{{ t('va.text.call_in_progress') }} {{ callInOnSince }}</i>
+          <i v-else>{{ t('va.presettings.incoming_call', { address: data.incomingCall!.peerAddress }) }}</i>
         </div>
 
         <div
@@ -167,7 +164,7 @@ watch(
             icon-position="left"
             @click.stop.prevent="() => endCall(currentChatObjId)"
           >
-            {{ $tr('va.end.call') }}
+            {{ t('va.btn.end_call') }}
           </ui3n-button>
 
           <template v-else-if="isIncomingCall">
@@ -181,7 +178,7 @@ watch(
               icon-position="left"
               @click.stop.prevent="() => joinIncomingCall(currentChatObjId, data.incomingCall!.peerAddress)"
             >
-              {{ $tr('va.presettings.btn.join') }}
+              {{ t('va.presettings.btn.join') }}
             </ui3n-button>
 
             <ui3n-button
@@ -194,15 +191,15 @@ watch(
               icon-position="left"
               @click.stop.prevent="() => dismissIncomingCall(currentChatObjId, false)"
             >
-              {{ $tr('va.presettings.btn.decline') }}
+              {{ t('va.presettings.btn.decline') }}
             </ui3n-button>
           </template>
-
 
           <template v-else>
             <ui3n-badge
               v-if="isLastMsgIncoming && data.unread"
               :value="data.unread"
+              :class="$style.badge"
             />
 
             <chat-message-status
@@ -218,106 +215,110 @@ watch(
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/mixins' as mixins;
+  @use '@main/common/assets/styles/mixins' as mixins;
 
-.chatListItem {
-  --chat-list-item-height: 64px;
+  .chatListItem {
+    --chat-list-item-height: 64px;
 
-  position: relative;
-  width: 100%;
-  height: var(--chat-list-item-height);
-  padding: 0 var(--spacing-m);
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  border-radius: var(--spacing-xs);
+    position: relative;
+    width: 100%;
+    height: var(--chat-list-item-height);
+    padding: 0 var(--spacing-m);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    border-radius: var(--spacing-xs);
 
-  &:hover {
-    cursor: pointer;
-    background-color: var(--color-bg-chat-bubble-general-bg);
+    &:hover {
+      cursor: pointer;
+      background-color: var(--color-bg-chat-bubble-general-bg);
+    }
+
+    &.chatListItemSelected {
+      background-color: var(--color-bg-chat-bubble-general-bg);
+    }
   }
 
-  &.chatListItemSelected {
-    background-color: var(--color-bg-chat-bubble-general-bg);
+  .chatListItemBody {
+    position: relative;
+    width: calc(100% - 36px);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-left: var(--spacing-s);
+    overflow: hidden;
   }
-}
 
-.chatListItemBody {
-  position: relative;
-  width: calc(100% - 36px);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-left: var(--spacing-s);
-  overflow: hidden;
-}
+  .chatListItemContent {
+    position: relative;
+    flex-grow: 1;
+    overflow: hidden;
+  }
 
-.chatListItemContent {
-  position: relative;
-  flex-grow: 1;
-  overflow: hidden;
-}
+  .chatListItemName {
+    position: relative;
+    height: 22px;
+    width: 100%;
 
-.chatListItemName {
-  position: relative;
-  height: 22px;
-  width: 100%;
+    span {
+      display: block;
+      font-size: var(--font-16);
+      font-weight: 500;
+      line-height: 22px;
+      color: var(--color-text-chat-bubble-other-default);
+      @include mixins.text-overflow-ellipsis();
+    }
 
-  span {
-    display: block;
-    font-size: var(--font-16);
-    font-weight: 500;
-    line-height: 22px;
+    &.callInProgress {
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      column-gap: var(--spacing-xs);
+
+      span {
+        @include mixins.text-overflow-ellipsis(calc(100% - 20px));
+      }
+    }
+  }
+
+  .chatListItemMessage {
+    position: relative;
+    height: var(--spacing-ml);
+    font-size: var(--font-14);
+    font-weight: 400;
+    line-height: var(--spacing-ml);
     color: var(--color-text-chat-bubble-other-default);
     @include mixins.text-overflow-ellipsis();
   }
 
-  &.callInProgress {
+  .chatListItemInfo {
+    position: relative;
+    width: max-content;
+    padding: 0 var(--spacing-xs);
+  }
+
+  .chatListItemDate {
+    position: relative;
+    height: 22px;
+    white-space: nowrap;
+    text-align: right;
+    margin-bottom: 2px;
+    font-size: var(--font-10);
+    font-weight: 400;
+    line-height: 22px;
+    color: var(--color-text-chat-bubble-other-sub);
+  }
+
+  .chatListItemStatus {
+    position: relative;
+    height: var(--spacing-ml);
     display: flex;
-    justify-content: flex-start;
+    justify-content: flex-end;
     align-items: center;
     column-gap: var(--spacing-xs);
 
-    span {
-      @include mixins.text-overflow-ellipsis(calc(100% - 20px));
+    .badge {
+      min-width: 20px !important;
     }
   }
-}
-
-.chatListItemMessage {
-  position: relative;
-  height: var(--spacing-ml);
-  font-size: var(--font-14);
-  font-weight: 400;
-  line-height: var(--spacing-ml);;
-  color: var(--color-text-chat-bubble-other-default);
-  @include mixins.text-overflow-ellipsis();
-}
-
-.chatListItemInfo {
-  position: relative;
-  width: max-content;
-  padding: 0 var(--spacing-xs);
-}
-
-.chatListItemDate {
-  position: relative;
-  height: 22px;
-  white-space: nowrap;
-  text-align: right;
-  margin-bottom: 2px;
-  font-size: var(--font-10);
-  font-weight: 400;
-  line-height: 22px;
-  color: var(--color-text-chat-bubble-other-sub);
-}
-
-.chatListItemStatus {
-  position: relative;
-  height: var(--spacing-ml);;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  column-gap: var(--spacing-xs);
-}
 </style>

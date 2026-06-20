@@ -1,7 +1,7 @@
 {
   "name": "Chat",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.10.28",
+  "version": "0.11.0",
   "icon": "logo.png",
   "description": "Send secure text messages, share files or start a video meeting.",
 
@@ -62,13 +62,13 @@
       "startCmds": {
         "open-chat-with": {
           "thisAppComponents": [
-            "/background-instance.js"
+            "/background-instance.mjs"
           ],
           "otherApps": "*"
         },
         "incoming-call": {
           "thisAppComponents": [
-            "/background-instance.js"
+            "/background-instance.mjs"
           ]
         }
       }
@@ -131,13 +131,13 @@
       "startCmds": {
         "open-chat-with": {
           "thisAppComponents": [
-            "/background-instance.js"
+            "/background-instance.mjs"
           ],
           "otherApps": "*"
         },
         "incoming-call": {
           "thisAppComponents": [
-            "/background-instance.js"
+            "/background-instance.mjs"
           ]
         }
       }
@@ -147,7 +147,7 @@
       "services": {
         "VideoChatComponent": {
           "thisAppComponents": [
-            "/background-instance.js"
+            "/background-instance.mjs"
           ]
         }
       },
@@ -186,7 +186,7 @@
       "services": {
         "VideoChatComponent": {
           "thisAppComponents": [
-            "/background-instance.js"
+            "/background-instance.mjs"
           ]
         }
       },
@@ -225,7 +225,7 @@
       }
     },
 
-    "/background-instance.js": {
+    "/background-instance.mjs": {
       "services": {
         "AppChatsInternal": {
           "thisAppComponents": [
@@ -299,7 +299,7 @@
   "launchOnSystemStartup": [
     {
       "name": "Messaging background service",
-      "component": "/background-instance.js",
+      "component": "/background-instance.mjs",
       "icon": "logo.png",
       "description": "Starts background process to observe messaging and show notifications when new messages arrive"
     }

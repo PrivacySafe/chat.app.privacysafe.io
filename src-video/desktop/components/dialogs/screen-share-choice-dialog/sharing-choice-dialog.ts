@@ -16,28 +16,31 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 import { onBeforeMount, onBeforeUnmount, ref } from 'vue';
-import { Deferred, defer } from '@v1nt1248/3nclient-lib/utils';
+import { type Deferred, defer } from '@v1nt1248/3nclient-lib/utils';
 import type { ScreenShareOption, SharedStream, WindowShareOption } from '@video/common/types';
-import type { ScreenShareChoicesProps, ScreenShareChoicesEmits } from './screen-share-choice-dialog.vue';
+import type { ScreenShareChoicesProps } from './screen-share-choice-dialog.vue';
 
 type DisplaySourceInfo = web3n.media.DisplaySourceInfo;
 
-export function useScreenShareChoiceDialog(
-  props: ScreenShareChoicesProps,
-  emits: ScreenShareChoicesEmits,
-) {
+export function useScreenShareChoiceDialog(props: ScreenShareChoicesProps) {
   const isAudioCaptureAvailable = ref(false);
   const selectAudio = ref(props.initialDeskSoundShared);
   const screenChoices = ref<ScreenShareOption[]>();
   const windowChoices = ref<WindowShareOption[]>();
   const deferredStreams = new Map<string, Deferred<MediaStream>>();
 
-  const selected: SharedStream[] = props.initiallyShared.concat();
+  const data = ref<{
+    selected: SharedStream[];
+    selectedDeskSound: boolean;
+  }>({
+    selected: props.initiallyShared.concat(),
+    selectedDeskSound: props.initialDeskSoundShared,
+  });
+
   let mediaIdToGet: string | undefined = undefined;
-  let selectedDeskSound = props.initialDeskSoundShared;
 
   function isAlreadyShared(srcId: string): boolean {
-    return !!props.initiallyShared.find(s => (s.srcId === srcId));
+    return !!props.initiallyShared.find(s => s.srcId === srcId);
   }
 
   function makeDeferredStream(srcId: string): Promise<MediaStream> {
@@ -47,17 +50,17 @@ export function useScreenShareChoiceDialog(
   }
 
   async function collectAvailableScreenShareOptions(): Promise<void> {
-    await w3n.mediaDevices!.setSelectDisplayMediaForCaptureHandler!(
-      displayChoicesCollectionCB,
-    );
+    await w3n.mediaDevices!.setSelectDisplayMediaForCaptureHandler!(displayChoicesCollectionCB);
 
     mediaIdToGet = undefined;
-    await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+    await navigator.mediaDevices
+      .getDisplayMedia({ video: true, audio: true })
       .catch(err => w3n.log('error', 'Error on the start of collection. ', err));
 
-    async function setStreamIn(
-      { srcId, initiallySelected }: ScreenShareOption | WindowShareOption,
-    ): Promise<void> {
+    async function setStreamIn({
+      srcId,
+      initiallySelected,
+    }: ScreenShareOption | WindowShareOption): Promise<void> {
       if (initiallySelected) {
         const { stream } = props.initiallyShared.find(s => s.srcId === srcId)!;
         deferredStreams.get(srcId)?.resolve(stream);
@@ -66,15 +69,17 @@ export function useScreenShareChoiceDialog(
         const deferred = deferredStreams.get(mediaIdToGet);
         if (deferred) {
           deferredStreams.delete(mediaIdToGet);
-          await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            // audio: true,
-          }).then(
-            stream => {
-              deferred.resolve(stream);
-            },
-            err => deferred.reject(err),
-          );
+          await navigator.mediaDevices
+            .getDisplayMedia({
+              video: true,
+              // audio: true,
+            })
+            .then(
+              stream => {
+                deferred.resolve(stream);
+              },
+              err => deferred.reject(err),
+            );
         }
         mediaIdToGet = undefined;
       }
@@ -137,17 +142,13 @@ export function useScreenShareChoiceDialog(
   }
 
   function onDeskSoundChange(v: boolean): void {
-    selectedDeskSound = v;
-    emits('select', { selected, selectedDeskSound });
+    data.value.selectedDeskSound = v;
   }
 
-  async function onOptionSelectionChange(
-    opt: ScreenShareOption | WindowShareOption,
-    v: boolean,
-  ): Promise<void> {
+  async function onOptionSelectionChange(opt: ScreenShareOption | WindowShareOption, v: boolean): Promise<void> {
     if (v) {
       const stream = await opt.stream;
-      selected.push({
+      data.value.selected.push({
         srcId: opt.srcId,
         stream,
         type: (opt as ScreenShareOption).display_id ? 'screen' : 'window',
@@ -155,10 +156,9 @@ export function useScreenShareChoiceDialog(
       });
     } else {
       const streamId = (await opt.stream).id;
-      const ind = selected.findIndex(({ stream: { id } }) => (id === streamId));
-      selected.splice(ind, 1);
+      const ind = data.value.selected.findIndex(({ stream: { id } }) => id === streamId);
+      data.value.selected.splice(ind, 1);
     }
-    emits('select', { selected, selectedDeskSound });
   }
 
   onBeforeMount(async () => {
@@ -168,12 +168,11 @@ export function useScreenShareChoiceDialog(
   });
 
   onBeforeUnmount(() => {
-    w3n.mediaDevices!.setSelectDisplayMediaForCaptureHandler!(
-      async () => undefined,
-    );
+    w3n.mediaDevices!.setSelectDisplayMediaForCaptureHandler!(async () => undefined);
   });
 
   return {
+    data,
     isAudioCaptureAvailable,
     selectAudio,
     screenChoices,

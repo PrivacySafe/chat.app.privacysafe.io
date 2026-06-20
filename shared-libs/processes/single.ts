@@ -14,6 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+/* eslint-disable @typescript-eslint/no-unsafe-function-type, @typescript-eslint/no-explicit-any */
 
 /**
  * This represents a function that will create a promise, potentially starting
@@ -32,46 +33,48 @@ export type Action<T> = () => Promise<T>;
  * do ning something as an exclusive process.
  */
 export class SingleProc {
+  private promise: Promise<any> | undefined = undefined;
 
-	private promise: Promise<any>|undefined = undefined;
+  constructor() {
+    Object.seal(this);
+  }
 
-	constructor() {
-		Object.seal(this);
-	}
+  private insertPromise<T>(promise: Promise<T>): Promise<T> {
+    const promiseToRegister = promise.catch(noop).then(() => {
+      if (this.promise === promiseToRegister) {
+        this.promise = undefined;
+      }
+    });
+    this.promise = promiseToRegister;
+    return promise;
+  }
 
-	private insertPromise<T>(promise: Promise<T>): Promise<T> {
-		const promiseToRegister = promise.catch(noop).then(() => {
-			if (this.promise === promiseToRegister) {
-				this.promise = undefined;
-			}
-		});
-		this.promise = promiseToRegister;
-		return promise;
-	}
+  getP<T>(): Promise<T> | undefined {
+    return this.promise;
+  }
 
-	getP<T>(): Promise<T>|undefined {
-		return this.promise;
-	}
+  addStarted<T>(promise: Promise<T>): Promise<T> {
+    if (this.promise) {
+      throw new Error('Process is already in progress.');
+    }
+    return this.insertPromise(promise);
+  }
 
-	addStarted<T>(promise: Promise<T>): Promise<T> {
-		if (this.promise) { throw new Error('Process is already in progress.'); }
-		return this.insertPromise(promise);
-	}
+  start<T>(action: Action<T>): Promise<T> {
+    if (this.promise) {
+      throw new Error('Process is already in progress.');
+    }
+    return this.insertPromise(action());
+  }
 
-	start<T>(action: Action<T>): Promise<T> {
-		if (this.promise) { throw new Error('Process is already in progress.'); }
-		return this.insertPromise(action());
-	}
-
-	startOrChain<T>(action: Action<T>): Promise<T> {
-		if (this.promise) {
-			const next = this.promise.then(() => action());
-			return this.insertPromise(next);
-		} else {
-			return this.insertPromise(action());
-		}
-	}
-
+  startOrChain<T>(action: Action<T>): Promise<T> {
+    if (this.promise) {
+      const next = this.promise.then(() => action());
+      return this.insertPromise(next);
+    } else {
+      return this.insertPromise(action());
+    }
+  }
 }
 Object.freeze(SingleProc.prototype);
 Object.freeze(SingleProc);
@@ -81,12 +84,8 @@ function noop() {}
 /**
  * This wraps given function/method into syncing wrap.
  */
-export function makeSyncedFunc<T extends Function>(
-	syncProc: SingleProc, thisArg: any, func: T
-): T {
-	return ((...args: any[]) => syncProc.startOrChain(
-		() => func.apply(thisArg, args))
-	) as any as T;
+export function makeSyncedFunc<T extends Function>(syncProc: SingleProc, thisArg: any, func: T): T {
+  return ((...args: any[]) => syncProc.startOrChain(() => func.apply(thisArg, args))) as any as T;
 }
 
 /**
@@ -96,54 +95,54 @@ export function makeSyncedFunc<T extends Function>(
  * startIfIdle() method.
  */
 export class SingleCyclicProc {
+  private proc: Promise<void> | undefined = undefined;
 
-	private proc: Promise<void>|undefined = undefined;
+  /**
+   * @param cycleWhile is a "while" predicate. When it returns true, process
+   * continues to cycle, and when it returns false, process goes to idle.
+   * @param action is an async cycle body to run at each iteration.
+   */
+  constructor(
+    private cycleWhile: () => boolean,
+    private action: () => Promise<void>,
+  ) {
+    Object.seal(this);
+  }
 
-	/**
-	 * @param cycleWhile is a "while" predicate. When it returns true, process
-	 * continues to cycle, and when it returns false, process goes to idle.
-	 * @param action is an async cycle body to run at each iteration.
-	 */
-	constructor(
-		private cycleWhile: () => boolean,
-		private action: () => Promise<void>
-	) {
-		Object.seal(this);
-	}
+  /**
+   * This starts process, if it is idle.
+   */
+  startIfIdle(): void {
+    if (this.proc) {
+      return;
+    }
+    this.proc = this.action();
+    this.proc.then(this.cycleOrIdle);
+  }
 
-	/**
-	 * This starts process, if it is idle.
-	 */
-	startIfIdle(): void {
-		if (this.proc) { return; }
-		this.proc = this.action();
-		this.proc.then(this.cycleOrIdle);
-	}
+  private cycleOrIdle = () => {
+    if (this.cycleWhile()) {
+      this.proc = this.action();
+    } else {
+      this.proc = undefined;
+    }
+  };
 
-	private cycleOrIdle = () => {
-		if (this.cycleWhile()) {
-			this.proc = this.action();
-		} else {
-			this.proc = undefined;
-		}
-	};
+  isRunning(): boolean {
+    return !!this.proc;
+  }
 
-	isRunning(): boolean {
-		return !!this.proc;
-	}
-
-	/**
-	 * This makes process unusable and unstartable. Waiting on a return promise,
-	 * awaits the completion of the last iteration this process is in (if any).
-	 */
-	async close(): Promise<void> {
-		this.cycleWhile = () => false;
-		this.action = () => {
-			throw new Error('This cyclic process has already been closed');
-		};
-		await this.proc;
-	}
-
+  /**
+   * This makes process unusable and unstartable. Waiting on a return promise,
+   * awaits the completion of the last iteration this process is in (if any).
+   */
+  async close(): Promise<void> {
+    this.cycleWhile = () => false;
+    this.action = () => {
+      throw new Error('This cyclic process has already been closed');
+    };
+    await this.proc;
+  }
 }
 Object.freeze(SingleCyclicProc.prototype);
 Object.freeze(SingleCyclicProc);

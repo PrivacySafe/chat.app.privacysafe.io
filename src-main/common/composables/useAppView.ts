@@ -15,6 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, onBeforeMount, onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useCommandHandler } from '@main/common/composables/useCommandHandler';
 import { useAppStore } from '@main/common/store/app.store';
@@ -25,18 +26,14 @@ import { chatService } from '@main/common/services/external-services.ts';
 export type AppViewInstance = ReturnType<typeof useAppView>;
 
 export function useAppView() {
+  const { t } = useI18n();
+
   const { start: startHandlingCommands } = useCommandHandler();
 
   const appStore = useAppStore();
   const contactsStore = useContactsStore();
 
-  const {
-    commonLoading,
-    appVersion,
-    user: me,
-    connectivityStatus,
-    customLogoSrc,
-  } = storeToRefs(appStore);
+  const { commonLoading, appVersion, user: me, connectivityStatus, customLogoSrc } = storeToRefs(appStore);
 
   const { initialize, stopMessagesProcessing, stopVideoCallsWatching } = useInitialize();
 
@@ -67,7 +64,7 @@ export function useAppView() {
 
       deleteExpiredMessagesTimerId = setInterval(() => deleteExpiredMessages(), 60000);
     } catch (e) {
-      w3n.log('error', 'Error while the app component mounting.', e)
+      w3n.log('error', 'Error while the app component mounting.', e);
       throw e;
     }
   });
@@ -80,6 +77,7 @@ export function useAppView() {
   });
 
   return {
+    t,
     commonLoading,
     me,
     customLogoSrc,

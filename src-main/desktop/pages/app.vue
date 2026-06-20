@@ -15,14 +15,19 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { Ui3nMenu, Ui3nRipple as vUi3nRipple, Ui3nResize as vUi3nResize } from '@v1nt1248/3nclient-lib';
-import prLogo from '@main/common/assets/images/privacysafe-logo-new.svg';
-import { useAppView } from '@main/common/composables/useAppView';
-import { useAppStore } from '@main/common/store/app.store';
-import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
+  import {
+    Ui3nDialogProvider,
+    Ui3nMenu,
+    Ui3nRipple as vUi3nRipple,
+    Ui3nResize as vUi3nResize,
+  } from '@v1nt1248/3nclient-lib';
+  import prLogo from '@main/common/assets/images/privacysafe-logo-new.svg';
+  import { useAppView } from '@main/common/composables/useAppView';
+  import { useAppStore } from '@main/common/store/app.store';
+  import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
 
-const { me, customLogoSrc, appVersion, connectivityStatusText, openDashboard, appExit } = useAppView();
-const appStore = useAppStore();
+  const { me, customLogoSrc, appVersion, connectivityStatusText, openDashboard, appExit, t } = useAppView();
+  const appStore = useAppStore();
 </script>
 
 <template>
@@ -42,7 +47,7 @@ const appStore = useAppStore();
           /
         </div>
         <div :class="$style.info">
-          {{ $tr('app.title') }}
+          {{ t('app.title') }}
           <div :class="$style.version">
             v {{ appVersion }}
           </div>
@@ -55,9 +60,9 @@ const appStore = useAppStore();
             {{ me }}
           </span>
           <span :class="$style.connection">
-            {{ $tr('app.status') }}:
+            {{ t('app.status.label') }}:
             <span :class="connectivityStatusText === 'app.status.connected.online' && $style.connectivity">
-              {{ $tr(connectivityStatusText) }}
+              {{ t(connectivityStatusText) }}
             </span>
           </span>
         </div>
@@ -82,7 +87,7 @@ const appStore = useAppStore();
                 :class="$style.menuItem"
                 @click="appExit"
               >
-                {{ $tr('app.exit') }}
+                {{ t('app.exit') }}
               </div>
             </div>
           </template>
@@ -99,154 +104,156 @@ const appStore = useAppStore();
     </div>
 
     <div id="notification" />
+
+    <ui3n-dialog-provider />
   </div>
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/mixins' as mixins;
+  @use '@main/common/assets/styles/mixins' as mixins;
 
-.app {
-  --main-toolbar-height: calc(var(--spacing-s) * 9);
+  .app {
+    --main-toolbar-height: calc(var(--spacing-s) * 9);
 
-  position: fixed;
-  inset: 0;
-}
-
-.toolbar {
-  position: relative;
-  width: 100%;
-  height: var(--main-toolbar-height);
-  padding: 0 var(--spacing-m);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--color-border-block-primary-default);
-}
-
-.toolbarTitle {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  column-gap: var(--spacing-m);
-}
-
-.toolbarLogo {
-  position: relative;
-  height: var(--spacing-m);
-  cursor: pointer;
-}
-
-.delimiter {
-  font-size: 20px;
-  font-weight: 500;
-  color: var(--color-text-control-accent-default);
-  padding-bottom: 2px;
-}
-
-.info {
-  position: relative;
-  width: max-content;
-  font-size: var(--font-16);
-  font-weight: 500;
-  color: var(--color-text-control-primary-default);
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  gap: var(--spacing-s);
-  padding-bottom: calc(var(--spacing-xs) / 2);
-}
-
-.version {
-  font-size: var(--font-16);
-  font-weight: 500;
-  color: var(--color-text-control-secondary-default);
-  line-height: var(--font-16);
-}
-
-.user {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-
-.userInfo {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-end;
-  margin-right: var(--spacing-m);
-
-  span:not(.connectivity) {
-    color: var(--color-text-control-primary-default);
-    line-height: 1.4;
+    position: fixed;
+    inset: 0;
   }
-}
 
-.mail {
-  font-size: var(--font-14);
-  font-weight: 600;
-}
+  .toolbar {
+    position: relative;
+    width: 100%;
+    height: var(--main-toolbar-height);
+    padding: 0 var(--spacing-m);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border-block-primary-default);
+  }
 
-.connection {
-  font-size: var(--font-12);
-  font-weight: 500;
-}
+  .toolbarTitle {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-m);
+  }
 
-.connectivity {
-  color: var(--success-content-default);
-}
+  .toolbarLogo {
+    position: relative;
+    height: var(--spacing-m);
+    cursor: pointer;
+  }
 
-.icon {
-  position: relative;
-  cursor: pointer;
-  overflow: hidden;
-  border-radius: 50%;
-}
-
-.menu {
-  position: relative;
-  background-color: var(--color-bg-control-secondary-default);
-  width: max-content;
-  border-radius: var(--spacing-xs);
-  @include mixins.elevation(1);
-}
-
-.menuItem {
-  position: relative;
-  width: 60px;
-  height: var(--spacing-l);
-  padding: 0 var(--spacing-s);
-  font-size: var(--font-13);
-  font-weight: 500;
-  color: var(--color-text-control-primary-default);
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  cursor: pointer;
-
-  &:hover {
-    background-color: var(--color-bg-control-primary-hover);
+  .delimiter {
+    font-size: 20px;
+    font-weight: 500;
     color: var(--color-text-control-accent-default);
+    padding-bottom: 2px;
   }
-}
 
-.content {
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: calc(var(--main-toolbar-height) + 1px);
-  bottom: 0;
-}
+  .info {
+    position: relative;
+    width: max-content;
+    font-size: var(--font-16);
+    font-weight: 500;
+    color: var(--color-text-control-primary-default);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: var(--spacing-s);
+    padding-bottom: calc(var(--spacing-xs) / 2);
+  }
 
-#notification {
-  position: fixed;
-  bottom: var(--spacing-xs);
-  left: var(--spacing-m);
-  right: var(--spacing-m);
-  z-index: 5000;
-  height: auto;
-  display: flex;
-  justify-content: center;
-  align-content: flex-end;
-}
+  .version {
+    font-size: var(--font-16);
+    font-weight: 500;
+    color: var(--color-text-control-secondary-default);
+    line-height: var(--font-16);
+  }
+
+  .user {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .userInfo {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+    margin-right: var(--spacing-m);
+
+    span:not(.connectivity) {
+      color: var(--color-text-control-primary-default);
+      line-height: 1.4;
+    }
+  }
+
+  .mail {
+    font-size: var(--font-14);
+    font-weight: 600;
+  }
+
+  .connection {
+    font-size: var(--font-12);
+    font-weight: 500;
+  }
+
+  .connectivity {
+    color: var(--success-content-default);
+  }
+
+  .icon {
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    border-radius: 50%;
+  }
+
+  .menu {
+    position: relative;
+    background-color: var(--color-bg-control-secondary-default);
+    width: max-content;
+    border-radius: var(--spacing-xs);
+    @include mixins.elevation(1);
+  }
+
+  .menuItem {
+    position: relative;
+    width: 60px;
+    height: var(--spacing-l);
+    padding: 0 var(--spacing-s);
+    font-size: var(--font-13);
+    font-weight: 500;
+    color: var(--color-text-control-primary-default);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    cursor: pointer;
+
+    &:hover {
+      background-color: var(--color-bg-control-primary-hover);
+      color: var(--color-text-control-accent-default);
+    }
+  }
+
+  .content {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: calc(var(--main-toolbar-height) + 1px);
+    bottom: 0;
+  }
+
+  #notification {
+    position: fixed;
+    bottom: var(--spacing-xs);
+    left: var(--spacing-m);
+    right: var(--spacing-m);
+    z-index: 5000;
+    height: auto;
+    display: flex;
+    justify-content: center;
+    align-content: flex-end;
+  }
 </style>

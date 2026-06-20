@@ -15,152 +15,157 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-import { computed, inject, nextTick, onBeforeMount, ref, watch } from 'vue';
-import { getFileExtension, formatFileSize, isFileAudio, isFileImage, isFileVideo, schedulerYield } from
-    '@v1nt1248/3nclient-lib/utils';
-import { type Nullable, Ui3nIcon, Ui3nProgressCircular, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
-import type { ChatMessageAttachmentsInfo, Task } from '~/index';
-import ChatAttachmentType from './chat-attachment-type.vue';
-import { createImageThumbnail } from '@main/common/utils/create-thumbnail/create-image-thumbnail.ts';
-import { createVideoThumbnail } from '@main/common/utils/create-thumbnail/create-video-thumbnail.ts';
-import { createPdfThumbnail } from '@main/common/utils/create-thumbnail/create-pdf-thumbnail.ts';
-import ListingEntry = web3n.files.ListingEntry;
+  import { computed, inject, nextTick, onBeforeMount, ref, watch } from 'vue';
+  import {
+    getFileExtension,
+    formatFileSize,
+    isFileAudio,
+    isFileImage,
+    isFileVideo,
+    schedulerYield,
+  } from '@v1nt1248/3nclient-lib/utils';
+  import { type Nullable, Ui3nIcon, Ui3nProgressCircular, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+  import type { ChatMessageAttachmentsInfo, Task } from '~/index';
+  import { getEntityStat } from '@shared/get-stats-safely';
+  import ChatAttachmentType from './chat-attachment-type.vue';
+  import { createImageThumbnail } from '@main/common/utils/create-thumbnail/create-image-thumbnail.ts';
+  import { createVideoThumbnail } from '@main/common/utils/create-thumbnail/create-video-thumbnail.ts';
+  import { createPdfThumbnail } from '@main/common/utils/create-thumbnail/create-pdf-thumbnail.ts';
 
-const props = defineProps<{
-  entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS;
-  info: ChatMessageAttachmentsInfo;
-}>();
+  const props = defineProps<{
+    entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS;
+    info: ChatMessageAttachmentsInfo;
+  }>();
 
-const emits = defineEmits<{
-  (ev: 'change:size', value: number): void;
-  (ev: 'delete'): void;
-}>();
+  const emits = defineEmits<{
+    (ev: 'change:size', value: number): void;
+    (ev: 'delete'): void;
+  }>();
 
-const { addTask } = inject('task-runner') as { addTask: (task: Task) => void };
+  const { addTask } = inject('task-runner') as { addTask: (task: Task) => void };
 
-const isCalculatingFolderSize = ref(false);
-const folderSize = ref(0);
-const cancelFolderSizeCalculation = ref(false);
+  const isCalculatingFolderSize = ref(false);
+  const folderSize = ref(0);
+  const cancelFolderSizeCalculation = ref(false);
 
-const isThumbnailCreationProcessGoingOn = ref(false);
-const thumbnail = ref<Nullable<string>>(null);
+  const isThumbnailCreationProcessGoingOn = ref(false);
+  const thumbnail = ref<Nullable<string>>(null);
 
-const ext = computed(() => getFileExtension(props.info.name).toLowerCase());
+  const ext = computed(() => getFileExtension(props.info.name).toLowerCase());
 
-const attachment = computed(() => {
-  const lastDotPosition = props.info.name.lastIndexOf('.');
-  return {
-    ...props.info,
-    ext: ext.value,
-    attachmentName: props.info.isFolder ? props.info.name : props.info.name.slice(0, lastDotPosition),
-    isPossibleThumbnail: isFileImage({ fullName: props.info.name.toLowerCase() })
-      || isFileVideo({ fullName: props.info.name.toLowerCase() })
-      || ext.value === 'pdf',
-  };
-});
+  const attachment = computed(() => {
+    const lastDotPosition = props.info.name.lastIndexOf('.');
+    return {
+      ...props.info,
+      ext: ext.value,
+      attachmentName: props.info.isFolder ? props.info.name : props.info.name.slice(0, lastDotPosition),
+      isPossibleThumbnail:
+        (isFileImage({ fullName: props.info.name.toLowerCase() }) ||
+          isFileVideo({ fullName: props.info.name.toLowerCase() }) ||
+          ext.value === 'pdf') &&
+        props.info.size,
+    };
+  });
 
-const previewStyle = computed(() => {
-  if (!attachment.value.isPossibleThumbnail || !thumbnail.value) {
-    return {};
-  }
-
-  return {
-    backgroundImage: `url('${thumbnail.value}')`,
-  }
-});
-
-async function calculateFolderSize(folder: web3n.files.ReadonlyFS): Promise<number> {
-  let size = 0;
-  let entries: ListingEntry[];
-  try {
-    entries = await folder.listFolder('');
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  } catch (e) {
-    entries = [];
-  }
-
-  for (const entry of (entries || [])) {
-    if (cancelFolderSizeCalculation.value) {
-      break;
+  const previewStyle = computed(() => {
+    if (!attachment.value.isPossibleThumbnail || !thumbnail.value) {
+      return {};
     }
 
-    const { name, isFile, isFolder } = entry;
-    if (isFile) {
-      const stat = await folder.stat(name);
-      size += (stat.size || 0);
-      folderSize.value += (stat.size || 0);
-      await schedulerYield();
-    } else if (isFolder) {
-      const newFolder = await folder.readonlySubRoot(name);
-      size += await calculateFolderSize(newFolder);
+    return {
+      backgroundImage: `url('${thumbnail.value}')`,
+    };
+  });
+
+  async function calculateFolderSize(folder: web3n.files.ReadonlyFS): Promise<number> {
+    let size = 0;
+    let entries: web3n.files.ListingEntry[];
+    try {
+      entries = await folder.listFolder('');
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (e) {
+      entries = [];
     }
-  }
 
-  return size;
-}
-
-function deleteAttachment() {
-  cancelFolderSizeCalculation.value = true;
-  emits('delete');
-}
-
-async function makeThumbnailTask() {
-  try {
-    if (isFileImage({ fullName: props.info.name.toLowerCase() })) {
-      thumbnail.value = await createImageThumbnail({
-        file3n: props.entity as web3n.files.ReadonlyFile,
-        targetSize: 84,
-      });
-    } else if (isFileVideo({ fullName: props.info.name.toLowerCase() })) {
-      thumbnail.value = await createVideoThumbnail({
-        file3n: props.entity as web3n.files.ReadonlyFile,
-        targetSize: 84,
-      });
-    } else if (ext.value === 'pdf') {
-      thumbnail.value = await createPdfThumbnail({
-        file3n: props.entity as web3n.files.ReadonlyFile,
-        targetSize: 84,
-      });
-    }
-  } catch (e) {
-    w3n.log('error', `Error making thumbnail for ${props.info.name} file.`, e);
-  } finally {
-    isThumbnailCreationProcessGoingOn.value = false;
-  }
-}
-
-async function makeThumbnail() {
-  if (!attachment.value.isPossibleThumbnail) {
-    return;
-  }
-
-  isThumbnailCreationProcessGoingOn.value = true;
-  addTask(makeThumbnailTask);
-}
-
-makeThumbnail();
-
-onBeforeMount(() => {
-  if (props.info.isFolder) {
-    isCalculatingFolderSize.value = true;
-    folderSize.value = 0;
-    nextTick(async () => {
-      try {
-        const folderSize = await calculateFolderSize(props.entity as web3n.files.ReadonlyFS);
-        emits('change:size', folderSize);
-      } finally {
-        isCalculatingFolderSize.value = false;
+    for (const entry of entries || []) {
+      if (cancelFolderSizeCalculation.value) {
+        break;
       }
-    });
-  }
-});
 
-watch(
-  folderSize,
-  (val) => {
+      const { name, isFile, isFolder } = entry;
+      if (isFile) {
+        const stat = await getEntityStat(folder, name, true);
+        size += stat.size!;
+        folderSize.value += stat.size!;
+        await schedulerYield();
+      } else if (isFolder) {
+        const newFolder = await folder.readonlySubRoot(name);
+        size += await calculateFolderSize(newFolder);
+      }
+    }
+
+    return size;
+  }
+
+  function deleteAttachment() {
+    cancelFolderSizeCalculation.value = true;
+    emits('delete');
+  }
+
+  async function makeThumbnailTask() {
+    try {
+      if (isFileImage({ fullName: props.info.name.toLowerCase() })) {
+        thumbnail.value = await createImageThumbnail({
+          file3n: props.entity as web3n.files.ReadonlyFile,
+          targetSize: 84,
+        });
+      } else if (isFileVideo({ fullName: props.info.name.toLowerCase() })) {
+        thumbnail.value = await createVideoThumbnail({
+          file3n: props.entity as web3n.files.ReadonlyFile,
+          targetSize: 84,
+        });
+      } else if (ext.value === 'pdf') {
+        thumbnail.value = await createPdfThumbnail({
+          file3n: props.entity as web3n.files.ReadonlyFile,
+          targetSize: 84,
+        });
+      }
+    } catch (e) {
+      w3n.log('error', `Error making thumbnail for ${props.info.name} file.`, e);
+    } finally {
+      isThumbnailCreationProcessGoingOn.value = false;
+    }
+  }
+
+  async function makeThumbnail() {
+    if (!attachment.value.isPossibleThumbnail) {
+      return;
+    }
+
+    isThumbnailCreationProcessGoingOn.value = true;
+    addTask(makeThumbnailTask);
+  }
+
+  makeThumbnail();
+
+  onBeforeMount(() => {
+    if (props.info.isFolder) {
+      isCalculatingFolderSize.value = true;
+      folderSize.value = 0;
+      nextTick(async () => {
+        try {
+          const folderSize = await calculateFolderSize(props.entity as web3n.files.ReadonlyFS);
+          emits('change:size', folderSize);
+        } finally {
+          isCalculatingFolderSize.value = false;
+        }
+      });
+    }
+  });
+
+  watch(folderSize, val => {
     emits('change:size', val || 0);
-  },
-);
+  });
 </script>
 
 <template>
@@ -270,104 +275,104 @@ watch(
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/mixins' as mixins;
+  @use '@main/common/assets/styles/mixins' as mixins;
 
-.chatAttachment {
-  --chat-attachment-body-size: 124px;
+  .chatAttachment {
+    --chat-attachment-body-size: 124px;
 
-  position: relative;
-  display: flex;
-  min-width: var(--chat-attachment-body-size);
-  width: var(--chat-attachment-body-size);
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: center;
-  row-gap: var(--spacing-xs);
-  border-radius: var(--spacing-s);
-  padding: var(--spacing-s);
-  background-color: var(--color-bg-table-d-cell-default);
+    position: relative;
+    display: flex;
+    min-width: var(--chat-attachment-body-size);
+    width: var(--chat-attachment-body-size);
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    row-gap: var(--spacing-xs);
+    border-radius: var(--spacing-s);
+    padding: var(--spacing-s);
+    background-color: var(--color-bg-table-d-cell-default);
 
-  &:hover {
-    .del {
+    &:hover {
+      .del {
+        opacity: 1;
+      }
+    }
+  }
+
+  .del {
+    position: absolute;
+    width: var(--spacing-m);
+    height: var(--spacing-m);
+    border-radius: 50%;
+    top: 0;
+    right: 0;
+    z-index: 1;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+
+    &:hover {
       opacity: 1;
     }
   }
-}
 
-.del {
-  position: absolute;
-  width: var(--spacing-m);
-  height: var(--spacing-m);
-  border-radius: 50%;
-  top: 0;
-  right: 0;
-  z-index: 1;
-  opacity: 0;
-  transition: opacity 0.3s ease-in-out;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
+  .name {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
 
-  &:hover {
-    opacity: 1;
+    span {
+      display: block;
+      font-size: var(--font-12);
+      font-weight: 600;
+      line-height: var(--font-16);
+      color: var(--color-text-control-primary-default);
+      @include mixins.text-overflow-ellipsis();
+    }
   }
-}
 
-.name {
-  position: relative;
-  width: 100%;
-  overflow: hidden;
+  .body {
+    position: relative;
+    display: flex;
+    width: 100%;
+    aspect-ratio: 5 / 4;
+    justify-content: center;
+    align-items: center;
+  }
 
-  span {
-    display: block;
-    font-size: var(--font-12);
+  .preview {
+    position: relative;
+    min-width: 84px;
+    width: 84px;
+    height: 84px;
+    border-radius: var(--spacing-xs);
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .info {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .type,
+  .size {
+    position: relative;
+    min-width: var(--spacing-s);
+  }
+
+  .size {
+    font-size: 11px;
     font-weight: 600;
-    line-height: var(--font-16);
-    color: var(--color-text-control-primary-default);
-    @include mixins.text-overflow-ellipsis();
+    color: var(--color-text-table-primary-default);
   }
-}
-
-.body {
-  position: relative;
-  display: flex;
-  width: 100%;
-  aspect-ratio: 5 / 4;
-  justify-content: center;
-  align-items: center;
-}
-
-.preview {
-  position: relative;
-  min-width: 84px;
-  width: 84px;
-  height: 84px;
-  border-radius: var(--spacing-xs);
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.info {
-  display: flex;
-  width: 100%;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.type,
-.size {
-  position: relative;
-  min-width: var(--spacing-s);
-}
-
-.size {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-table-primary-default);
-}
 </style>

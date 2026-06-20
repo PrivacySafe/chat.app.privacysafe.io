@@ -1,7 +1,8 @@
 import { computed, inject, onBeforeMount, onMounted, ref, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
-import { I18N_KEY, I18nPlugin, NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import { NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import type { DeviceOption } from '@video/common/types';
 import { useAppStore } from '@video/common/store/app.store';
 import { useStreamsStore } from '@video/common/store/streams.store';
@@ -9,7 +10,7 @@ import { useStreamsStore } from '@video/common/store/streams.store';
 export function useVaSetup() {
   const router = useRouter();
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
   const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const appStore = useAppStore();
@@ -96,7 +97,7 @@ export function useVaSetup() {
     if (!isCamOn.value && !haveVideo.value) {
       notification.$createNotice({
         type: 'error',
-        content: $tr('va.setup.no-cameras'),
+        content: t('va.setup.notification.no_cameras'),
       });
     } else {
       setCamOn(!isCamOn.value);
@@ -122,7 +123,7 @@ export function useVaSetup() {
   });
 
   return {
-    $tr,
+    t,
     user,
     isAnyOneConnected,
     choicesWithVideoInput,

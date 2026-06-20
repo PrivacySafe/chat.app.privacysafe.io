@@ -171,6 +171,7 @@ watch(
   display: flex;
   justify-content: flex-start;
   align-items: center;
+  column-gap: var(--spacing-xs);
   color: var(--color-text-control-primary-default);
 
   :global(.ui3n-icon) {

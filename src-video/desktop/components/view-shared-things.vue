@@ -15,63 +15,65 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-import { computed, inject, nextTick, ref, watch } from 'vue';
-import { storeToRefs } from 'pinia';
-import size from 'lodash/size';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import {
-  Ui3nButton,
-  Ui3nIcon,
-  Ui3nRipple as vUi3nRipple,
-  Ui3nTooltip,
-  type Nullable,
-} from '@v1nt1248/3nclient-lib';
-import type { OwnScreen } from '@video/common/types';
-import { useStreamsStore } from '@video/common/store/streams.store.ts';
-import VideoStream from '@video/common/components/video-stream.vue';
+  import { computed, nextTick, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
+  import size from 'lodash/size';
+  import {
+    Ui3nButton,
+    Ui3nIcon,
+    Ui3nRipple as vUi3nRipple,
+    Ui3nTooltip,
+    type Nullable,
+  } from '@v1nt1248/3nclient-lib';
+  import type { OwnScreen } from '@video/common/types';
+  import { useStreamsStore } from '@video/common/store/streams.store.ts';
+  import VideoStream from '@video/common/components/video-stream.vue';
 
-interface PeerShared {
-  peerAddr: string;
-  peerName: string;
-  stream: MediaStream;
-}
-
-const props = defineProps<{
-  things: (OwnScreen | PeerShared)[];
-}>();
-
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-
-const streamsStore = useStreamsStore();
-const { isSharingOwnDeskSound } = storeToRefs(streamsStore);
-const { setOwnDeskSoundSharing, removeOwnScreen } = streamsStore;
-
-const currentSharedItem = ref(0);
-
-const processedSharedItems = computed(() => props.things.map((thing) => ({
-  ...thing,
-  id: (thing as OwnScreen).srcId || (thing as PeerShared).peerAddr,
-})));
-
-const selectedSharedItem = ref<Nullable<OwnScreen | PeerShared>>(processedSharedItems.value[0]);
-
-function selectSharedItem(index: number) {
-  currentSharedItem.value = index;
-  selectedSharedItem.value = null;
-
-  nextTick(() => {
-    selectedSharedItem.value = processedSharedItems.value[currentSharedItem.value];
-  });
-}
-
-watch(
-  () => size(processedSharedItems.value),
-  (val, oldVal) => {
-    if (val !== oldVal) {
-      size(processedSharedItems.value) > 0 && selectSharedItem(0);
-    }
+  interface PeerShared {
+    peerAddr: string;
+    peerName: string;
+    stream: MediaStream;
   }
-);
+
+  const props = defineProps<{
+    things: (OwnScreen | PeerShared)[];
+  }>();
+
+  const { t } = useI18n();
+
+  const streamsStore = useStreamsStore();
+  const { isSharingOwnDeskSound } = storeToRefs(streamsStore);
+  const { setOwnDeskSoundSharing, removeOwnScreen } = streamsStore;
+
+  const currentSharedItem = ref(0);
+
+  const processedSharedItems = computed(() =>
+    props.things.map(thing => ({
+      ...thing,
+      id: (thing as OwnScreen).srcId || (thing as PeerShared).peerAddr,
+    })),
+  );
+
+  const selectedSharedItem = ref<Nullable<OwnScreen | PeerShared>>(processedSharedItems.value[0]);
+
+  function selectSharedItem(index: number) {
+    currentSharedItem.value = index;
+    selectedSharedItem.value = null;
+
+    nextTick(() => {
+      selectedSharedItem.value = processedSharedItems.value[currentSharedItem.value];
+    });
+  }
+
+  watch(
+    () => size(processedSharedItems.value),
+    (val, oldVal) => {
+      if (val !== oldVal) {
+        size(processedSharedItems.value) > 0 && selectSharedItem(0);
+      }
+    },
+  );
 </script>
 
 <template>
@@ -79,7 +81,7 @@ watch(
     :class="[
       $style.viewSharedThings,
       isSharingOwnDeskSound && $style.withDeskSound,
-      size(things) > 1 && $style.withTabs
+      size(things) > 1 && $style.withTabs,
     ]"
   >
     <div
@@ -93,7 +95,7 @@ watch(
           height="16"
         />
 
-        <span>{{ $tr('sharing.desktop.sound') }}</span>
+        <span>{{ t('call.sharing.desktop_sound') }}</span>
       </div>
 
       <ui3n-button
@@ -155,96 +157,96 @@ watch(
 </template>
 
 <style lang="scss" module>
-.viewSharedThings {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding-left: var(--spacing-l);
-  background-color: var(--color-bg-block-primary-default);
-  color: var(--color-text-block-primary-default);
+  .viewSharedThings {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding-left: var(--spacing-l);
+    background-color: var(--color-bg-block-primary-default);
+    color: var(--color-text-block-primary-default);
 
-  &.withDeskSound {
-    padding-top: var(--spacing-xl);
+    &.withDeskSound {
+      padding-top: var(--spacing-xl);
 
-    .tabs {
-      top: var(--spacing-xl);
+      .tabs {
+        top: var(--spacing-xl);
+      }
+    }
+
+    &.withTabs {
+      padding-left: var(--spacing-xl);
     }
   }
 
-  &.withTabs {
-    padding-left: var(--spacing-xl);
+  .title {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: var(--spacing-xl);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: var(--font-16);
+    font-weight: 600;
+    border-bottom: 1px solid var(--color-border-block-primary-default);
   }
-}
 
-.title {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: var(--spacing-xl);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--font-16);
-  font-weight: 600;
-  border-bottom: 1px solid var(--color-border-block-primary-default);
-}
+  .withPadding {
+    padding: 0 var(--spacing-m);
+  }
 
-.withPadding {
-  padding: 0 var(--spacing-m);
-}
+  .name {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-s);
+  }
 
-.name {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  column-gap: var(--spacing-s);
-}
+  .tabs {
+    position: absolute;
+    left: 0;
+    width: var(--spacing-xl);
+    top: 0;
+    bottom: 0;
+    border-right: 1px solid var(--color-border-block-primary-default);
+  }
 
-.tabs {
-  position: absolute;
-  left: 0;
-  width: var(--spacing-xl);
-  top: 0;
-  bottom: 0;
-  border-right: 1px solid var(--color-border-block-primary-default);
-}
-
-.selected {
-  background-color: var(--color-bg-control-primary-hover);
-}
-
-.tab {
-  position: relative;
-  width: var(--spacing-xl);
-  height: var(--spacing-xl);
-  border-radius: var(--spacing-xs);
-  overflow: hidden;
-
-  &:hover {
+  .selected {
     background-color: var(--color-bg-control-primary-hover);
   }
 
-  &:not(.selectedTab) {
-    cursor: pointer;
+  .tab {
+    position: relative;
+    width: var(--spacing-xl);
+    height: var(--spacing-xl);
+    border-radius: var(--spacing-xs);
+    overflow: hidden;
+
+    &:hover {
+      background-color: var(--color-bg-control-primary-hover);
+    }
+
+    &:not(.selectedTab) {
+      cursor: pointer;
+    }
   }
-}
 
-.tabBody {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: var(--font-16);
-  font-weight: 600;
-}
+  .tabBody {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: var(--font-16);
+    font-weight: 600;
+  }
 
-.body {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding-top: var(--spacing-l);
-}
+  .body {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding-top: var(--spacing-l);
+  }
 </style>

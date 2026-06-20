@@ -16,117 +16,138 @@
 -->
 
 <script lang="ts" setup>
-import { Ui3nSwitch } from '@v1nt1248/3nclient-lib';
-import type { SharedStream } from '@video/common/types';
-import { useScreenShareChoiceDialog } from './sharing-choice-dialog';
-import SharePreview from '@video/desktop/components/share-preview.vue';
+  import { useI18n } from 'vue-i18n';
+  import {
+    Ui3nDialog,
+    type Ui3nDialogComponentProps,
+    type Ui3nDialogEvent,
+    Ui3nSwitch,
+  } from '@v1nt1248/3nclient-lib';
+  import type { SharedStream } from '@video/common/types';
+  import { useScreenShareChoiceDialog } from './sharing-choice-dialog';
+  import SharePreview from '@video/desktop/components/share-preview.vue';
 
-export interface ScreenShareChoicesProps {
-  initiallyShared: SharedStream[];
-  initialDeskSoundShared: boolean;
-}
+  export interface ScreenShareChoicesProps {
+    initiallyShared: SharedStream[];
+    initialDeskSoundShared: boolean;
+    dialogProps?: Ui3nDialogComponentProps<{ selected: SharedStream[]; selectedDeskSound: boolean }>;
+  }
 
-export interface ScreenShareChoicesEmits {
-  (event: 'select', value: unknown): void;
-}
+  export interface ScreenShareChoicesEvents {
+    (
+      event: 'action',
+      value: { event: Ui3nDialogEvent; data?: { selected: SharedStream[]; selectedDeskSound: boolean } },
+    ): void;
+  }
 
-const props = defineProps<ScreenShareChoicesProps>();
-const emits = defineEmits<ScreenShareChoicesEmits>();
+  const props = defineProps<ScreenShareChoicesProps>();
+  const emits = defineEmits<ScreenShareChoicesEvents>();
 
-const {
-  isAudioCaptureAvailable,
-  selectAudio,
-  windowChoices,
-  screenChoices,
-  onOptionSelectionChange,
-  onDeskSoundChange,
-} = useScreenShareChoiceDialog(props, emits);
+  const { t } = useI18n();
+
+  const {
+    data,
+    isAudioCaptureAvailable,
+    selectAudio,
+    windowChoices,
+    screenChoices,
+    onOptionSelectionChange,
+    onDeskSoundChange,
+  } = useScreenShareChoiceDialog(props);
 </script>
 
 <template>
-  <div :class="$style.shareOptions">
-    <div :class="$style.body">
-      <div
-        v-if="isAudioCaptureAvailable"
-        :class="$style.soundShare"
-      >
-        <ui3n-switch
-          v-model="selectAudio"
-          size="24"
-          @change="onDeskSoundChange"
-        >
-          {{ $tr('sharing.settings.sound.share') }}
-        </ui3n-switch>
-      </div>
+  <ui3n-dialog
+    v-bind="dialogProps"
+    :data="data"
+    @action="emits('action', $event)"
+  >
+    <template #body>
+      <div :class="$style.shareOptions">
+        <div :class="$style.body">
+          <div
+            v-if="isAudioCaptureAvailable"
+            :class="$style.soundShare"
+          >
+            <ui3n-switch
+              v-model="selectAudio"
+              size="24"
+              @change="onDeskSoundChange"
+            >
+              {{ t('call.sharing.settings.sound_share') }}
+            </ui3n-switch>
+          </div>
 
-      <div :class="$style.block">
-        <div :class="$style.blockTitle">
-          {{ $tr('sharing.settings.screens.title') }}:
+          <div :class="$style.block">
+            <div :class="$style.blockTitle">
+              {{ t('call.sharing.settings.screens_title') }}:
+            </div>
+
+            <share-preview
+              v-for="screen in screenChoices"
+              :key="screen.srcId"
+              :opts="screen"
+              @selected="v => onOptionSelectionChange(screen, v)"
+            />
+          </div>
+
+          <div :class="$style.block">
+            <div :class="$style.blockTitle">
+              {{ t('call.sharing.settings.windows_title') }}:
+            </div>
+
+            <share-preview
+              v-for="frame in windowChoices"
+              :key="frame.srcId"
+              :opts="frame"
+              @selected="v => onOptionSelectionChange(frame, v)"
+            />
+          </div>
         </div>
-
-        <share-preview
-          v-for="screen in screenChoices"
-          :key="screen.srcId"
-          :opts="screen"
-          @selected="v => onOptionSelectionChange(screen, v)"
-        />
       </div>
-
-      <div :class="$style.block">
-        <div :class="$style.blockTitle">
-          {{ $tr('sharing.settings.windows.title') }}:
-        </div>
-
-        <share-preview
-          v-for="frame in windowChoices"
-          :key="frame.srcId"
-          :opts="frame"
-          @selected="v => onOptionSelectionChange(frame, v)"
-        />
-      </div>
-    </div>
-  </div>
+    </template>
+  </ui3n-dialog>
 </template>
 
 <style lang="scss" module>
-.shareOptions {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding: var(--spacing-m);
-}
+  .shareOptions {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: var(--spacing-m);
+  }
 
-.body {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow-y: auto;
-}
+  .body {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+  }
 
-.soundShare {
-  margin-bottom: var(--spacing-m);
-}
+  .soundShare {
+    margin-bottom: var(--spacing-m);
+  }
 
-.block {
-  position: relative;
-  width: 100%;
-  padding-top: var(--spacing-l);
-  padding-right: var(--spacing-m);
-  margin-bottom: var(--spacing-m);
-  display: grid;
-  grid-template-columns: repeat(auto-fill, 340px);
-  gap: var(--spacing-m);
-}
+  .block {
+    position: relative;
+    width: 100%;
+    padding-top: var(--spacing-l);
+    padding-right: var(--spacing-m);
+    margin-bottom: var(--spacing-m);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 340px);
+    gap: var(--spacing-m);
+  }
 
-.blockTitle {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: var(--spacing-l);
-  font-size: var(--font-16);
-  font-weight: 600;
-  line-height: var(--spacing-l);
-  color: var(--color-text-control-primary-default);
-}
+  .blockTitle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--spacing-l);
+    font-size: var(--font-16);
+    font-weight: 600;
+    line-height: var(--spacing-l);
+    color: var(--color-text-control-primary-default);
+  }
 </style>

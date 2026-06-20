@@ -1,10 +1,8 @@
 import type { ChatListItemView } from '~/chat.types.ts';
+import type { Ui3nDialogComponentProps } from '@v1nt1248/3nclient-lib';
 
 export interface ChatInfoDialogProps {
   chat: ChatListItemView;
   isMobileMode?: boolean;
-}
-
-export interface ChatInfoDialogEmits {
-  (event: 'close'): void;
+  dialogProps?: Ui3nDialogComponentProps<void>;
 }

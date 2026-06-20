@@ -21,7 +21,7 @@ declare namespace web3n.testing {
 		testStand: testing.TestStand;
 	}
 
-	interface StartupW3N extends web3n.startup.W3N {
+	interface StartupW3N extends web3n.caps.startup.W3N {
 		testStand: testing.StartupTestStand;
 	}
 

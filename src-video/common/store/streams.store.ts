@@ -30,9 +30,7 @@ import type { OwnVideoAudio, PeerState } from '@video/common/types';
 import type { ChatIdObj } from '~/asmail-msgs.types';
 import { generateChatMessageId } from '@shared/chat-ids';
 
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-function noop() {
-}
+function noop() {}
 
 export const useStreamsStore = defineStore('streams', () => {
   const appStore = useAppStore();
@@ -47,19 +45,15 @@ export const useStreamsStore = defineStore('streams', () => {
   const isMicOn = ref(false);
   const isCamOn = ref(false);
 
-  const isOwnAudioAvailable = computed(() => ownVA.value
-    ? ownVA.value.stream.getAudioTracks().length > 0
-    : undefined,
+  const isOwnAudioAvailable = computed(() =>
+    ownVA.value ? ownVA.value.stream.getAudioTracks().length > 0 : undefined,
   );
-  const isOwnVideoAvailable = computed(() => ownVA.value
-    ? ownVA.value.stream.getVideoTracks().length > 0
-    : undefined,
+  const isOwnVideoAvailable = computed(() =>
+    ownVA.value ? ownVA.value.stream.getVideoTracks().length > 0 : undefined,
   );
 
   const isGroupChat = computed(() => chatObjId.value?.isGroupChat);
-  const isAnyOneConnected = computed(
-    () => !!peers.value.find(p => p.webRTCConnected),
-  );
+  const isAnyOneConnected = computed(() => !!peers.value.find(p => p.webRTCConnected));
   const singlePeer = computed(() => peers.value[0]);
 
   const peerFuncs = usePeerFuncs(getPeer);
@@ -70,11 +64,13 @@ export const useStreamsStore = defineStore('streams', () => {
       isMicOn.value = val;
       toggleAudioIn(ownVA.value.stream, val);
       const streamId = ownVA.value.stream.id;
-      peers.value.forEach(({ channel }) => channel.signalOwnStreamState({
-        streamId,
-        audio: val,
-        video: isCamOn.value,
-      }));
+      peers.value.forEach(({ channel }) =>
+        channel.signalOwnStreamState({
+          streamId,
+          audio: val,
+          video: isCamOn.value,
+        }),
+      );
     }
   }
 
@@ -83,11 +79,13 @@ export const useStreamsStore = defineStore('streams', () => {
       isCamOn.value = val;
       toggleVideoIn(ownVA.value.stream, val);
       const streamId = ownVA.value.stream.id;
-      peers.value.forEach(({ channel }) => channel.signalOwnStreamState({
-        streamId,
-        audio: isMicOn.value,
-        video: isCamOn.value,
-      }));
+      peers.value.forEach(({ channel }) =>
+        channel.signalOwnStreamState({
+          streamId,
+          audio: isMicOn.value,
+          video: isCamOn.value,
+        }),
+      );
     }
   }
 
@@ -109,22 +107,24 @@ export const useStreamsStore = defineStore('streams', () => {
     chatNom: string,
     ownNom: string,
     ownAddress: string,
-    otherPeers: { addr: string, name: string }[],
+    otherPeers: { addr: string; name: string }[],
     makePeerChannel: (peerAddr: string) => PeerChannelWithStreams,
   ): void {
     chatObjId.value = chatId;
     chatName.value = chatNom;
     ownName.value = ownNom;
     ownAddr.value = ownAddress;
-    peers.value = otherPeers.map(({ addr: peerAddr, name: peerName }) => makePeerState(
-      peerAddr, peerName, makePeerChannel(peerAddr),
-    ));
+    peers.value = otherPeers.map(({ addr: peerAddr, name: peerName }) =>
+      makePeerState(peerAddr, peerName, makePeerChannel(peerAddr)),
+    );
   }
 
   function getPeer(peerAddr: string) {
     const peer = peers.value.find(p => areAddressesEqual(p.peerAddr, peerAddr));
     if (!peer) {
-      throw new Error(`Peer with address ${peerAddr} not found among ${peers.value.length} peers. Is it exact spelling as is used in chat info?`);
+      throw new Error(
+        `Peer with address ${peerAddr} not found among ${peers.value.length} peers. Is it exact spelling as is used in chat info?`,
+      );
     }
 
     return peer as PeerState;
@@ -133,7 +133,9 @@ export const useStreamsStore = defineStore('streams', () => {
   function updatePeer(peerAddr: string, data: Partial<PeerState> = {}) {
     const peerIndex = peers.value.findIndex(p => areAddressesEqual(p.peerAddr, peerAddr));
     if (peerIndex === -1) {
-      throw new Error(`Peer with address ${peerAddr} not found among ${peers.value.length} peers. Is it exact spelling as is used in chat info?`);
+      throw new Error(
+        `Peer with address ${peerAddr} not found among ${peers.value.length} peers. Is it exact spelling as is used in chat info?`,
+      );
     }
 
     Object.keys(data).forEach(field => {
@@ -147,11 +149,13 @@ export const useStreamsStore = defineStore('streams', () => {
       throw new Error(`Own stream is not set`);
     }
 
-    Promise.allSettled(peers.value.map(
-      peer => peer.channel.connect().then(() => {
-        peer.channel.sendUserMediaStream(ownVA.value!.stream);
-      }, noop),
-    ));
+    Promise.allSettled(
+      peers.value.map(peer =>
+        peer.channel.connect().then(() => {
+          peer.channel.sendUserMediaStream(ownVA.value!.stream);
+        }, noop),
+      ),
+    );
 
     videoChatSrv.notifyBkgrndInstanceOnCallStart();
   }
@@ -165,9 +169,10 @@ export const useStreamsStore = defineStore('streams', () => {
 
     if (isGroupChat.value) {
       await Promise.allSettled(
-        peers.value.map(({ peerAddr, channel }) => channel.close()
-          .catch(err => w3n.log('error', `Error closing channel with ${peerAddr}`, err)),
-        ));
+        peers.value.map(({ peerAddr, channel }) =>
+          channel.close().catch(err => w3n.log('error', `Error closing channel with ${peerAddr}`, err)),
+        ),
+      );
     } else {
       await singlePeer.value.channel.close();
     }

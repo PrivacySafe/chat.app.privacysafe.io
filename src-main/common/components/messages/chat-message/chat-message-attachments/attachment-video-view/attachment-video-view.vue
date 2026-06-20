@@ -15,42 +15,39 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-import {
-  Ui3nButton,
-  Ui3nIcon,
-  Ui3nProgressCircular,
-  Ui3nSlider,
-  Ui3nTooltip,
-} from '@v1nt1248/3nclient-lib';
-import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
-import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
-import { useVideoView } from './useVideoView';
+  import { useI18n } from 'vue-i18n';
+  import { Ui3nButton, Ui3nIcon, Ui3nProgressCircular, Ui3nSlider, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+  import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
+  import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
+  import { useVideoView } from './useVideoView';
 
-export interface AttachmentVideoViewEmits {
-  (event: 'error'): void;
-}
+  export interface AttachmentVideoViewEmits {
+    (event: 'error'): void;
+  }
 
-const props = defineProps<{
-  item: AttachmentViewInfo;
-  incomingMsgId?: string;
-  isMobileMode?: boolean;
-}>();
-const emits = defineEmits<AttachmentVideoViewEmits>();
+  const props = defineProps<{
+    item: AttachmentViewInfo;
+    incomingMsgId?: string;
+    isMobileMode?: boolean;
+  }>();
+  const emits = defineEmits<AttachmentVideoViewEmits>();
 
-const {
-  isProcessing,
-  isPlaying,
-  videoPlayerRef,
-  currentTime,
-  duration,
-  volume,
-  currentTimeAsText,
-  durationAsText,
-  updateVolume,
-  updateCurrentTime,
-  play,
-  pause,
-} = useVideoView({ item: props.item, incomingMsgId: props.incomingMsgId, emits });
+  const { t } = useI18n();
+
+  const {
+    isProcessing,
+    isPlaying,
+    videoPlayerRef,
+    currentTime,
+    duration,
+    volume,
+    currentTimeAsText,
+    durationAsText,
+    updateVolume,
+    updateCurrentTime,
+    play,
+    pause,
+  } = useVideoView({ item: props.item, incomingMsgId: props.incomingMsgId, emits });
 </script>
 
 <template>
@@ -63,9 +60,7 @@ const {
     <div :class="$style.videoPlayerControl">
       <div :class="$style.videoPlayerControlBody">
         <div :class="$style.videoPlayerControlActionsAdditional">
-          <ui3n-icon
-            icon="round-volume-mute"
-          />
+          <ui3n-icon icon="round-volume-mute" />
 
           <div :class="$style.volume">
             <ui3n-slider
@@ -85,7 +80,7 @@ const {
 
         <div :class="$style.videoPlayerControlActions">
           <ui3n-tooltip
-            :content="$tr('chat.player.play')"
+            :content="t('chat.viewer.tooltip.play')"
             placement="top-end"
             position-strategy="fixed"
           >
@@ -99,7 +94,7 @@ const {
           </ui3n-tooltip>
 
           <ui3n-tooltip
-            :content="$tr('chat.player.pause')"
+            :content="t('chat.viewer.tooltip.pause')"
             placement="top-end"
             position-strategy="fixed"
           >
@@ -146,90 +141,90 @@ const {
 </template>
 
 <style lang="scss" module>
-.videoView {
-  --video-view-padding: 48px 16px 104px 16px;
-  --video-player-control-height: 64px;
+  .videoView {
+    --video-view-padding: 48px 16px 104px 16px;
+    --video-player-control-height: 64px;
 
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding: var(--video-view-padding);
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: var(--video-view-padding);
 
-  &.mobile {
-    .videoPlayerControlActionsAdditional {
-      width: 108px;
+    &.mobile {
+      .videoPlayerControlActionsAdditional {
+        width: 108px;
+      }
     }
   }
-}
 
-.videoPlayer {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.videoPlayerControl {
-  position: absolute;
-  left: 0;
-  bottom: 24px;
-  width: 100%;
-  height: var(--audio-panel-height);
-  padding: 0 var(--spacing-m);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.videoPlayerControlBody {
-  display: flex;
-  width: 100%;
-  height: 32px;
-  justify-content: space-between;
-  align-items: center;
-  column-gap: var(--spacing-s);
-}
-
-.videoPlayerTime {
-  position: relative;
-  width: 72px;
-  font-size: var(--font-18);
-  font-weight: 500;
-  color: var(--color-text-block-primary-default);
-  text-align: left;
-
-  &.right {
-    text-align: right;
+  .videoPlayer {
+    position: relative;
+    width: 100%;
+    height: 100%;
   }
-}
 
-.videoPlayerControlActions,
-.videoPlayerControlActionsAdditional {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  column-gap: var(--spacing-xs);
-}
-
-.videoPlayerControlActionsAdditional {
-  width: 140px;
-
-  span {
-    font-size: var(--font-12);
+  .videoPlayerControl {
+    position: absolute;
+    left: 0;
+    bottom: 24px;
+    width: 100%;
+    height: var(--audio-panel-height);
+    padding: 0 var(--spacing-m);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
   }
-}
 
-.volume {
-  flex-grow: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
+  .videoPlayerControlBody {
+    display: flex;
+    width: 100%;
+    height: 32px;
+    justify-content: space-between;
+    align-items: center;
+    column-gap: var(--spacing-s);
+  }
 
-.loader {
-  position: absolute;
-  z-index: 5500;
-  left: calc(50% - 54px);
-  top: 50%;
-  transform: translateY(-50%);
-}
+  .videoPlayerTime {
+    position: relative;
+    width: 72px;
+    font-size: var(--font-18);
+    font-weight: 500;
+    color: var(--color-text-block-primary-default);
+    text-align: left;
+
+    &.right {
+      text-align: right;
+    }
+  }
+
+  .videoPlayerControlActions,
+  .videoPlayerControlActionsAdditional {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    column-gap: var(--spacing-xs);
+  }
+
+  .videoPlayerControlActionsAdditional {
+    width: 140px;
+
+    span {
+      font-size: var(--font-12);
+    }
+  }
+
+  .volume {
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .loader {
+    position: absolute;
+    z-index: 5500;
+    left: calc(50% - 54px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
 </style>

@@ -15,12 +15,17 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import type { StoredInvitationParams, ChatIdObj, ChatSystemMessageData } from './asmail-msgs.types';
-import type { AddressCheckResult } from '~/services.types';
-import type { ChatSettings } from '@bg/dataset/versions/v2/chats-db';
+import type {
+  StoredInvitationParams,
+  ChatIdObj,
+  ChatSystemMessageData,
+  ChatMessageType,
+} from './asmail-msgs.types';
+import type { AddressCheckResult } from './services.types.ts';
+import type { ChatSettings } from '../src-deno/types/index.ts';
 
 export type ChatMenuAction =
-  'chat:info'
+  | 'chat:info'
   | 'chat:rename'
   | 'history:export'
   | 'history:clean'
@@ -177,7 +182,7 @@ export type ChatMessageView = RegularMsgView | ChatSysMsgView | ChatInvitationMs
 
 export type IncomingMessageStatus = 'read' | 'unread';
 
-export type OutgoingMessageStatus = 'sending' | 'sent' | 'error' | 'canceled' | 'read';
+export type OutgoingMessageStatus = 'sending' | 'syncing_self' | 'sent' | 'error' | 'canceled' | 'read';
 
 export type MessageStatus = IncomingMessageStatus | OutgoingMessageStatus;
 
@@ -227,6 +232,6 @@ export interface ChatException extends web3n.RuntimeException {
 export interface LocalMetadataInDelivery {
   chatId: ChatIdObj;
   chatMessageId?: ChatMessageView['chatMessageId'];
-  chatMessageType: ChatMessageView['chatMessageType'];
+  chatMessageType: ChatMessageType;
   chatSystemData?: ChatSystemMessageData;
 }

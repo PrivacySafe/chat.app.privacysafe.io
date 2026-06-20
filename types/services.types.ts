@@ -19,138 +19,13 @@ import type {
   ChatIdObj,
   ChatMessageId,
   ChatIncomingMessage,
-  RelatedMessage,
-  UpdateMembersSysMsgData,
   WebRTCMsg,
   WebRTCOffBandMessage,
-  UpdateAdminsSysMsgData,
   WebRTCMsgBodySysMsgData,
   ChatOutgoingMessage,
-  ChatSystemMsgV1,
 } from './asmail-msgs.types';
-import type {
-  ChatMessageView,
-  ChatListItemView,
-  SingleChatView,
-  GroupChatView, ChatMessageReaction,
-} from './chat.types';
-import type { MsgDbEntry } from '@bg/dataset/versions/v2/msgs-db.ts';
-import { SendingProgressInfo } from '@bg/chat-service';
-import type { ChatSettings } from '@bg/dataset/versions/v2/chats-db.ts';
-
-/**
- * This app's service.
- * It is a singleton in "background instance" component.
- * This service manages data state of chats app.
- */
-export interface ChatServiceIPC {
-
-  /**
-   * Creates new one-to-one chat. In case of an error it throws quite soon.
-   * When local data allows chat creation, this returns id of created chat.
-   * New chat object is pushed in event, observable via watch() method.
-   * @param value contains chat parameters and this user's own name, which peer
-   * can use as a name of this one-to-one chat.
-   */
-  createOneToOneChat(
-    value: Pick<SingleChatView, 'peerAddr' | 'name'> & { ownName?: string },
-  ): Promise<ChatIdObj>;
-
-  /**
-   * Accepts chat invitation.
-   * @param chatId
-   * @param chatMessageId
-   * @param ownName is a name one wants to use in the chat
-   */
-  acceptChatInvitation(
-    chatId: ChatIdObj, chatMessageId: string, ownName: string,
-  ): Promise<void>;
-
-  /**
-   * Creates new group chat. In case of an error it throws quite soon.
-   * When local data allows chat creation, this returns id of created chat.
-   * New chat object is pushed in event, observable via watch() method.
-   * @param value contains parameters of a group chat.
-   */
-  createGroupChat(
-    value: Pick<GroupChatView, 'chatId' | 'members' | 'name'>,
-  ): Promise<ChatIdObj>;
-
-  getChatList(): Promise<ChatListItemView[]>;
-
-  renameChat(chatId: ChatIdObj, newName: string): Promise<void>;
-
-  chatSetUp(chatId: ChatIdObj, data: Partial<ChatSettings>): Promise<void>;
-
-  deleteChat(chatId: ChatIdObj): Promise<void>;
-
-  updateGroupMembers(chatId: ChatIdObj, changes: UpdateMembersSysMsgData['value']): Promise<void>;
-
-  updateGroupAdmins(chatId: ChatIdObj, changes: UpdateAdminsSysMsgData['value']): Promise<void>;
-
-  getChat(chatId: ChatIdObj): Promise<ChatListItemView | undefined>;
-
-  postProcessingForVideoChat(): {
-    doAfterStartCall: (
-      { chatId, direction, sender }:
-      { chatId: ChatIdObj; direction: 'incoming' | 'outgoing'; sender?: string },
-    ) => Promise<void>;
-    doAfterEndCall: (chatId: ChatIdObj) => Promise<void>;
-  };
-
-  deleteMessagesInChat(
-    chatId: ChatIdObj, deleteForEveryone: boolean,
-  ): Promise<void>;
-
-  deleteMessage(id: ChatMessageId, deleteForEveryone: boolean): Promise<void>;
-
-  deleteMessages(chatMsgIds: ChatMessageId[], deleteForEveryone: boolean): Promise<void>;
-
-  deleteExpiredMessages(now: number): Promise<void>;
-
-  getMessage(id: ChatMessageId): Promise<ChatMessageView | undefined>;
-
-  getMessagesByChat(chatId: ChatIdObj): Promise<ChatMessageView[]>;
-
-  getRecentReactions(quantity: number): Promise<string[]>;
-
-  sendRegularMessage(
-    { chatId, chatMessageId, text, files, relatedMessage }: {
-      chatId: ChatIdObj,
-      chatMessageId?: string,
-      text: string,
-      files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined,
-      relatedMessage: RelatedMessage | undefined,
-    }): Promise<void>;
-
-  cancelSendingMessage(deliveryId: string, chatMsgId: ChatMessageId): Promise<void>;
-
-  markMessageAsReadNotifyingSender(chatMessageId: ChatMessageId): Promise<void>;
-
-  checkAddressExistenceForASMail(addr: string): Promise<AddressCheckResult>;
-
-  // XXX will this be needed? Or, will this turn to get attachments thing?
-  getIncomingMessage(msgId: string): Promise<ChatIncomingMessage | undefined>;
-
-  watch(obs: web3n.Observer<UpdateEvent>): () => void;
-
-  updateEarlySentMessage(
-    { chatId, chatMessageId, updatedBody }:
-    { chatId: ChatIdObj; chatMessageId: string; updatedBody: string },
-  ): Promise<ChatMessageView | undefined>;
-
-  changeMessageReaction(
-    { chatId, chatMessageId, updatedReactions }:
-    { chatId: ChatIdObj; chatMessageId: string; updatedReactions: Record<string, ChatMessageReaction> },
-  ): Promise<ChatMessageView | undefined>;
-
-  sendSystemDeletableMessage(
-    { chatId, recipients, chatMessageId, chatSystemData }:
-      { chatId: ChatIdObj; recipients: string[] } & Pick<ChatSystemMsgV1, 'chatMessageId' | 'chatSystemData'>,
-  ): Promise<void>;
-
-  makeAndSaveMsgToDb(ownAddr: string, msgData: Partial<MsgDbEntry>): Promise<ChatMessageView>;
-}
+import type { ChatMessageView, ChatListItemView } from './chat.types';
+import type { SendingProgressInfo } from '../src-deno/types/index.ts';
 
 export interface ChatEventBase {
   updatedEntityType: 'chat';
@@ -185,7 +60,7 @@ export interface ChatWebRTCCallEvent extends ChatEventBase {
 }
 
 export type ChatEvent =
-  ChatAddedEvent
+  | ChatAddedEvent
   | ChatUpdatedEvent
   | ChatRemovedEvent
   | AllChatMessagesRemovedEvent
@@ -221,7 +96,7 @@ export interface ChatMessageSendingProgressEvent extends ChatMessageEventBase {
 }
 
 export type ChatMessageEvent =
-  ChatMessageAddedEvent
+  | ChatMessageAddedEvent
   | ChatMessageUpdatedEvent
   | ChatMessageRemovedEvent
   | ChatMessageRemovedMultipleEvent
@@ -230,23 +105,11 @@ export type ChatMessageEvent =
 export type UpdateEvent = ChatEvent | ChatMessageEvent;
 
 export type AddressCheckResult =
-  'found'
+  | 'found'
   | 'found-but-access-restricted'
   | 'not-present-at-domain'
   | 'no-service-for-domain'
   | 'not-valid-public-key';
-
-export interface FileLinkStoreService {
-  saveFile(data: ArrayBuffer, fileName?: string): Promise<string>;
-
-  saveLink(entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS): Promise<string>;
-
-  getLink(entityId: string): Promise<web3n.files.SymLink | null | undefined>;
-
-  getFile(entityId: string): Promise<web3n.files.File | web3n.files.FS | null | undefined>;
-
-  deleteLink(entityId: string): Promise<void>;
-}
 
 /**
  * This app's service.
@@ -304,13 +167,21 @@ export interface VideoChatComponent {
 
   notifyBkgrndInstanceOnCallStart(): void;
 
-  sendSystemWebRTCMsg(
-    { chatId, recipients, chatMessageId, chatSystemData }:
-    { chatId: ChatIdObj; recipients: string[]; chatMessageId?: string; chatSystemData: WebRTCMsgBodySysMsgData },
-  ): Promise<void>;
+  sendSystemWebRTCMsg({
+    chatId,
+    recipients,
+    chatMessageId,
+    chatSystemData,
+  }: {
+    chatId: ChatIdObj;
+    recipients: string[];
+    chatMessageId?: string;
+    chatSystemData: WebRTCMsgBodySysMsgData;
+  }): Promise<void>;
 }
 
-export type CallFromVideoGUI = StartChannelRequest
+export type CallFromVideoGUI =
+  | StartChannelRequest
   | CloseChannelRequest
   | SendWebRTCSignalRequest
   | CallStartedEvent;

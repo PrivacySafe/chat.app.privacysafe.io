@@ -33,17 +33,15 @@ import type {
 } from '@video/common/types';
 
 export class PeerChannelWithStreams extends WebRTCPeerChannel {
-
-  private readonly partials: Record<
-    string, Partial<StreamWithInfo & { streamId: string; }>
-  > = {};
+  private readonly partials: Record<string, Partial<StreamWithInfo & { streamId: string }>> = {};
   private readonly ownTrackSenders = new Map<string, RTCRtpSender>();
 
   private constructor(
     private readonly peerAddr: string,
     private readonly store: StreamsStore,
     private readonly eventBus: VueEventBus<PeerEvents>,
-    rtcConfig: RTCConfiguration, offBandComm: OffBandSignalingChannel,
+    rtcConfig: RTCConfiguration,
+    offBandComm: OffBandSignalingChannel,
     isPolite: boolean,
   ) {
     super(rtcConfig, offBandComm, isPolite);
@@ -58,14 +56,7 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
     offBandComm: OffBandSignalingChannel,
     isPolite: boolean,
   ): PeerChannelWithStreams {
-    const peer = new PeerChannelWithStreams(
-      peerAddr,
-      store,
-      eventBus,
-      rtcConfig,
-      offBandComm,
-      isPolite,
-    );
+    const peer = new PeerChannelWithStreams(peerAddr, store, eventBus, rtcConfig, offBandComm, isPolite);
     return peer;
   }
 
@@ -74,7 +65,10 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
   }
 
   protected onConnectionTrack(ev: RTCTrackEvent): void {
-    const { track, streams: [stream] } = ev;
+    const {
+      track,
+      streams: [stream],
+    } = ev;
     this.absorbStreamTrack(stream, track.id);
     track.onunmute = () => {
       this.store.syncUIWithPeerTracksState(this.peerAddr);
@@ -122,13 +116,12 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
     this.dataChannel?.send(JSON.stringify(json));
   }
 
-  signalOwnStreamState(
-    { streamId, audio, video }:
-    { streamId: string; audio: boolean; video: boolean },
-  ): void {
+  signalOwnStreamState({ streamId, audio, video }: { streamId: string; audio: boolean; video: boolean }): void {
     const json: StreamStateMsg = {
       type: 'stream-state',
-      streamId, audio, video,
+      streamId,
+      audio,
+      video,
     };
 
     if (this.dataChannel?.readyState === 'open') {
@@ -157,12 +150,13 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
 
   sendInfoMsg<T>(msg: T): void {
     const json: InfoMsg = {
-      type: 'info', msg,
+      type: 'info',
+      msg,
     };
     this.dataChannel?.send(JSON.stringify(json));
   }
 
-  protected onDataChannelMessage(ev: { data: string; }): void {
+  protected onDataChannelMessage(ev: { data: string }): void {
     try {
       const json: Msg = JSON.parse(ev.data);
       switch (json.type) {
@@ -199,18 +193,17 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
         stream: partial.stream,
         tracks: partial.tracks!,
       });
-      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete this.partials[streamId];
     } else {
       this.partials[streamId] = {
-        streamId, type: streamType, tracks: [],
+        streamId,
+        type: streamType,
+        tracks: [],
       };
     }
   }
 
-  private placePeerStreamIntoStore(
-    { stream, tracks, type }: StreamWithInfo,
-  ): void {
+  private placePeerStreamIntoStore({ stream, tracks, type }: StreamWithInfo): void {
     for (const trackId of tracks) {
       this.store.addPeerStreamTrack(this.peerAddr, type, stream, trackId);
     }
@@ -232,7 +225,6 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
           stream,
           tracks: [trackId],
         });
-        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
         delete this.partials[stream.id];
       } else {
         partial.tracks!.push(trackId);
@@ -243,7 +235,8 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
         // FixMe ???
       } else {
         this.partials[stream.id] = {
-          stream, tracks: [trackId],
+          stream,
+          tracks: [trackId],
         };
       }
     }
@@ -253,7 +246,9 @@ export class PeerChannelWithStreams extends WebRTCPeerChannel {
     this.store.updatePeer(this.peerAddr, { isMicOn: audio, isCamOn: video });
     this.eventBus.emit('stream:track-event', {
       peerAddr: this.peerAddr,
-      streamId, audio, video,
+      streamId,
+      audio,
+      video,
     });
 
     const stream = this.store.getPeerStream(this.peerAddr, streamId)?.stream;

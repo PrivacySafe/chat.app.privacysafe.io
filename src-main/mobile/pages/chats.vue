@@ -15,31 +15,32 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import type { ChatListItemView } from '~/chat.types';
-import { useNavigation } from '@main/mobile/composables/useNavigation';
-import ChatList from '@main/common/components/chat/chat-list.vue';
-import { Ui3nButton } from '@v1nt1248/3nclient-lib';
-import { useChatsView } from '@main/common/composables/useChatsView.ts';
+  import type { ChatListItemView } from '~/chat.types';
+  import { useNavigation } from '@main/mobile/composables/useNavigation';
+  import ChatList from '@main/common/components/chat/chat-list.vue';
+  import { Ui3nButton } from '@v1nt1248/3nclient-lib';
+  import { useChatsView } from '@main/common/composables/useChatsView.ts';
 
-const { openCreateChatDialog } = useChatsView();
+  const { openCreateChatDialog } = useChatsView();
 
-const { navigateToChat } = useNavigation();
+  const { navigateToChat } = useNavigation();
 
-function goChat(chatListItem: ChatListItemView) {
-  const { isGroupChat, chatId } = chatListItem;
-  navigateToChat({
-    params: {
-      chatType: isGroupChat ? 'g' : 's',
-      chatId,
-    },
-  });
-}
+  function goChat(chatListItem: ChatListItemView) {
+    const { isGroupChat, chatId } = chatListItem;
+    navigateToChat({
+      params: {
+        chatType: isGroupChat ? 'g' : 's',
+        chatId,
+      },
+    });
+  }
 </script>
 
 <template>
-  <chat-list 
-  :class="$style.chats"
-  @click="goChat" />
+  <chat-list
+    :class="$style.chats"
+    @click="goChat"
+  />
 
   <ui3n-button
     type="icon"
@@ -53,18 +54,18 @@ function goChat(chatListItem: ChatListItemView) {
 </template>
 
 <style lang="scss" module>
-.chats {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  background-color: var(--color-bg-block-primary-default);
-  overflow-y: auto;
-}
+  .chats {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background-color: var(--color-bg-block-primary-default);
+    overflow-y: auto;
+  }
 
-.createBtn {
-  position: absolute !important;
-  bottom: var(--spacing-m);
-  right: var(--spacing-m);
-  z-index: 2;
-}
+  .createBtn {
+    position: absolute !important;
+    bottom: var(--spacing-m);
+    right: var(--spacing-m);
+    z-index: 2;
+  }
 </style>

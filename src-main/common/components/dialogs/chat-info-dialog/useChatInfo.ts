@@ -19,16 +19,19 @@ import { storeToRefs } from 'pinia';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
 import { NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import type { Nullable } from '@v1nt1248/3nclient-lib';
+import type { Nullable, Ui3nDialogEvent } from '@v1nt1248/3nclient-lib';
 import { includesAddress, toCanonicalAddress } from '@shared/address-utils';
 import { AUTO_DELETE_MESSAGES_BY_ID } from '@shared/constants';
 import type { GroupChatView, PersonView } from '~/index';
-import type { ChatInfoDialogProps, ChatInfoDialogEmits } from './types';
+import type { ChatInfoDialogProps } from './types';
 import { useAppStore } from '@main/common/store/app.store';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { useChatStore } from '@main/common/store/chat.store';
 
-export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmits) {
+export function useChatInfo(
+  props: ChatInfoDialogProps,
+  emits: { (event: 'action', value: { event: Ui3nDialogEvent }): void },
+) {
   const { $createNotice } = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
   const { user: ownAddr } = storeToRefs(useAppStore());
 
@@ -60,14 +63,17 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
       return {};
     }
 
-    return Object.keys(props.chat.members || {}).reduce((res, addr) => {
-      const canonicalAddr = toCanonicalAddress(addr);
-      res[canonicalAddr] = cloneDeep((props.chat as GroupChatView).members[addr]);
-      return res;
-    }, {} as Record<string, { hasAccepted: boolean  }>);
+    return Object.keys(props.chat.members || {}).reduce(
+      (res, addr) => {
+        const canonicalAddr = toCanonicalAddress(addr);
+        res[canonicalAddr] = cloneDeep((props.chat as GroupChatView).members[addr]);
+        return res;
+      },
+      {} as Record<string, { hasAccepted: boolean }>,
+    );
   });
 
-  const dialogWidth = computed(() => props.isMobileMode ? '300px' : '380px');
+  const dialogWidth = computed(() => (props.isMobileMode ? '300px' : '380px'));
 
   const autoDeleteMessageInfo = computed(() => {
     const { settings } = props.chat;
@@ -112,24 +118,25 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
     return allContacts.value.filter(c => includesAddress(addrsInChat, toCanonicalAddress(c.mail)));
   });
 
-  const filteredMembers = computed(() => members.value
-    .filter(m => m.displayName.toLowerCase().includes(memberSearch.value.toLowerCase())),
+  const filteredMembers = computed(() =>
+    members.value.filter(m => m.displayName.toLowerCase().includes(memberSearch.value.toLowerCase())),
   );
 
   const nonDeletableUsers = computed(() => {
     const me = contactList.value.find(c => toCanonicalAddress(c.mail) === ownAddr.value);
     return me
-      ? [{
-        ...me,
-        displayName: 'Me',
-      }]
+      ? [
+          {
+            ...me,
+            displayName: 'Me',
+          },
+        ]
       : [];
   });
 
-  const addBtnDisable = computed(() => isEqual(
-    initialSelectedUsers.value.slice().sort(),
-    selectedUsers.value.slice().sort(),
-  ));
+  const addBtnDisable = computed(() =>
+    isEqual(initialSelectedUsers.value.slice().sort(), selectedUsers.value.slice().sort()),
+  );
 
   function isUserAdmin(addr: string): boolean {
     if (props.chat.isGroupChat) {
@@ -148,7 +155,7 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
   }
 
   function closeDialog() {
-    emits('close');
+    emits('action', { event: 'close' });
   }
 
   async function openEditMode() {
@@ -180,15 +187,18 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
 
   function updateMembers() {
     const { members } = props.chat as GroupChatView;
-    const updatedMembers = allContacts.value.reduce((res, c) => {
-      const { mail } = c;
-      if (isContactSelected(c)) {
-        res[mail] = {
-          hasAccepted: members[mail] ? members[mail].hasAccepted : false,
-        };
-      }
-      return res;
-    }, {} as Record<string, { hasAccepted: boolean }>);
+    const updatedMembers = allContacts.value.reduce(
+      (res, c) => {
+        const { mail } = c;
+        if (isContactSelected(c)) {
+          res[mail] = {
+            hasAccepted: members[mail] ? members[mail].hasAccepted : false,
+          };
+        }
+        return res;
+      },
+      {} as Record<string, { hasAccepted: boolean }>,
+    );
 
     updateGroupMembers(props.chat.chatId, updatedMembers).then(canClose => {
       canClose && closeDialog();
@@ -213,9 +223,7 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
     }
 
     const listItemMailParts = mail.split('@');
-    const listItemElId = listItemMailParts && listItemMailParts[0]
-      ? `item-${listItemMailParts[0]}`
-      : null;
+    const listItemElId = listItemMailParts && listItemMailParts[0] ? `item-${listItemMailParts[0]}` : null;
     listItemMenuProps.value.listItem = {
       contactId,
       mail,
@@ -242,10 +250,13 @@ export function useChatInfo(props: ChatInfoDialogProps, emits: ChatInfoDialogEmi
     };
   }
 
-  function handleAction(
-    { action, user }:
-    { action: 'make:admin' | 'remove:admin', user: { contactId: string; mail: string } },
-  ) {
+  function handleAction({
+    action,
+    user,
+  }: {
+    action: 'make:admin' | 'remove:admin';
+    user: { contactId: string; mail: string };
+  }) {
     if (!props.chat.isGroupChat) {
       return;
     }

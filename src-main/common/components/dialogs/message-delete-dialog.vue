@@ -16,56 +16,71 @@
 -->
 
 <script lang="ts" setup>
-import { computed, inject, ref } from 'vue';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import { Ui3nCheckbox } from '@v1nt1248/3nclient-lib';
+  import { computed, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import {
+    Ui3nCheckbox,
+    Ui3nDialog,
+    type Ui3nDialogComponentProps,
+    type Ui3nDialogEvent,
+  } from '@v1nt1248/3nclient-lib';
 
-const props = defineProps<{
-  text?: string;
-}>();
-const emits = defineEmits(['select']);
+  const props = defineProps<{
+    text?: string;
+    dialogProps?: Ui3nDialogComponentProps<boolean>;
+  }>();
+  const emits = defineEmits<{
+    (event: 'action', value: { event: Ui3nDialogEvent; data?: boolean }): void;
+  }>();
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
 
-const deleteForEveryone = ref(false);
+  const deleteForEveryone = ref(false);
 
-const bodyText = computed(() => props.text || $tr('chat.message.delete.dialog.text'));
+  const bodyText = computed(() => props.text || t('chat.message.dialog.delete.text'));
 
-function onFlagChange(val: boolean | string | number) {
-  emits('select', val);
-}
+  function onFlagChange(val: boolean | string | number) {
+    emits('action', { event: 'confirm', data: !!val });
+  }
 </script>
 
 <template>
-  <div :class="$style.messageDeleteDialog">
-    <div :class="$style.messageDeleteDialogText">
-      {{ bodyText }}
-    </div>
+  <ui3n-dialog
+    v-bind="dialogProps"
+    @action="emits('action', $event)"
+  >
+    <template #body>
+      <div :class="$style.messageDeleteDialog">
+        <div :class="$style.messageDeleteDialogText">
+          {{ bodyText }}
+        </div>
 
-    <ui3n-checkbox
-      v-model="deleteForEveryone"
-      :class="$style.messageDeleteDialogCheckbox"
-      @change="onFlagChange"
-    >
-      {{ $tr('chat.message.delete.dialog.additional') }}
-    </ui3n-checkbox>
-  </div>
+        <ui3n-checkbox
+          v-model="deleteForEveryone"
+          :class="$style.messageDeleteDialogCheckbox"
+          @change="onFlagChange"
+        >
+          {{ t('chat.message.dialog.delete.additional_text') }}
+        </ui3n-checkbox>
+      </div>
+    </template>
+  </ui3n-dialog>
 </template>
 
 <style lang="scss" module>
-.messageDeleteDialog {
-  padding: var(--spacing-l) var(--spacing-m);
-}
+  .messageDeleteDialog {
+    padding: var(--spacing-l) var(--spacing-m);
+  }
 
-.messageDeleteDialogText {
-  font-size: var(--font-12);
-  font-weight: 400;
-  line-height: var(--font-16);
-  color: var(--color-text-block-primary-default);
-  margin-bottom: var(--spacing-s);
-}
+  .messageDeleteDialogText {
+    font-size: var(--font-12);
+    font-weight: 400;
+    line-height: var(--font-16);
+    color: var(--color-text-block-primary-default);
+    margin-bottom: var(--spacing-s);
+  }
 
-.messageDeleteDialogCheckbox {
-  --ui3n-checkbox-text-weight: 600;
-}
+  .messageDeleteDialogCheckbox {
+    --ui3n-checkbox-text-weight: 600;
+  }
 </style>

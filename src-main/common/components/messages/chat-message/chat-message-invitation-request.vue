@@ -15,77 +15,79 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { computed, inject } from 'vue';
-import { storeToRefs } from 'pinia';
-import get from 'lodash/get';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import { Ui3nButton, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
-import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
-import { getTextForChatInvitationMessage } from '@main/common/utils/chat-ui.helper';
-import { areChatIdsEqual } from '@shared/chat-ids';
-import { useRouting } from '@main/desktop/composables/useRouting';
-import { useAppStore } from '@main/common/store/app.store';
-import { useContactsStore } from '@main/common/store/contacts.store';
-import { useChatStore } from '@main/common/store/chat.store';
-import { useChatsStore } from '@main/common/store/chats.store';
-import type { ChatInvitationMsgView } from '~/chat.types';
+  import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
+  import get from 'lodash/get';
+  import { Ui3nButton, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+  import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
+  import { getTextForChatInvitationMessage } from '@main/common/utils/chat-ui.helper';
+  import { areChatIdsEqual } from '@shared/chat-ids';
+  import { useRouting } from '@main/desktop/composables/useRouting';
+  import { useAppStore } from '@main/common/store/app.store';
+  import { useContactsStore } from '@main/common/store/contacts.store';
+  import { useChatStore } from '@main/common/store/chat.store';
+  import { useChatsStore } from '@main/common/store/chats.store';
+  import type { ChatInvitationMsgView } from '~/chat.types';
 
-const props = defineProps<{
-  msg: ChatInvitationMsgView;
-}>();
+  const props = defineProps<{
+    msg: ChatInvitationMsgView;
+  }>();
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-const { router } = useRouting();
+  const { t } = useI18n();
+  const { router } = useRouting();
 
-const { user, isMobileMode } = storeToRefs(useAppStore());
+  const { user, isMobileMode } = storeToRefs(useAppStore());
 
-const contactsStore = useContactsStore();
-const { contactList } = storeToRefs(contactsStore);
-const { addContact, fetchContacts } = contactsStore;
+  const contactsStore = useContactsStore();
+  const { contactList } = storeToRefs(contactsStore);
+  const { addContact, fetchContacts } = contactsStore;
 
-const { acceptChatInvitation, refreshChatList } = useChatsStore();
+  const { acceptChatInvitation, refreshChatList } = useChatsStore();
 
-const chatStore = useChatStore();
-const { deleteChat, resetCurrentChat } = chatStore;
-const { currentChat, currentChatId } = storeToRefs(chatStore);
+  const chatStore = useChatStore();
+  const { deleteChat, resetCurrentChat } = chatStore;
+  const { currentChat, currentChatId } = storeToRefs(chatStore);
 
-const date = computed(() => {
-  const { timestamp } = props.msg;
-  return prepareDateAsSting(timestamp);
-});
-
-const isChatAccepted = computed(() =>
-  (currentChat.value?.isGroupChat && get(currentChat.value, ['members', user.value, 'hasAccepted']))
-  || (!currentChat.value?.isGroupChat && currentChat.value?.status === 'on'),
-);
-
-const doesAllowAddingContact = computed(() => !contactList.value.find(c => c.mail === props.msg.sender));
-const tooltipText = computed(() => doesAllowAddingContact.value
-  ? $tr('chat.oto.invitation.incoming-from-unknown.tooltip', { address: props.msg.sender })
-  : '',
-);
-
-async function deny() {
-  await deleteChat(props.msg.chatId, false);
-  if (areChatIdsEqual(currentChatId.value, props.msg.chatId)) {
-    resetCurrentChat();
-    await router.push({ name: 'chats' });
-  }
-  await refreshChatList();
-}
-
-async function accept() {
-  await acceptChatInvitation({
-    chatId: currentChatId.value!,
-    chatMessageId: props.msg.chatMessageId,
+  const date = computed(() => {
+    const { timestamp } = props.msg;
+    return prepareDateAsSting(timestamp);
   });
-  await refreshChatList();
-}
 
-async function addContactToList() {
-  await addContact(props.msg.sender);
-  await fetchContacts();
-}
+  const isChatAccepted = computed(
+    () =>
+      (currentChat.value?.isGroupChat && get(currentChat.value, ['members', user.value, 'hasAccepted'])) ||
+      (!currentChat.value?.isGroupChat && currentChat.value?.status === 'on'),
+  );
+
+  const doesAllowAddingContact = computed(() => !contactList.value.find(c => c.mail === props.msg.sender));
+  const tooltipText = computed(() =>
+    doesAllowAddingContact.value
+      ? t('chat.invitation.tooltip.oto.incoming_from_unknown', { address: props.msg.sender })
+      : '',
+  );
+
+  async function deny() {
+    await deleteChat(props.msg.chatId, false);
+    if (areChatIdsEqual(currentChatId.value, props.msg.chatId)) {
+      resetCurrentChat();
+      await router.push({ name: 'chats' });
+    }
+    await refreshChatList();
+  }
+
+  async function accept() {
+    await acceptChatInvitation({
+      chatId: currentChatId.value!,
+      chatMessageId: props.msg.chatMessageId,
+    });
+    await refreshChatList();
+  }
+
+  async function addContactToList() {
+    await addContact(props.msg.sender);
+    await fetchContacts();
+  }
 </script>
 
 <template>
@@ -93,7 +95,7 @@ async function addContactToList() {
     :class="[
       $style.chatMessageInvitationRequest,
       isMobileMode && $style.chatMessageInvitationRequestMobile,
-      doesAllowAddingContact && $style.clickable
+      doesAllowAddingContact && $style.clickable,
     ]"
     v-on="doesAllowAddingContact ? { click: addContactToList } : {}"
   >
@@ -119,7 +121,7 @@ async function addContactToList() {
         text-color="var(--warning-fill-default)"
         @click.stop.prevent="deny"
       >
-        {{ $tr('chat.invitation.deny') }}
+        {{ t('chat.invitation.btn.deny') }}
       </ui3n-button>
 
       <ui3n-button
@@ -129,7 +131,7 @@ async function addContactToList() {
         text-color="var(--success-fill-default)"
         @click.stop.prevent="accept"
       >
-        {{ $tr('chat.invitation.accept') }}
+        {{ t('chat.invitation.btn.accept') }}
       </ui3n-button>
     </div>
 
@@ -140,67 +142,67 @@ async function addContactToList() {
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/mixins' as mixins;
+  @use '@main/common/assets/styles/mixins' as mixins;
 
-.chatMessageInvitationRequest {
-  position: relative;
-  width: fit-content;
-  max-width: 90%;
-  overflow: hidden;
-  height: var(--spacing-l);
-  margin: var(--spacing-s) auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  column-gap: var(--spacing-s);
-  padding: 0 12px;
-  font-size: var(--font-12);
-  font-weight: 500;
-  user-select: none;
-  color: var(--color-text-block-secondary-default);
+  .chatMessageInvitationRequest {
+    position: relative;
+    width: fit-content;
+    max-width: 90%;
+    overflow: hidden;
+    height: var(--spacing-l);
+    margin: var(--spacing-s) auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    padding: 0 12px;
+    font-size: var(--font-12);
+    font-weight: 500;
+    user-select: none;
+    color: var(--color-text-block-secondary-default);
 
-  &.clickable {
-    cursor: pointer;
-  }
-
-  &.chatMessageInvitationRequestMobile {
-    height: auto;
-    column-gap: 6px;
-    padding: 6px var(--spacing-m);
-
-    .text {
-      white-space: break-spaces;
-      text-align: center;
+    &.clickable {
+      cursor: pointer;
     }
 
-    .date {
-      min-width: fit-content;
+    &.chatMessageInvitationRequestMobile {
+      height: auto;
+      column-gap: 6px;
+      padding: 6px var(--spacing-m);
+
+      .text {
+        white-space: break-spaces;
+        text-align: center;
+      }
+
+      .date {
+        min-width: fit-content;
+      }
     }
   }
-}
 
-.text {
-  position: relative;
-  min-width: 100px;
-  color: var(--color-text-block-secondary-default);
-  text-align: center;
+  .text {
+    position: relative;
+    min-width: 100px;
+    color: var(--color-text-block-secondary-default);
+    text-align: center;
 
-  @include mixins.text-overflow-ellipsis();
-}
+    @include mixins.text-overflow-ellipsis();
+  }
 
-.date {
-  flex-grow: 1;
-  min-width: fit-content;
-  white-space: nowrap;
-  position: relative;
-  color: var(--color-text-chat-bubble-user-sub);
-}
+  .date {
+    flex-grow: 1;
+    min-width: fit-content;
+    white-space: nowrap;
+    position: relative;
+    color: var(--color-text-chat-bubble-user-sub);
+  }
 
-.action {
-  flex-grow: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  column-gap: var(--spacing-xs);
-}
+  .action {
+    flex-grow: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    column-gap: var(--spacing-xs);
+  }
 </style>

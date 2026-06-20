@@ -35,10 +35,25 @@ module.exports = {
           'each',
           'content',
           'use',
+          'font-feature-values',
+          'character-variant',
+          'styleset',
         ],
       },
     ],
-    'no-invalid-position-declaration': null,
-    'property-no-deprecated': [true, { ignoreProperties: ['-webkit-box-orient'] }],
+    'selector-pseudo-class-no-unknown': [
+      true,
+      {
+        ignorePseudoClasses: ['global', 'local', 'export'],
+      },
+    ],
+    'property-no-unknown': [
+      true,
+      {
+        ignoreSelectors: ['/.*Inter.*/'],
+        ignoreAtRules: ['font-feature-values', 'character-variant', 'styleset'],
+      },
+    ],
+    'declaration-property-value-keyword-no-deprecated': [true, { ignoreKeywords: ['break-word'] }],
   },
 };

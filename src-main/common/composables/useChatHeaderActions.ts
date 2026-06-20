@@ -15,6 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, type ComputedRef, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '@main/common/store/chat.store';
 import { chatMenuItems } from '@main/common/constants';
@@ -24,6 +25,8 @@ export function useChatHeaderActions(
   props: ComputedRef<{ chat: ChatListItemView; chatWithCall?: boolean; disabled?: boolean }>,
   emits: { (event: 'select:action', value: string): void },
 ) {
+  const { t } = useI18n();
+
   const { currentChat, isAdminOfGroupChat } = storeToRefs(useChatStore());
 
   const isMenuOpen = ref(false);
@@ -55,27 +58,28 @@ export function useChatHeaderActions(
     return acceptedMembersAndNotAdmins.length === 0;
   });
 
-  const availableMenuItems = computed(() => chatMenuItems
-    .filter(i => {
-      if (currentChat.value?.isGroupChat) {
-        if (i.chatTypes.includes('group')) {
-          return true;
+  const availableMenuItems = computed(() =>
+    chatMenuItems
+      .filter(i => {
+        if (currentChat.value?.isGroupChat) {
+          if (i.chatTypes.includes('group')) {
+            return true;
+          }
+
+          if (isAdminOfGroupChat.value) {
+            return i.chatTypes.includes('group&admin');
+          }
+
+          return false;
         }
 
-        if (isAdminOfGroupChat.value) {
-          return i.chatTypes.includes('group&admin');
-        }
-
-        return false;
-      }
-
-      return i.chatTypes.includes('single');
-    })
-    .filter(i => i.action !== 'chat:delete' || (i.action === 'chat:delete' && canLeaveAndDeleteChat.value))
-    .map(i => ({
-      ...i,
-      id: i.action.replaceAll(':', ''),
-    })),
+        return i.chatTypes.includes('single');
+      })
+      .filter(i => i.action !== 'chat:delete' || (i.action === 'chat:delete' && canLeaveAndDeleteChat.value))
+      .map(i => ({
+        ...i,
+        id: i.action.replaceAll(':', ''),
+      })),
   ) as ComputedRef<(ChatMenuItem & { id: string })[]>;
 
   function selectAction(item: ChatMenuItem) {
@@ -114,24 +118,24 @@ export function useChatHeaderActions(
   }
 
   function initialSubMenusState(): Record<string, boolean> {
-    return (availableMenuItems.value || []).reduce((res, item) => {
-      if (item.subMenu) {
-        res[item.action] = false;
-      }
-      return res;
-    }, {} as Record<string, boolean>);
+    return (availableMenuItems.value || []).reduce(
+      (res, item) => {
+        if (item.subMenu) {
+          res[item.action] = false;
+        }
+        return res;
+      },
+      {} as Record<string, boolean>,
+    );
   }
 
   subMenusState.value = initialSubMenusState();
 
-  watch(
-    isMenuOpen,
-    (val, oVal) => {
-      if (val !== oVal && !val) {
-        subMenusState.value = initialSubMenusState();
-      }
-    },
-  );
+  watch(isMenuOpen, (val, oVal) => {
+    if (val !== oVal && !val) {
+      subMenusState.value = initialSubMenusState();
+    }
+  });
 
   watch(
     () => props.value.chatWithCall,
@@ -143,6 +147,7 @@ export function useChatHeaderActions(
   );
 
   return {
+    t,
     isMenuOpen,
     subMenusState,
     availableMenuItems,

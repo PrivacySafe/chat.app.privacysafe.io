@@ -31,35 +31,65 @@
   box-shadow: 0 0 2px 0 var(--shadow-key-1), 0 2px 5px 0 var(--shadow-key-2);
 }
 
+@mixin ripple($color) {
+  @if & {
+    background-position: center;
+    transition: background 0.35s ease-in-out;
+
+    &:not([disabled]) {
+      cursor: pointer;
+
+      &:hover {
+        background: $color radial-gradient(circle, transparent 1%, $color 1%) center/15000%;
+      }
+
+      &:active {
+        opacity: 1;
+        background-color: var(--grey-20);
+        background-size: 100%;
+        transition: background 0s;
+      }
+    }
+  }
+}
+
 /* stylelint-disable nesting-selector-no-missing-scoping-root */
 @mixin scrollbar($size: 200px) {
-  &::-webkit-scrollbar-track {
-    background-color: var(transparent);
+  :global(::-webkit-scrollbar-track) {
+    background-color: transparent;
   }
 
-  &::-webkit-scrollbar-thumb {
-    height: $size;
-    background-color: var(--color-bg-control-accent-disabled);
-    border-radius: 80px;
+  :global(::-webkit-scrollbar-thumb) {
+    background-color: var(--color-bg-control-accent-default);
+    border-radius: 4px;
   }
 
-  &::-webkit-scrollbar-thumb:hover {
+  :global(::-webkit-scrollbar-thumb:hover) {
     background-color: var(--color-bg-control-accent-hover);
     cursor: pointer;
   }
 }
 
 @mixin scrollbar-vertical($size: 200px) {
-  &::-webkit-scrollbar {
-    width: 8px;
+  :global(::-webkit-scrollbar) {
+    width: 6px;
   }
   @include scrollbar($size);
+
+  :global(::-webkit-scrollbar-thumb) {
+    min-height: 24px;
+  }
 }
 
 @mixin scrollbar-horizontal($size: 200px) {
-  &::-webkit-scrollbar {
-    height: 8px;
+  :global(::-webkit-scrollbar) {
+    height: 6px;
   }
   @include scrollbar($size);
+
+  :global(::-webkit-scrollbar-thumb) {
+    min-width: 48px;
+  }
 }
+
 /* stylelint-enable */

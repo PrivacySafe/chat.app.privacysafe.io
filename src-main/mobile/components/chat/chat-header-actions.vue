@@ -15,24 +15,24 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { computed } from 'vue';
-import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
-import { useChatHeaderActions } from '@main/common/composables/useChatHeaderActions';
-import type { ChatListItemView } from '~/chat.types.ts';
+  import { computed } from 'vue';
+  import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
+  import { useChatHeaderActions } from '@main/common/composables/useChatHeaderActions';
+  import type { ChatListItemView } from '~/chat.types.ts';
 
-const props = defineProps<{
-  chat: ChatListItemView;
-  chatWithCall?: boolean;
-  disabled?: boolean;
-}>();
-const emits = defineEmits<{
-  (event: 'select:action', value: string): void;
-}>();
+  const props = defineProps<{
+    chat: ChatListItemView;
+    chatWithCall?: boolean;
+    disabled?: boolean;
+  }>();
+  const emits = defineEmits<{
+    (event: 'select:action', value: string): void;
+  }>();
 
-const propsValue = computed(() => props);
+  const propsValue = computed(() => props);
 
-const { isMenuOpen, availableMenuItems, subMenusState, selectAction, isSubItemSelected, isMenuItemDisabled } =
-  useChatHeaderActions(propsValue, emits);
+  const { t, isMenuOpen, availableMenuItems, subMenusState, selectAction, isSubItemSelected, isMenuItemDisabled } =
+    useChatHeaderActions(propsValue, emits);
 </script>
 
 <template>
@@ -69,11 +69,11 @@ const { isMenuOpen, availableMenuItems, subMenusState, selectAction, isSubItemSe
           <ui3n-icon
             :icon="item.icon"
             size="14"
-            :color="item.isAccent ? 'var(--warning-content-default)': 'var(--color-icon-control-primary-default)'"
+            :color="item.isAccent ? 'var(--warning-content-default)' : 'var(--color-icon-control-primary-default)'"
             :class="$style.icon"
           />
 
-          {{ $tr(item.text) }}
+          {{ t(item.text) }}
 
           <ui3n-icon
             v-if="item.subMenu"
@@ -98,9 +98,9 @@ const { isMenuOpen, availableMenuItems, subMenusState, selectAction, isSubItemSe
                 isSubItemSelected(subItem) && $style.isSelected,
                 isMenuItemDisabled(subItem) && $style.disabled,
               ]"
-              v-on="(isMenuItemDisabled(subItem) || subItem.subMenu) ? {} : { click: () => selectAction(subItem) }"
+              v-on="isMenuItemDisabled(subItem) || subItem.subMenu ? {} : { click: () => selectAction(subItem) }"
             >
-              {{ $tr(subItem.text) }}
+              {{ t(subItem.text) }}
             </div>
           </div>
         </div>
@@ -110,101 +110,103 @@ const { isMenuOpen, availableMenuItems, subMenusState, selectAction, isSubItemSe
 </template>
 
 <style lang="scss" module>
-@keyframes scale {
-  0% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(0.75);
-  }
-
-  100% {
-    transform: scale(1);
-  }
-}
-
-.menu {
-  div:last-child {
-    overflow: visible !important;
-  }
-}
-
-.chatHeaderActionsMenu {
-  --chat-header-menu-width: 192px;
-  --chat-header-menu-item-height: var(--spacing-l);
-
-  position: relative;
-  width: var(--chat-header-menu-width);
-  background-color: var(--color-bg-control-secondary-default);
-  border-radius: var(--spacing-xs);
-  padding: var(--spacing-xs);
-}
-
-.chatHeaderActionsMenuItem {
-  position: relative;
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  column-gap: var(--spacing-s);
-  padding: 0 var(--spacing-xs);
-  height: var(--chat-header-menu-item-height);
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--color-text-control-primary-default);
-  border-radius: 2px;
-  cursor: pointer;
-
-  &:hover {
-    background-color: var(--color-bg-control-primary-hover);
-    color: var(--color-text-control-accent-default);
-
-    .icon {
-      animation: scale 0.4s ease-in-out;
+  @keyframes scale {
+    0% {
+      transform: scale(1);
     }
 
-    :global(.ui3n-icon) {
-      color: var(--color-icon-control-accent-hover);
+    50% {
+      transform: scale(0.75);
+    }
+
+    100% {
+      transform: scale(1);
     }
   }
-}
 
-.chatHeaderActionsMenuItemAccent {
-  color: var(--warning-content-default);
+  .menu {
+    div:last-child {
+      overflow: visible !important;
+    }
+  }
 
-  &:hover {
-    background-color: var(--warning-fill-hover);
+  .chatHeaderActionsMenu {
+    --chat-header-menu-width: 192px;
+    --chat-header-menu-item-height: var(--spacing-l);
+
+    position: relative;
+    width: var(--chat-header-menu-width);
+    background-color: var(--color-bg-control-secondary-default);
+    border-radius: var(--spacing-xs);
+    padding: var(--spacing-xs);
+  }
+
+  .chatHeaderActionsMenuItem {
+    position: relative;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    padding: 0 var(--spacing-xs);
+    height: var(--chat-header-menu-item-height);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--color-text-control-primary-default);
+    border-radius: 2px;
+    cursor: pointer;
+
+    &:hover {
+      background-color: var(--color-bg-control-primary-hover);
+      color: var(--color-text-control-accent-default);
+
+      .icon {
+        animation: scale 0.4s ease-in-out;
+      }
+
+      :global(.ui3n-icon) {
+        color: var(--color-icon-control-accent-hover);
+      }
+    }
+  }
+
+  .chatHeaderActionsMenuItemAccent {
     color: var(--warning-content-default);
+
+    &:hover {
+      background-color: var(--warning-fill-hover);
+      color: var(--warning-content-default);
+    }
   }
-}
 
-.margin {
-  margin-top: var(--spacing-xs);
-}
+  .margin {
+    margin-top: var(--spacing-xs);
+  }
 
-.disabled {
-  pointer-events: none;
-  opacity: 0.5;
-  cursor: default;
-}
+  .disabled {
+    pointer-events: none;
+    opacity: 0.5;
+    cursor: default;
+  }
 
-.subMenu {
-  position: absolute;
-  padding: var(--spacing-xs);
-  background-color: var(--color-bg-control-secondary-default);
-  border-radius: var(--spacing-xs);
-  width: 90px;
-  top: 0;
-  left: -90px;
-  min-height: calc(var(--chat-header-menu-item-height) + var(--spacing-xs) * 2);
-  box-shadow: 0 0 2px 0 var(--shadow-key-1), 0 2px 5px 0 var(--shadow-key-2);
-}
+  .subMenu {
+    position: absolute;
+    padding: var(--spacing-xs);
+    background-color: var(--color-bg-control-secondary-default);
+    border-radius: var(--spacing-xs);
+    width: 90px;
+    top: 0;
+    left: -90px;
+    min-height: calc(var(--chat-header-menu-item-height) + var(--spacing-xs) * 2);
+    box-shadow:
+      0 0 2px 0 var(--shadow-key-1),
+      0 2px 5px 0 var(--shadow-key-2);
+  }
 
-.subMenuItem {
-  padding-left: var(--spacing-s);
-}
+  .subMenuItem {
+    padding-left: var(--spacing-s);
+  }
 
-.isSelected {
-  background-color: var(--color-bg-control-primary-hover);
-}
+  .isSelected {
+    background-color: var(--color-bg-control-primary-hover);
+  }
 </style>

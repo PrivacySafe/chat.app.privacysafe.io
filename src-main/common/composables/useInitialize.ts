@@ -25,11 +25,7 @@ export function useInitialize() {
   const chatsStore = useChatsStore();
   const messagesStore = useMessagesStore();
 
-  const {
-    handleBackgroundChatEvents,
-    refreshChatList,
-    updateChatItemInList,
-  } = chatsStore;
+  const { handleBackgroundChatEvents, refreshChatList, updateChatItemInList } = chatsStore;
   const { fetchRecentReactions, handleBackgroundMessageEvents } = messagesStore;
 
   const updatesQueue: UpdateEvent[] = [];
@@ -75,7 +71,6 @@ export function useInitialize() {
     stopVideoCallsWatching.value = videoOpenerSrv.watchVideoChats({
       next: async data => {
         const { type, chatId } = data;
-        // eslint-disable-next-line default-case
         switch (type) {
           case 'call-started':
             await updateChatItemInList(chatId, { callStart: Date.now() });
@@ -88,10 +83,13 @@ export function useInitialize() {
           case 'close-channel':
             // TODO
             break;
+
+          // no default
         }
       },
       complete: () => console.info('Observation of video call events from VideoOpenerService completed.'),
-      error: err => w3n.log('error', 'Error occurred in observation of video call events from VideoOpenerService. ', err),
+      error: err =>
+        w3n.log('error', 'Error occurred in observation of video call events from VideoOpenerService. ', err),
     });
   }
 

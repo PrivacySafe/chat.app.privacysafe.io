@@ -44,7 +44,7 @@ export async function getFileByInfoFromMsg(
 
 export async function saveFileFromMsg(
   fileId: string,
-  $tr: (key: string, placeholders?: Record<string, string>) => string,
+  t: (key: string, placeholders?: Record<string, string>) => string,
   incomingMsgId?: string,
 ): Promise<boolean | undefined> {
   const entity = await getFileByInfoFromMsg(fileId, incomingMsgId);
@@ -54,7 +54,7 @@ export async function saveFileFromMsg(
 
   if ((entity as ReadonlyFS).listFolder) {
     const targetFolder = await w3n.shell?.fileDialogs?.saveFolderDialog!(
-      $tr('chat.message.folder.download'),
+      t('chat.message.dialog.folder_download.title'),
       '',
       entity.name,
     );
@@ -72,7 +72,7 @@ export async function saveFileFromMsg(
     }
   } else {
     const targetFile = await w3n.shell?.fileDialogs?.saveFileDialog!(
-      $tr('chat.message.file.download'),
+      t('chat.message.dialog.file_download.title'),
       '',
       entity.name,
     );

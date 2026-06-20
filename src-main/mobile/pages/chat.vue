@@ -15,74 +15,75 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { onBeforeUnmount, onMounted } from 'vue';
-import { onBeforeRouteUpdate } from 'vue-router';
-import isEmpty from 'lodash/isEmpty';
-import { Ui3nButton, Ui3nHtml, Ui3nIcon, Ui3nText, Ui3nTooltip, Ui3nClickOutside } from '@v1nt1248/3nclient-lib';
-import { formatFileSize } from '@v1nt1248/3nclient-lib/utils';
-import type { RegularMsgView } from '~/index';
-import { useChatView } from '@main/common/composables/useChatView';
-import { useContactsStore } from '@main/common/store/contacts.store';
-import { useNavigation } from '@main/mobile/composables/useNavigation';
-import ChatHeader from '@main/mobile/components/chat/chat-header.vue';
-import EmoticonsDialog from '@main/common/components/dialogs/emoticons-dialog.vue';
-import ChatAttachmentItem from '@main/common/components/chat/chat-attachment-item.vue';
-import ChatMessages from '@main/common/components/messages/chat-messages/chat-messages.vue';
-import ChatMessageInfo from '@main/common/components/messages/chat-message/chat-message-info/chat-message-info.vue';
-import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
+  import { onBeforeUnmount, onMounted } from 'vue';
+  import { onBeforeRouteUpdate } from 'vue-router';
+  import isEmpty from 'lodash/isEmpty';
+  import { Ui3nButton, Ui3nHtml, Ui3nIcon, Ui3nText, Ui3nTooltip, Ui3nClickOutside } from '@v1nt1248/3nclient-lib';
+  import { formatFileSize } from '@v1nt1248/3nclient-lib/utils';
+  import type { RegularMsgView } from '~/index';
+  import { useChatView } from '@main/common/composables/useChatView';
+  import { useContactsStore } from '@main/common/store/contacts.store';
+  import { useNavigation } from '@main/mobile/composables/useNavigation';
+  import ChatHeader from '@main/mobile/components/chat/chat-header.vue';
+  import EmoticonsDialog from '@main/common/components/dialogs/emoticons-dialog.vue';
+  import ChatAttachmentItem from '@main/common/components/chat/chat-attachment-item.vue';
+  import ChatMessages from '@main/common/components/messages/chat-messages/chat-messages.vue';
+  import ChatMessageInfo from '@main/common/components/messages/chat-message/chat-message-info/chat-message-info.vue';
+  import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
 
-const vUi3nHtml = Ui3nHtml;
-const vUi3nClickOutside = Ui3nClickOutside;
+  const vUi3nHtml = Ui3nHtml;
+  const vUi3nClickOutside = Ui3nClickOutside;
 
-const { getContactName } = useContactsStore();
+  const { getContactName } = useContactsStore();
 
-const {
-  currentChat,
-  currentChatMessages,
-  selectedMessages,
-  whetherShowButtonDown,
-  msgInfoDisplayed,
-  disabled,
-  readonly,
-  isEmoticonsDialogOpen,
-  msgText,
-  inputEl,
-  initialMessage,
-  initialMessageType,
-  editableMessage,
-  files,
-  attachmentsInfo,
-  attachmentsTotal,
-  sendBtnDisabled,
-  filteredMembers,
-  activeSuggestionIndex,
-  onInput,
-  selectMention,
-  hideSuggestions,
-  clearSelectedMessages,
-  onMessageListElementInit,
-  deleteMessages,
-  scrollMessageListToEnd,
-  setMsgForWhichInfoIsDisplayed,
-  getTextOfEditableOrInitialMsg,
-  addFiles,
-  addFilesViaPaste,
-  prepareReplyMessage,
-  startEditMsgMode,
-  onEmoticonSelect,
-  clearInitialInfo,
-  clearAttachments,
-  finishEditMsgMode,
-  deleteAttachment,
-  sendMessage,
-  doAfterMount,
-  doBeforeRouteUpdate,
-  doBeforeUnMount,
-} = useChatView(useNavigation);
+  const {
+    t,
+    currentChat,
+    currentChatMessages,
+    selectedMessages,
+    whetherShowButtonDown,
+    msgInfoDisplayed,
+    disabled,
+    readonly,
+    isEmoticonsDialogOpen,
+    msgText,
+    inputEl,
+    initialMessage,
+    initialMessageType,
+    editableMessage,
+    files,
+    attachmentsInfo,
+    attachmentsTotal,
+    sendBtnDisabled,
+    filteredMembers,
+    activeSuggestionIndex,
+    onInput,
+    selectMention,
+    hideSuggestions,
+    clearSelectedMessages,
+    onMessageListElementInit,
+    deleteMessages,
+    scrollMessageListToEnd,
+    setMsgForWhichInfoIsDisplayed,
+    getTextOfEditableOrInitialMsg,
+    addFiles,
+    addFilesViaPaste,
+    prepareReplyMessage,
+    startEditMsgMode,
+    onEmoticonSelect,
+    clearInitialInfo,
+    clearAttachments,
+    finishEditMsgMode,
+    deleteAttachment,
+    sendMessage,
+    doAfterMount,
+    doBeforeRouteUpdate,
+    doBeforeUnMount,
+  } = useChatView(useNavigation);
 
-onMounted(doAfterMount);
-onBeforeRouteUpdate(doBeforeRouteUpdate);
-onBeforeUnmount(doBeforeUnMount);
+  onMounted(doAfterMount);
+  onBeforeRouteUpdate(doBeforeRouteUpdate);
+  onBeforeUnmount(doBeforeUnMount);
 </script>
 
 <template>
@@ -158,7 +159,7 @@ onBeforeUnmount(doBeforeUnMount);
             @paste="addFilesViaPaste"
           >
             <ui3n-text
-              v-model:text="msgText"
+              v-model="msgText"
               :rows="1"
               :max-rows="3"
               :disabled="readonly"
@@ -173,7 +174,11 @@ onBeforeUnmount(doBeforeUnMount);
             color="var(--color-bg-block-primary-default)"
             icon="round-send"
             icon-size="24"
-            :icon-color="!sendBtnDisabled ? 'var(--color-icon-block-accent-default)' : 'var(--color-icon-block-secondary-default)'"
+            :icon-color="
+              !sendBtnDisabled
+                ? 'var(--color-icon-block-accent-default)'
+                : 'var(--color-icon-block-secondary-default)'
+            "
             :disabled="sendBtnDisabled"
             @click="sendMessage(undefined, true)"
           />
@@ -230,7 +235,7 @@ onBeforeUnmount(doBeforeUnMount);
 
               <div :class="$style.inputAdditionalData">
                 <div :class="$style.inputAdditionalLabel">
-                  {{ $tr('chat.message.edit.label') }}
+                  {{ t('chat.message.label.edit') }}
                 </div>
                 <div
                   v-ui3n-html:sanitize="getTextOfEditableOrInitialMsg(editableMessage)"
@@ -274,7 +279,7 @@ onBeforeUnmount(doBeforeUnMount);
               :class="$style.attachments"
             >
               <div :class="$style.attachmentsStat">
-                {{ $tr('chat.total') }}: {{ formatFileSize(attachmentsTotal) }}
+                {{ t('chat.total') }}: {{ formatFileSize(attachmentsTotal) }}
               </div>
 
               <div :class="$style.attachmentsBody">
@@ -306,7 +311,7 @@ onBeforeUnmount(doBeforeUnMount);
           :class="$style.bulkActions"
         >
           <ui3n-tooltip
-            :content="$tr('chat.messages.bulk.delete')"
+            :content="t('chat.messages.bulk.delete')"
             placement="top-start"
             position-strategy="fixed"
           >
@@ -322,11 +327,11 @@ onBeforeUnmount(doBeforeUnMount);
           </ui3n-tooltip>
 
           <div :class="$style.selectedText">
-            {{ $tr('chat.messages.selected.text') }}:&nbsp;{{ selectedMessages.length }}
+            {{ t('chat.messages.selected') }}:&nbsp;{{ selectedMessages.length }}
           </div>
 
           <ui3n-tooltip
-            :content="$tr('chat.messages.bulk.actions.exit')"
+            :content="t('chat.messages.bulk.exit')"
             placement="top-end"
             position-strategy="fixed"
           >
@@ -351,204 +356,204 @@ onBeforeUnmount(doBeforeUnMount);
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/_mixins.scss' as mixins;
+  @use '@main/common/assets/styles/_mixins.scss' as mixins;
 
-.chat {
-  --chat-toolbar-height: 48px;
-  --chat-input-max-height: 88px;
+  .chat {
+    --chat-toolbar-height: 48px;
+    --chat-input-max-height: 88px;
 
-  position: fixed;
-  inset: 0;
-}
-
-.bodyWrapper {
-  position: relative;
-  width: 100%;
-  height: calc(100% - var(--chat-toolbar-height));
-  background-color: var(--color-bg-chat-bubble-general-bg);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: stretch;
-  row-gap: var(--spacing-xs);
-}
-
-.messagesWrapper {
-  position: relative;
-  width: 100%;
-  flex-basis: calc(100% - var(--chat-toolbar-height) - var(--spacing-xs));
-  overflow-y: auto;
-}
-
-.messages {
-  position: relative;
-  width: 100%;
-  height: calc(100% - 4px);
-}
-
-.actions {
-  position: relative;
-  width: 100%;
-  flex-grow: 1;
-}
-
-.input {
-  position: relative;
-  width: 100%;
-  display: flex;
-  padding: var(--spacing-s);
-  justify-content: center;
-  align-items: center;
-  max-height: var(--chat-input-max-height);
-  flex-grow: 1;
-  background-color: var(--color-bg-block-primary-default);
-}
-
-.emoticonsBtnWrapper {
-  position: relative;
-}
-
-.inputField {
-  position: relative;
-  width: 55%;
-  margin: 0 var(--spacing-m);
-}
-
-.inputAdditional {
-  position: absolute;
-  background-color: var(--color-bg-block-primary-default);
-  left: 0;
-  width: 100%;
-  bottom: calc(100% + 1px);
-}
-
-.attachments {
-  position: relative;
-  width: 100%;
-  padding: var(--spacing-ml) var(--spacing-m) var(--spacing-xs);
-  overflow: hidden;
-}
-
-.attachmentsStat {
-  position: absolute;
-  left: var(--spacing-m);
-  top: var(--spacing-xs);
-  height: var(--spacing-m);
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  font-size: var(--font-13);
-  font-weight: 500;
-  color: var(--color-text-control-primary-default);
-}
-
-.attachmentsBody {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  column-gap: var(--spacing-xs);
-  padding-bottom: var(--spacing-xs);
-  overflow-x: auto;
-
-  @include mixins.scrollbar-horizontal(96px);
-}
-
-.attachmentsClear {
-  position: absolute !important;
-  top: 0;
-  right: 4px;
-}
-
-.inputAdditionalBlock {
-  display: flex;
-  height: var(--spacing-xl);
-  padding: var(--spacing-xs) 2px var(--spacing-xs) var(--spacing-s);
-  justify-content: flex-start;
-  align-items: center;
-}
-
-.members {
-  position: relative;
-  width: 100%;
-}
-
-.member {
-  position: relative;
-  width: 100%;
-  height: var(--spacing-l);
-  padding: 0 var(--spacing-m);
-  border-radius: var(--spacing-s);
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  column-gap: var(--spacing-s);
-  font-size: var(--font-12);
-  font-weight: 500;
-  color: var(--color-text-control-primary-default);
-  cursor: pointer;
-
-  &.active,
-  &:hover {
-    background-color: var(--color-bg-block-primary-hover);
+    position: fixed;
+    inset: 0;
   }
-}
 
-.inputAdditionalIcon {
-  position: relative;
-  min-width: var(--spacing-l);
-  width: var(--spacing-l);
-  min-height: var(--spacing-l);
-  height: var(--spacing-l);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-right: 3px solid var(--color-icon-block-accent-default);
-}
+  .bodyWrapper {
+    position: relative;
+    width: 100%;
+    height: calc(100% - var(--chat-toolbar-height));
+    background-color: var(--color-bg-chat-bubble-general-bg);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: stretch;
+    row-gap: var(--spacing-xs);
+  }
 
-.inputAdditionalData {
-  position: relative;
-  width: calc(100% - var(--spacing-s) * 7);
-  padding: 0 var(--spacing-xs);
-}
+  .messagesWrapper {
+    position: relative;
+    width: 100%;
+    flex-basis: calc(100% - var(--chat-toolbar-height) - var(--spacing-xs));
+    overflow-y: auto;
+  }
 
-.inputAdditionalLabel {
-  position: relative;
-  width: 100%;
-  font-size: var(--font-12);
-  font-weight: 500;
-  line-height: var(--font-16);
-  color: var(--color-icon-block-accent-default);
-}
+  .messages {
+    position: relative;
+    width: 100%;
+    height: calc(100% - 4px);
+  }
 
-.inputAdditionalText {
-  position: relative;
-  font-size: var(--font-12);
-  font-weight: 400;
-  line-height: var(--font-16);
-  color: var(--color-text-chat-bubble-other-quote);
-  @include mixins.text-overflow-ellipsis();
-}
+  .actions {
+    position: relative;
+    width: 100%;
+    flex-grow: 1;
+  }
 
-.bulkActions {
-  position: relative;
-  width: 100%;
-  height: 66px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-m);
-  background-color: var(--color-bg-block-primary-default);
-}
+  .input {
+    position: relative;
+    width: 100%;
+    display: flex;
+    padding: var(--spacing-s);
+    justify-content: center;
+    align-items: center;
+    max-height: var(--chat-input-max-height);
+    flex-grow: 1;
+    background-color: var(--color-bg-block-primary-default);
+  }
 
-.selectedText {
-  font-size: var(--font-16);
-  color: var(--color-text-block-secondary-default);
-}
+  .emoticonsBtnWrapper {
+    position: relative;
+  }
 
-.btnDown {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  border: 1px solid var(--color-icon-block-accent-default);
-}
+  .inputField {
+    position: relative;
+    width: 55%;
+    margin: 0 var(--spacing-m);
+  }
+
+  .inputAdditional {
+    position: absolute;
+    background-color: var(--color-bg-block-primary-default);
+    left: 0;
+    width: 100%;
+    bottom: calc(100% + 1px);
+  }
+
+  .attachments {
+    position: relative;
+    width: 100%;
+    padding: var(--spacing-ml) var(--spacing-m) var(--spacing-xs);
+    overflow: hidden;
+  }
+
+  .attachmentsStat {
+    position: absolute;
+    left: var(--spacing-m);
+    top: var(--spacing-xs);
+    height: var(--spacing-m);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    font-size: var(--font-13);
+    font-weight: 500;
+    color: var(--color-text-control-primary-default);
+  }
+
+  .attachmentsBody {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-xs);
+    padding-bottom: var(--spacing-xs);
+    overflow-x: auto;
+
+    @include mixins.scrollbar-horizontal(96px);
+  }
+
+  .attachmentsClear {
+    position: absolute !important;
+    top: 0;
+    right: 4px;
+  }
+
+  .inputAdditionalBlock {
+    display: flex;
+    height: var(--spacing-xl);
+    padding: var(--spacing-xs) 2px var(--spacing-xs) var(--spacing-s);
+    justify-content: flex-start;
+    align-items: center;
+  }
+
+  .members {
+    position: relative;
+    width: 100%;
+  }
+
+  .member {
+    position: relative;
+    width: 100%;
+    height: var(--spacing-l);
+    padding: 0 var(--spacing-m);
+    border-radius: var(--spacing-s);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    font-size: var(--font-12);
+    font-weight: 500;
+    color: var(--color-text-control-primary-default);
+    cursor: pointer;
+
+    &.active,
+    &:hover {
+      background-color: var(--color-bg-block-primary-hover);
+    }
+  }
+
+  .inputAdditionalIcon {
+    position: relative;
+    min-width: var(--spacing-l);
+    width: var(--spacing-l);
+    min-height: var(--spacing-l);
+    height: var(--spacing-l);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-right: 3px solid var(--color-icon-block-accent-default);
+  }
+
+  .inputAdditionalData {
+    position: relative;
+    width: calc(100% - var(--spacing-s) * 7);
+    padding: 0 var(--spacing-xs);
+  }
+
+  .inputAdditionalLabel {
+    position: relative;
+    width: 100%;
+    font-size: var(--font-12);
+    font-weight: 500;
+    line-height: var(--font-16);
+    color: var(--color-icon-block-accent-default);
+  }
+
+  .inputAdditionalText {
+    position: relative;
+    font-size: var(--font-12);
+    font-weight: 400;
+    line-height: var(--font-16);
+    color: var(--color-text-chat-bubble-other-quote);
+    @include mixins.text-overflow-ellipsis();
+  }
+
+  .bulkActions {
+    position: relative;
+    width: 100%;
+    height: 66px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-m);
+    background-color: var(--color-bg-block-primary-default);
+  }
+
+  .selectedText {
+    font-size: var(--font-16);
+    color: var(--color-text-block-secondary-default);
+  }
+
+  .btnDown {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    border: 1px solid var(--color-icon-block-accent-default);
+  }
 </style>

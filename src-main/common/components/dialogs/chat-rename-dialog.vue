@@ -16,62 +16,68 @@
 -->
 
 <script lang="ts" setup>
-import { ref, inject, watch } from 'vue';
-import size from 'lodash/size';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import { Ui3nInput } from '@v1nt1248/3nclient-lib';
-import { validationParams } from '../../constants';
+  import { ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import size from 'lodash/size';
+  import {
+    Ui3nDialog,
+    type Ui3nDialogComponentProps,
+    type Ui3nDialogEvent,
+    Ui3nInput,
+  } from '@v1nt1248/3nclient-lib';
+  import { validationParams } from '../../constants';
 
-const props = defineProps<{
-  chatName: string;
-}>();
-const emit = defineEmits(['select', 'validate']);
+  const props = defineProps<{
+    chatName: string;
+    dialogProps?: Ui3nDialogComponentProps<{ oldName: string; newName: string }>;
+  }>();
+  const emits = defineEmits<{
+    (event: 'action', value: { event: Ui3nDialogEvent; data?: { oldName: string; newName: string } }): void;
+  }>();
 
-const { chatsNameMaxLength } = validationParams;
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
 
-const data = ref({ oldName: props.chatName, newName: props.chatName });
-const isValid = ref(false);
+  const { chatsNameMaxLength } = validationParams;
 
-function checkRequired(text?: string): boolean | string {
-  return !!text || $tr('validation.text.required');
-}
+  const data = ref({ oldName: props.chatName, newName: props.chatName });
+  const isValid = ref(false);
 
-function checkLength(text?: string): boolean | string {
-  return size(text) < chatsNameMaxLength ||
-    $tr('validation.text.length', { length: chatsNameMaxLength.toString() });
-}
+  function checkRequired(text?: string): boolean | string {
+    return !!text || t('validation.text.required');
+  }
 
-function onChange() {
-  emit('select', data.value);
-}
-
-emit('select', data.value);
-
-watch(
-  () => isValid.value,
-  val => emit('validate', val),
-  { immediate: true },
-);
+  function checkLength(text?: string): boolean | string {
+    return (
+      size(text) < chatsNameMaxLength || t('validation.text.length', { length: chatsNameMaxLength.toString() })
+    );
+  }
 </script>
 
 <template>
-  <div :class="$style.chatRenameDialog">
-    <ui3n-input
-      v-model="data.newName"
-      :rules="[ checkRequired as any, checkLength as any ]"
-      :placeholder="$tr('chat.rename.dialog.input.placeholder')"
-      @change="onChange"
-      @update:valid="(val: boolean) => isValid = val"
-    />
-  </div>
+  <ui3n-dialog
+    v-bind="dialogProps"
+    :data="data"
+    :is-valid="isValid"
+    @action="emits('action', $event)"
+  >
+    <template #body>
+      <div :class="$style.chatRenameDialog">
+        <ui3n-input
+          v-model="data.newName"
+          :rules="[checkRequired as any, checkLength as any]"
+          :placeholder="t('chat.dialog.rename.input_placeholder')"
+          @update:valid="(val: boolean) => (isValid = val)"
+        />
+      </div>
+    </template>
+  </ui3n-dialog>
 </template>
 
 <style lang="scss" module>
-.chatRenameDialog {
-  position: relative;
-  width: 100%;
-  height: 104px;
-  padding: var(--spacing-l) var(--spacing-m);
-}
+  .chatRenameDialog {
+    position: relative;
+    width: 100%;
+    height: 104px;
+    padding: var(--spacing-l) var(--spacing-m);
+  }
 </style>

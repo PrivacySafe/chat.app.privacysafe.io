@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2025 3NSoft Inc.
+ Copyright (C) 2025-2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,22 +15,24 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { onBeforeMount } from 'vue';
-import { Ui3nButton } from '@v1nt1248/3nclient-lib';
-import { useRouting } from '@main/desktop/composables/useRouting';
-import { useChatsView } from '@main/common/composables/useChatsView.ts';
-import type { ChatListItemView } from '~/chat.types';
-import ChatList from '@main/common/components/chat/chat-list.vue';
+  import { onBeforeMount } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { Ui3nButton } from '@v1nt1248/3nclient-lib';
+  import { useRouting } from '@main/desktop/composables/useRouting';
+  import { useChatsView } from '@main/common/composables/useChatsView.ts';
+  import type { ChatListItemView } from '~/chat.types';
+  import ChatList from '@main/common/components/chat/chat-list.vue';
 
-const { goToChatRoute } = useRouting();
-const { openCreateChatDialog, doBeforeMount } = useChatsView();
+  const { t } = useI18n();
+  const { goToChatRoute } = useRouting();
+  const { openCreateChatDialog, doBeforeMount } = useChatsView();
 
-function goChat(chatListItem: ChatListItemView) {
-  const { isGroupChat, chatId } = chatListItem;
-  goToChatRoute({ isGroupChat, chatId });
-}
+  function goChat(chatListItem: ChatListItemView) {
+    const { isGroupChat, chatId } = chatListItem;
+    goToChatRoute({ isGroupChat, chatId });
+  }
 
-onBeforeMount(doBeforeMount);
+  onBeforeMount(doBeforeMount);
 </script>
 
 <template>
@@ -41,7 +43,7 @@ onBeforeMount(doBeforeMount);
           :class="$style.addBtn"
           @click="() => openCreateChatDialog()"
         >
-          {{ $tr('btn.text.new') }}
+          {{ t('app.text.new') }}
         </ui3n-button>
       </div>
       <chat-list
@@ -61,7 +63,7 @@ onBeforeMount(doBeforeMount);
           v-else
           :class="$style.chatBodyEmpty"
         >
-          {{ $tr('chat.content.empty') }}
+          {{ t('chat.content.empty') }}
         </div>
       </router-view>
     </div>
@@ -69,61 +71,62 @@ onBeforeMount(doBeforeMount);
 </template>
 
 <style lang="scss" module>
-.chats {
-  --chats-aside-width: calc(var(--column-size) * 4);
-  --chats-toolbar-height: calc(var(--spacing-s) * 8);
+  .chats {
+    --chats-aside-width: calc(var(--column-size) * 4);
+    --chats-toolbar-height: calc(var(--spacing-s) * 8);
 
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: stretch;
-}
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+  }
 
-.blockAside {
-  position: relative;
-  width: var(--chats-aside-width);
-  border-right: 1px solid var(--color-border-block-primary-default);
-}
+  .blockAside {
+    position: relative;
+    width: var(--chats-aside-width);
+    border-right: 1px solid var(--color-border-block-primary-default);
+  }
 
-.blockAsideToolbar {
-  position: relative;
-  width: 100%;
-  height: var(--chats-toolbar-height);
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  padding: 0 var(--spacing-m);
-}
+  .blockAsideToolbar {
+    position: relative;
+    width: 100%;
+    height: var(--chats-toolbar-height);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    padding: 0 var(--spacing-m);
+  }
 
-.addBtn {
-  width: calc(var(--spacing-s) * 7);
-  font-weight: 600;
-  margin-right: var(--spacing-s);
-  text-transform: capitalize;
-}
+  .addBtn {
+    width: calc(var(--spacing-s) * 7);
+    font-weight: 600;
+    text-transform: capitalize;
+    border-radius: var(--spacing-m) !important;
+  }
 
-.chatList {
-  position: relative;
-  height: calc(100% - var(--chats-toolbar-height));
-}
+  .chatList {
+    position: relative;
+    height: calc(100% - var(--chats-toolbar-height));
+  }
 
-.chatBody {
-  position: relative;
-  width: calc(100% - var(--chats-aside-width));
-  height: 100%;
-}
+  .chatBody {
+    position: relative;
+    width: calc(100% - var(--chats-aside-width));
+    height: 100%;
+  }
 
-.chatBodyEmpty {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  justify-content: center;
-  align-items: center;
-  background-color: var(--color-bg-chat-bubble-general-bg);
-  font-size: var(--font-14);
-  font-weight: 400;
-  color: var(--color-text-chat-bubble-other-default);
-}
+  .chatBodyEmpty {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--color-bg-chat-bubble-general-bg);
+    font-size: var(--font-14);
+    font-weight: 400;
+    color: var(--color-text-chat-bubble-other-default);
+  }
 </style>

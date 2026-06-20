@@ -15,110 +15,112 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-import { computed, inject, nextTick, onMounted, ref, useTemplateRef } from 'vue';
-import * as pdfjs from 'pdfjs-dist';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import { Ui3nButton, Ui3nProgressCircular, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
-import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
-import { getFileByInfoFromMsg } from '@main/common/utils/files.helper';
+  import { computed, nextTick, onMounted, ref, useTemplateRef } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
+  import pdfjsWorker from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
+  import type { PDFDocumentProxy } from 'pdfjs-dist';
+  import { Ui3nButton, Ui3nProgressCircular, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+  import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
+  import { getFileByInfoFromMsg } from '@main/common/utils/files.helper';
 
-const props = defineProps<{
-  item: AttachmentViewInfo;
-  incomingMsgId?: string;
-  isMobileMode?: boolean;
-}>();
-const emits = defineEmits<{
-  (event: 'error'): void;
-}>();
+  const props = defineProps<{
+    item: AttachmentViewInfo;
+    incomingMsgId?: string;
+    isMobileMode?: boolean;
+  }>();
+  const emits = defineEmits<{
+    (event: 'error'): void;
+  }>();
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
 
-let pdfDoc: PDFDocumentProxy | undefined = undefined;
+  let pdfDoc: PDFDocumentProxy | undefined = undefined;
 
-const isProcessing = ref(true);
-const currentPage = ref(1);
-const totalPage = ref(1);
+  const isProcessing = ref(true);
+  const currentPage = ref(1);
+  const totalPage = ref(1);
 
-const canvasRef = useTemplateRef<HTMLCanvasElement>('canvasEl');
-const canvasStyle = ref({});
-const ctx = computed(() => canvasRef.value ? canvasRef.value.getContext('2d') : null);
+  const canvasRef = useTemplateRef<HTMLCanvasElement>('canvasEl');
+  const canvasStyle = ref({});
+  const ctx = computed(() => (canvasRef.value ? canvasRef.value.getContext('2d') : null));
 
-function renderPage(num = 1) {
-  isProcessing.value = true;
-  nextTick(() => {
-    pdfDoc!.getPage(num)
-      .then(page => {
-        const viewport = page.getViewport({ scale: 1 });
+  function renderPage(num = 1) {
+    isProcessing.value = true;
+    nextTick(() => {
+      pdfDoc!
+        .getPage(num)
+        .then(page => {
+          const viewport = page.getViewport({ scale: 1 });
 
-        canvasRef.value!.height = viewport.height;
-        canvasRef.value!.width = viewport.width;
-        canvasStyle.value = {
-          ...(viewport.height >= viewport.width && { height: '100%' }),
-          ...(viewport.height < viewport.width && { width: '100%' }),
-        };
+          canvasRef.value!.height = viewport.height;
+          canvasRef.value!.width = viewport.width;
+          canvasStyle.value = {
+            ...(viewport.height >= viewport.width && { height: '100%' }),
+            ...(viewport.height < viewport.width && { width: '100%' }),
+          };
 
-        const renderTask = page.render({
-          canvasContext: ctx.value!,
-          canvas: canvasRef.value!,
-          viewport,
+          const renderTask = page.render({
+            canvasContext: ctx.value!,
+            canvas: canvasRef.value!,
+            viewport,
+          });
+
+          return renderTask.promise;
+        })
+        .then(() => {
+          isProcessing.value = false;
         });
+    });
+  }
 
-        return renderTask.promise;
+  function onPagePrev() {
+    if (currentPage.value <= 1) {
+      return;
+    }
+
+    currentPage.value -= 1;
+    renderPage(currentPage.value);
+  }
+
+  function onPageNext() {
+    if (currentPage.value >= totalPage.value) {
+      return;
+    }
+
+    currentPage.value += 1;
+    renderPage(currentPage.value);
+  }
+
+  onMounted(() => {
+    getFileByInfoFromMsg(props.item.id!, props.incomingMsgId)
+      .then(file => {
+        if (!file) {
+          isProcessing.value = false;
+          emits('error');
+          return;
+        }
+
+        return (file as web3n.files.ReadonlyFile).readBytes();
       })
-      .then(() => {
-        isProcessing.value = false;
+      .then(byteArray => {
+        if (!byteArray) {
+          return;
+        }
+
+        return pdfjs.getDocument(byteArray).promise;
+      })
+      .then(doc => {
+        pdfDoc = doc;
+        if (pdfDoc) {
+          totalPage.value = pdfDoc.numPages;
+        }
+
+        return renderPage(currentPage.value);
       });
   });
-}
-
-function onPagePrev() {
-  if (currentPage.value <= 1) {
-    return;
-  }
-
-  currentPage.value -= 1;
-  renderPage(currentPage.value);
-}
-
-function onPageNext() {
-  if (currentPage.value >= totalPage.value) {
-    return;
-  }
-
-  currentPage.value += 1;
-  renderPage(currentPage.value);
-}
-
-onMounted(() => {
-  getFileByInfoFromMsg(props.item.id!, props.incomingMsgId)
-    .then(file => {
-      if (!file) {
-        isProcessing.value = false;
-        emits('error');
-        return;
-      }
-
-      return (file as web3n.files.ReadonlyFile).readBytes();
-    })
-    .then(byteArray => {
-      if (!byteArray) {
-        return;
-      }
-
-      return pdfjs.getDocument(byteArray).promise;
-    })
-    .then(doc => {
-      pdfDoc = doc;
-      if (pdfDoc) {
-        totalPage.value = pdfDoc.numPages;
-      }
-
-      return renderPage(currentPage.value);
-    });
-});
 </script>
 
 <template>
@@ -135,7 +137,7 @@ onMounted(() => {
     >
       <div :class="$style.blockBtn">
         <ui3n-tooltip
-          :content="$tr('chat.pdf.view.btn.prev')"
+          :content="t('chat.viewer.btn.pdf.prev')"
           position-strategy="fixed"
           placement="bottom-start"
         >
@@ -151,7 +153,7 @@ onMounted(() => {
         </ui3n-tooltip>
 
         <ui3n-tooltip
-          :content="$tr('chat.pdf.view.btn.next')"
+          :content="t('chat.viewer.btn.pdf.next')"
           position-strategy="fixed"
           placement="bottom-start"
         >
@@ -168,14 +170,14 @@ onMounted(() => {
       </div>
 
       <div :class="$style.info">
-        {{ $tr('chat.pdf.view.page') }}
+        {{ t('chat.viewer.label.pdf') }}
         <span>{{ currentPage }}</span>
         &nbsp;/&nbsp;
         <span>{{ totalPage }}</span>
       </div>
 
       <div :class="$style.blockBtn">
-        &nbsp;
+&nbsp;
       </div>
     </div>
 
@@ -189,59 +191,59 @@ onMounted(() => {
 </template>
 
 <style lang="scss" module>
-.pdfView {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding: var(--spacing-xxl) var(--spacing-s);
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  .pdfView {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: var(--spacing-xxl) var(--spacing-s);
+    display: flex;
+    justify-content: center;
+    align-items: center;
 
-  &.mobile {
-    padding: var(--spacing-xl) var(--spacing-s);
+    &.mobile {
+      padding: var(--spacing-xl) var(--spacing-s);
 
-    .actions {
-      height: var(--spacing-xl);
+      .actions {
+        height: var(--spacing-xl);
+      }
     }
   }
-}
 
-.canvas {
-  position: relative;
-  object-fit: contain;
-}
+  .canvas {
+    position: relative;
+    object-fit: contain;
+  }
 
-.actions {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  top: 0;
-  height: var(--spacing-xxl);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 var(--spacing-s);
-}
+  .actions {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    top: 0;
+    height: var(--spacing-xxl);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 var(--spacing-s);
+  }
 
-.blockBtn {
-  display: flex;
-  min-width: 72px;
-  justify-content: center;
-  align-items: center;
-  column-gap: var(--spacing-s);
-}
+  .blockBtn {
+    display: flex;
+    min-width: 72px;
+    justify-content: center;
+    align-items: center;
+    column-gap: var(--spacing-s);
+  }
 
-.info {
-  font-size: var(--font-16);
-  color: var(--color-text-control-primary-default);
-}
+  .info {
+    font-size: var(--font-16);
+    color: var(--color-text-control-primary-default);
+  }
 
-.loader {
-  position: absolute;
-  z-index: 5500;
-  left: calc(50% - 54px);
-  top: 50%;
-  transform: translateY(-50%);
-}
+  .loader {
+    position: absolute;
+    z-index: 5500;
+    left: calc(50% - 54px);
+    top: 50%;
+    transform: translateY(-50%);
+  }
 </style>

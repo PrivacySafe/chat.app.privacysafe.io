@@ -14,35 +14,37 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
-
-import { I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { b64ToBlob, uint8ToDataURL } from '@v1nt1248/3nclient-lib/utils';
 
-type ReadonlyFile = web3n.files.ReadonlyFile
+type ReadonlyFile = web3n.files.ReadonlyFile;
 
 const IMG_FILE_EXTS = ['svg', 'jpeg', 'jpg', 'png', 'gif', 'webp'];
 
 export type ImageType = 'svg' | 'jpeg' | 'png' | 'gif' | 'webp';
 
 export async function selectImageFilesWithDialog(
-  title: string, btnLabel: string, multiSelections: boolean, $tr: I18nPlugin['$tr'],
+  title: string,
+  btnLabel: string,
+  multiSelections: boolean,
+  t: (key: string, placeholders?: Record<string, string>) => string,
 ): Promise<ReadonlyFile | ReadonlyFile[] | undefined> {
-  const files = await w3n.shell!.fileDialogs!.openFileDialog!(
-    title, btnLabel, multiSelections,
-    [{ extensions: IMG_FILE_EXTS, name: $tr('dialog.open-file.image-type') }],
-  );
-  return (files ? ((files.length > 1) ? files : files[0]) : undefined);
+  const files = await w3n.shell!.fileDialogs!.openFileDialog!(title, btnLabel, multiSelections, [
+    { extensions: IMG_FILE_EXTS, name: t('dialog.open-file.image-type') },
+  ]);
+  return files ? (files.length > 1 ? files : files[0]) : undefined;
 }
 
 export async function selectOneImageFileWithDialog(
-  title: string, btnLabel: string, $tr: I18nPlugin['$tr'],
+  title: string,
+  btnLabel: string,
+  t: (key: string, placeholders?: Record<string, string>) => string,
 ): Promise<ReadonlyFile | undefined> {
-  const file = await selectImageFilesWithDialog(title, btnLabel, false, $tr);
-  return (file ? file as ReadonlyFile : undefined);
+  const file = await selectImageFilesWithDialog(title, btnLabel, false, t);
+  return file ? (file as ReadonlyFile) : undefined;
 }
 
 export async function blobFromImageFile(imgFile: ReadonlyFile): Promise<Blob> {
-  const imgBytes = await imgFile.readBytes() as BlobPart;
+  const imgBytes = (await imgFile.readBytes()) as BlobPart;
   if (!imgBytes) {
     throw new Error(`Expected image file ${imgFile.name} is empty`);
   }
@@ -56,7 +58,7 @@ export function mimeTypeOfImageFile(imgFile: ReadonlyFile): string {
     throw new Error(`File name has no extension to guess its type`);
   }
   const fExt = fName.substring(indOfDot + 1);
-  switch (fExt as (ImageType | 'jpg')) {
+  switch (fExt as ImageType | 'jpg') {
     case 'svg':
       return `image/svg+xml`;
     case 'jpeg':
