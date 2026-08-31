@@ -18,7 +18,6 @@ import type { FileWithId } from '../types/index.ts';
 
 export async function getFileStat(entity: FileWithId): Promise<web3n.files.Stats> {
   return entity.stat().catch(() => {
-    console.log(`[xxx] Error getting ${entity.name} file stats`);
     return {
       isFile: true,
       size: 0,
@@ -29,7 +28,6 @@ export async function getFileStat(entity: FileWithId): Promise<web3n.files.Stats
 
 export async function getEntityStat(fs: web3n.files.FS, path: string, isFile?: boolean): Promise<web3n.files.Stats> {
   return fs.stat(path).catch(() => {
-    console.log(`[xxx] Error getting ${path} FS entity stats`);
     return {
       isFile: !!isFile,
       isFolder: !!isFile,

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024 - 2025 3NSoft Inc.
+ Copyright (C) 2024 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -34,13 +34,17 @@ declare namespace web3n.system {
 
 	interface SysUtils {
 
+		logout?: () => Promise<void>;
+		closeCurrentUserApps?: () => Promise<void>;
+		exitPlatform?: () => Promise<void>;
+
 		apps?: apps.Apps;
 
 		platform?: platform.Platform;
 
 		monitor?: monitor.SystemMonitor;
 
-		logout?: Logout;
+		otherOpenUsers?: OtherOpenUsers;
 
 		userLogin?: UserLoginSettings;
 
@@ -48,7 +52,11 @@ declare namespace web3n.system {
 
 	}
 
-	type Logout = (closePlatform: boolean) => Promise<void>;
+	interface OtherOpenUsers {
+		openLogin: () => Promise<void>;
+		list: () => Promise<string[]|undefined>;
+		openDashboardOf: (userId: string) => Promise<void>;
+	}
 
 	interface UserLoginSettings {
 		isAutoLoginSet: () => Promise<boolean>;

@@ -3,7 +3,12 @@
 tester_dir="$(dirname ${BASH_SOURCE[0]})"
 data_dir="$tester_dir/test-data_$(date +%Y-%m-%d_%H-%M)"
 signup_url="3nweb.net/signup/"
+#signup_url="webconference.kwlug.org:7070/signup/"
 platform="$1"
+
+# --- SOLUTION: Prevent embedded Deno from seeing package.json ---
+export DENO_NO_PACKAGE_JSON=1
+# -------------------------------------------------------------
 
 if [ -z "$platform" ]
 then

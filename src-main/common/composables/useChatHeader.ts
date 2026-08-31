@@ -70,7 +70,7 @@ export function useChatHeader({
 
   const { user } = storeToRefs(useAppStore());
 
-  const { joinIncomingCall, dismissIncomingCall, startCall, endCall } = useUiIncomingStore();
+  const { joinIncomingCall, dismissIncomingCall, startCall, endCall, rejoinCall } = useUiIncomingStore();
   const { refreshChatList } = useChatsStore();
 
   const chatStore = useChatStore();
@@ -93,6 +93,7 @@ export function useChatHeader({
     () => !!chat.value.incomingCall && !!chat.value.incomingCall.chatId && !!chat.value.incomingCall.peerAddress,
   );
   const chatWithCall = computed(() => !!chat.value.callStart);
+  const isCallActive = computed(() => !!chat.value.isCallActive);
 
   const callDuration = ref<Nullable<string>>(null);
   const timer = ref<NodeJS.Timeout | undefined>(undefined);
@@ -273,11 +274,13 @@ export function useChatHeader({
     currentChatObjId,
     isIncomingCall,
     chatWithCall,
+    isCallActive,
     callDuration,
     selectAction,
     joinIncomingCall,
     dismissIncomingCall,
     startCall,
     endCall,
+    rejoinCall,
   };
 }

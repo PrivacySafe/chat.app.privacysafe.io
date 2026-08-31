@@ -17,11 +17,22 @@
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import type { ReadonlyFile, ReadonlyFS } from '~/index';
 import { chatService, fileLinkStoreSrv } from '@main/common/services/external-services';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('FilesHelper');
 
 export async function getFileByInfoFromMsg(
   entityId: string,
   incomingMsgId?: string,
 ): Promise<Nullable<ReadonlyFile | ReadonlyFS>> {
+  // A record synchronized from another device of the same user carries only the
+  // attachments' metadata - the files themselves stay on the sending device, so
+  // there is no id to look up. Guarding here covers every caller at once
+  // (viewers, download, thumbnails) instead of each of them separately.
+  if (!entityId) {
+    return null;
+  }
+
   if (incomingMsgId) {
     const msg = await chatService.getIncomingMessage(incomingMsgId);
     if (!msg) {
@@ -67,7 +78,7 @@ export async function saveFileFromMsg(
       await targetFolder!.saveFolder(entity as ReadonlyFS, entity.name);
       return true;
     } catch (e) {
-      w3n.log('error', `Error saving the folder ${entity.name}`, e);
+      log.error(`Error saving the folder ${entity.name}`, e);
       return false;
     }
   } else {
@@ -86,7 +97,7 @@ export async function saveFileFromMsg(
       await targetFile.writeBytes(bytes!);
       return true;
     } catch (e) {
-      w3n.log('error', `Error saving the file ${entity.name}`, e);
+      log.error(`Error saving the file ${entity.name}`, e);
       return false;
     }
   }

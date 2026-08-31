@@ -30,8 +30,14 @@ export class ObserversSet<T> implements Observer<T> {
   readonly next = (value: T): void => {
     for (const obs of this.observers) {
       try {
-        obs.next?.(value);
-      } catch (err) { /* empty */
+        const res = obs.next?.(value);
+        if (res && typeof (res as Promise<unknown>).catch === 'function') {
+          (res as Promise<unknown>).catch(err => {
+            console.error('ObserversSet.next unhandled async rejection in observer:', err);
+          });
+        }
+      } catch (err) {
+        console.error('ObserversSet.next synchronous error in observer:', err);
       }
     }
   };
@@ -39,8 +45,14 @@ export class ObserversSet<T> implements Observer<T> {
   readonly error = (err: any): void => {
     for (const obs of this.observers) {
       try {
-        obs.error?.(err);
-      } catch (err) { /* empty */
+        const res = obs.error?.(err);
+        if (res && typeof (res as Promise<unknown>).catch === 'function') {
+          (res as Promise<unknown>).catch(asyncErr => {
+            console.error('ObserversSet.error unhandled async rejection in observer:', asyncErr);
+          });
+        }
+      } catch (syncErr) {
+        console.error('ObserversSet.error synchronous error in observer:', syncErr);
       }
     }
     this.observers.clear();
@@ -49,8 +61,14 @@ export class ObserversSet<T> implements Observer<T> {
   readonly complete = (): void => {
     for (const obs of this.observers) {
       try {
-        obs.complete?.();
-      } catch (err) { /* empty */
+        const res = obs.complete?.();
+        if (res && typeof (res as Promise<unknown>).catch === 'function') {
+          (res as Promise<unknown>).catch(asyncErr => {
+            console.error('ObserversSet.complete unhandled async rejection in observer:', asyncErr);
+          });
+        }
+      } catch (syncErr) {
+        console.error('ObserversSet.complete synchronous error in observer:', syncErr);
       }
     }
     this.observers.clear();

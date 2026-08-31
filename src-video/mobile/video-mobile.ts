@@ -18,17 +18,24 @@
 import { createApp } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { createPinia } from 'pinia';
-import { notifications, storeVueBus, vueBus } from '@v1nt1248/3nclient-lib/plugins';
+import { dialogs, notifications, storeVueBus, vueBus } from '@v1nt1248/3nclient-lib/plugins';
 
 import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
 import '@main/common/assets/styles/main.css';
 
 import i18n from '@main/common/data/i18';
+import { initDebugLogging } from '@shared/logger';
+import { startCallWindowLogRelay } from '@video/common/services/video-chat-service/video-chat-srv';
+import { installConsoleTimestamps } from '@shared/console-timestamps';
 
 import VideoApp from '@video/mobile/pages/video-app.vue';
 import VASetup from '@video/mobile/pages/va-setup.vue';
 import Call from '@video/mobile/pages/call.vue';
+
+// Before anything else logs: a call window's console lines are only useful with
+// a time on them (see shared-libs/console-timestamps.ts).
+installConsoleTimestamps();
 
 const app = createApp(VideoApp);
 const pinia = createPinia();
@@ -57,4 +64,13 @@ app.config.compilerOptions.isCustomElement = tag => {
   return tag.startsWith('ui3n-');
 };
 
-app.use(pinia).use(i18n).use(vueBus).use(notifications).use(router).mount('#video-mobile');
+app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#video-mobile');
+
+// Diagnostic logging of signalling and track handling, off unless the
+// launcher's app configuration turns it on (see shared-libs/logger.ts).
+initDebugLogging();
+
+// This window's lines also go to the background, which prints them into the
+// output the whole run is read from. Started here, before the background has
+// subscribed to this window: lines written meanwhile wait in the relay.
+startCallWindowLogRelay();

@@ -19,6 +19,9 @@ import size from 'lodash/size';
 import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
 import type { ReadonlyFile, ReadonlyFS, RegularMsgView } from '~/index';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('MsgActions');
 
 export async function copyMessageToClipboard(message: RegularMsgView | undefined) {
   if (!message) {
@@ -76,7 +79,7 @@ export async function downloadAttachments(
       return false;
     }
   } catch (err) {
-    w3n.log('error', t('chat.message.action_message.error.file_download'), err);
+    log.error(t('chat.message.action_message.error.file_download'), err);
     return false;
   }
 }

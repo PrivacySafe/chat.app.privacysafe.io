@@ -27,6 +27,9 @@ import { useChatsStore } from '@main/common/store/chats.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
 import type { ChatListItemView, GroupChatView, RegularMsgView } from '~/chat.types';
 import type { ChatIdObj, RelatedMessage } from '~/index';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('ChatStore');
 
 export const useChatStore = defineStore('chat', () => {
   const { t } = useI18n();
@@ -144,7 +147,7 @@ export const useChatStore = defineStore('chat', () => {
   }) {
     const chat = chatsStore.getChatView(chatId);
     if (!chat) {
-      w3n.log('error', `The chat with id ${JSON.stringify(chatId)} is not found.`);
+      log.error(`The chat with id ${JSON.stringify(chatId)} is not found.`);
       return;
     }
 

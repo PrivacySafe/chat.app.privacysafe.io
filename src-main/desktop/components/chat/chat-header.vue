@@ -45,12 +45,14 @@
     currentChatObjId,
     isIncomingCall,
     chatWithCall,
+    isCallActive,
     callDuration,
     selectAction,
     joinIncomingCall,
     dismissIncomingCall,
     startCall,
     endCall,
+    rejoinCall,
   } = useChatHeader({
     chat: chatVal,
     messages: chatMessagesVal,
@@ -130,6 +132,21 @@
     </template>
 
     <ui3n-button
+      v-else-if="isCallActive"
+      type="custom"
+      size="small"
+      color="var(--success-content-default)"
+      text-color="var(--success-fill-default)"
+      icon="round-phone"
+      icon-color="var(--success-fill-default)"
+      icon-position="left"
+      :class="$style.rejoinBtn"
+      @click.stop.prevent="() => rejoinCall(currentChatObjId)"
+    >
+      {{ t('va.btn.rejoin_call') }}
+    </ui3n-button>
+
+    <ui3n-button
       v-else
       type="custom"
       color="var(--color-bg-button-tritery-default)"
@@ -195,5 +212,20 @@
   .videoCallBtn {
     padding: 0 var(--spacing-s) !important;
     column-gap: 0 !important;
+  }
+
+  .rejoinBtn {
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.7;
+    }
   }
 </style>

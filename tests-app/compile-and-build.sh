@@ -104,11 +104,18 @@ echo "Implicit check with no-emit vue's typescript compile"
 vue-tsc --noEmit || exit $?
 echo "Build with vite, reusing main vite config"
 vite build || exit $?
+
 cp -LHr public/* build/app/ || cp -r public/* build/app/ || exit $?
+
+# The app's own public/ is not this directory's: the patched manifest exposes
+# ice-servers.json as an FS resource initialized from the app folder, so the test
+# build needs that file too - otherwise every call start logs a failed read and
+# falls back to the copy inside the Deno bundle.
+cp ../public/ice-servers.json build/app/ || exit $?
 
 patch_app_manifest ../manifest.json manifest-patch.json build/manifest.json || error_exit "🚩 fail to patch manifest"
 
-for js_file in background-instance.js
+for js_file in background-instance.mjs
 do
   if [ -f "../app/$js_file" ]
   then

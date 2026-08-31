@@ -15,7 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import dayjs from 'dayjs';
-import { isEmpty, size } from 'lodash';
+import size from 'lodash/size';
+import isEmpty from 'lodash/isEmpty';
 import { html2text } from '@v1nt1248/3nclient-lib/utils';
 import { messageActions } from '../constants';
 import type {
@@ -24,6 +25,7 @@ import type {
   ChatException,
   ChatListItemView,
   ChatMessageAction,
+  ChatMessageActionType,
   ChatMessageAttachmentsInfo,
   ChatMessageView,
   FileWithId,
@@ -34,6 +36,9 @@ import type {
 import { getFileStat, getEntityStat } from '@shared/get-stats-safely';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from './chat-ui.helper';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('ChatsHelper');
 
 export async function prepareAttachmentEntityInfo(
   entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS,
@@ -170,7 +175,7 @@ export async function exportChatMessages({
         await (outFile as web3n.files.WritableFile).writeTxt(chatContent);
         return true;
       } catch (e) {
-        w3n.log('error', 'Error chat messages content saving. ', e);
+        log.error('Error chat messages content saving. ', e);
         return false;
       }
     }
@@ -222,10 +227,14 @@ function checkAction({
   return typeMatches && statusMatches && attachmentsMatches && timestampMatches;
 }
 
+const ORIGIN_DEVICE_ONLY_ACTIONS: ChatMessageActionType[] = ['resend', 'cancel_sending', 'edit', 'download'];
+const DELETE_BLOCKED_STATUSES: MessageStatus[] = ['sending', 'syncing_self'];
+
 export function getMessageActions(
   msg: ChatMessageView,
   t: (txt: string) => string,
   readonly?: boolean,
+  isOriginDevice = true,
 ): Omit<ChatMessageAction, 'conditions'>[] {
   const { isIncomingMsg, status, timestamp } = msg;
   const messageType = isIncomingMsg ? 'incoming' : 'outgoing';
@@ -238,6 +247,15 @@ export function getMessageActions(
 
       if (readonly && !allowInReadonlyMode) {
         return false;
+      }
+
+      if (!isOriginDevice && !isIncomingMsg) {
+        if (ORIGIN_DEVICE_ONLY_ACTIONS.includes(action.id)) {
+          return false;
+        }
+        if (action.id === 'delete_message' && status && DELETE_BLOCKED_STATUSES.includes(status)) {
+          return false;
+        }
       }
 
       if (isEmpty(conditions)) {
@@ -296,4 +314,34 @@ export function prepareCheckAddrErrorText(
   }
 
   return t('validation.text.unknown', { addr });
+}
+
+export function prepareMessageBody(inputText: string) {
+  const mentionPattern = /@.*?]/g;
+  let processedText = inputText.replace(mentionPattern, match => {
+    return `<a class="mention" data-mention="${match}">${match}</a>`;
+  });
+
+  const urlPattern = /(?:https?|w3n):\/\/[^\s]+|(?<!\S|@)[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/[^\s]*[^.,?\s])?/g;
+  const combinedPattern = new RegExp(`(<a[^>]*>.*?</a>)|(${urlPattern.source})`, 'gi');
+
+  processedText = processedText.replace(combinedPattern, (match, tagGroup, urlGroup) => {
+    if (tagGroup) {
+      return tagGroup;
+    }
+
+    if (urlGroup) {
+      return `<a class="url" data-href="${urlGroup}">${urlGroup}</a>`;
+    }
+
+    return match;
+  });
+
+  return processedText;
+}
+
+export function restoreRawMessage(htmlMessage: string) {
+  const anyTagPattern = /<a class="(?:url|mention)"[^>]*>([\s\S]*?)<\/a>/g;
+
+  return htmlMessage.replace(anyTagPattern, (_, innerText) => innerText);
 }

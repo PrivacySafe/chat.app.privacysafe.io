@@ -23,15 +23,18 @@
     type Ui3nDialogComponentProps,
     type Ui3nDialogEvent,
     Ui3nInput,
+    Ui3nIcon,
   } from '@v1nt1248/3nclient-lib';
   import { useChatsStore } from '@main/common/store/chats.store.ts';
   import { useChatStore } from '@main/common/store/chat.store.ts';
+  import { getChatNameHint } from '@main/common/utils/chat-ui.helper.ts';
   import { areChatIdsEqual } from '@shared/chat-ids.ts';
   import type { ChatIdObj } from '~/asmail-msgs.types.ts';
   import ChatAvatar from '../chat/chat-avatar.vue';
 
   defineProps<{
     dialogProps?: Ui3nDialogComponentProps<{ chatId?: ChatIdObj; contact?: { mail: string; name: string } }>;
+    warningText?: string;
   }>();
   const emits = defineEmits<{
     (
@@ -49,12 +52,16 @@
 
   // We can only make forward messages to already created and active chats (having accept)
   const filteredChatList = computed(() =>
-    chatListSortedByTime.value.filter(
-      c =>
-        c.displayName.toLowerCase().includes(searchText.value.toLowerCase()) &&
-        !['initiated', 'invited'].includes(c.status) &&
-        !areChatIdsEqual(currentChatId.value, c),
-    ),
+    chatListSortedByTime.value
+      .filter(
+        c =>
+          c.displayName.toLowerCase().includes(searchText.value.toLowerCase()) &&
+          !['initiated', 'invited'].includes(c.status) &&
+          !areChatIdsEqual(currentChatId.value, c),
+      )
+      // Picking the wrong one of two same-named chats sends the message to the
+      // wrong people, so the list spells out what tells them apart.
+      .map(c => ({ ...c, nameHint: getChatNameHint(c) })),
   );
 
   function selectItem({ chatId, contact }: { chatId?: ChatIdObj; contact?: { mail: string; name: string } }) {
@@ -70,12 +77,27 @@
   >
     <template #body>
       <div :class="$style.messageForwardDialog">
+        <div
+          v-if="warningText"
+          :class="$style.forwardWarning"
+        >
+          <ui3n-icon
+            icon="round-report-gmailerrorred"
+            :size="18"
+            color="var(--warning-content-default)"
+          />
+          <span :class="$style.forwardWarningText">{{ warningText }}</span>
+        </div>
+
         <ui3n-input
           v-model="searchText"
-          icon="round-search"
           clearable
           :class="$style.search"
-        />
+        >
+          <template #prepend-icon>
+            <ui3n-icon icon="round-search" />
+          </template>
+        </ui3n-input>
 
         <div :class="$style.messageForwardDialogBody">
           <h4 :class="$style.messageForwardDialogSubtitle">
@@ -101,6 +123,13 @@
               />
               <div :class="$style.messageForwardDialogItemName">
                 {{ chat.displayName }}
+
+                <span
+                  v-if="chat.nameHint"
+                  :class="$style.messageForwardDialogItemNameHint"
+                >
+                  {{ chat.nameHint }}
+                </span>
               </div>
             </div>
           </template>
@@ -176,6 +205,13 @@
     @include mixins.text-overflow-ellipsis();
   }
 
+  .messageForwardDialogItemNameHint {
+    margin-left: var(--spacing-xs);
+    font-size: var(--font-10);
+    font-weight: 400;
+    color: var(--color-text-chat-bubble-other-sub);
+  }
+
   .messageForwardDialogEmpty {
     position: relative;
     width: 100%;
@@ -185,5 +221,23 @@
     font-style: italic;
     color: var(--color-text-chat-bubble-other-default);
     margin-bottom: var(--spacing-s);
+  }
+
+  .forwardWarning {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-s);
+    border-radius: var(--spacing-xs);
+    background-color: var(--color-bg-block-tritery-disabled);
+    margin-bottom: var(--spacing-s);
+    font-size: var(--font-12);
+    line-height: var(--font-16);
+    color: var(--warning-content-default);
+  }
+
+  .forwardWarningText {
+    flex: 1;
   }
 </style>

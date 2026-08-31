@@ -16,6 +16,7 @@
 -->
 <script lang="ts" setup>
   import { computed } from 'vue';
+  import size from 'lodash/size';
   import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
   import { useChatHeaderActions } from '@main/common/composables/useChatHeaderActions';
   import type { ChatListItemView } from '~/chat.types.ts';
@@ -40,6 +41,7 @@
     v-model="isMenuOpen"
     :offset-y="4"
     :close-on-click="false"
+    :content-border-radius="16"
     :disabled="disabled"
     :class="$style.menu"
   >
@@ -55,7 +57,7 @@
     <template #menu>
       <div :class="$style.chatHeaderActionsMenu">
         <div
-          v-for="item in availableMenuItems"
+          v-for="(item, index) in availableMenuItems"
           :key="item.action"
           :class="[
             $style.chatHeaderActionsMenuItem,
@@ -63,6 +65,8 @@
             item.isAccent && $style.chatHeaderActionsMenuItemAccent,
             item.subMenu && $style.withSubMenu,
             isMenuItemDisabled(item) && $style.disabled,
+            index === 0 && $style.itemFirst,
+            index === size(availableMenuItems) - 1 && $style.itemLast,
           ]"
           v-on="isMenuItemDisabled(item) ? {} : { click: () => selectAction(item) }"
         >
@@ -88,7 +92,7 @@
             :class="$style.subMenu"
           >
             <div
-              v-for="subItem in item.subMenu"
+              v-for="(subItem, ind) in item.subMenu"
               :key="subItem.action"
               :class="[
                 $style.chatHeaderActionsMenuItem,
@@ -97,6 +101,8 @@
                 subItem.isAccent && $style.chatHeaderActionsMenuItemAccent,
                 isSubItemSelected(subItem) && $style.isSelected,
                 isMenuItemDisabled(subItem) && $style.disabled,
+                ind === 0 && $style.itemFirst,
+                ind === size(item.subMenu) - 1 && $style.itemLast,
               ]"
               v-on="isMenuItemDisabled(subItem) || subItem.subMenu ? {} : { click: () => selectAction(subItem) }"
             >
@@ -137,7 +143,7 @@
     position: relative;
     width: var(--chat-header-menu-width);
     background-color: var(--color-bg-control-secondary-default);
-    border-radius: var(--spacing-xs);
+    border-radius: var(--spacing-m);
     padding: var(--spacing-xs);
   }
 
@@ -147,13 +153,22 @@
     justify-content: flex-start;
     align-items: center;
     column-gap: var(--spacing-s);
-    padding: 0 var(--spacing-xs);
+    padding: 0 var(--spacing-s);
     height: var(--chat-header-menu-item-height);
     font-size: 13px;
     font-weight: 400;
+    line-height: var(--font-16);
     color: var(--color-text-control-primary-default);
-    border-radius: 2px;
+    border-radius: var(--spacing-xs);
     cursor: pointer;
+
+    &.itemFirst {
+      border-radius: var(--spacing-m) var(--spacing-m) var(--spacing-xs) var(--spacing-xs);
+    }
+
+    &.itemLast {
+      border-radius: var(--spacing-xs) var(--spacing-xs) var(--spacing-m) var(--spacing-m);
+    }
 
     &:hover {
       background-color: var(--color-bg-control-primary-hover);
@@ -192,10 +207,10 @@
     position: absolute;
     padding: var(--spacing-xs);
     background-color: var(--color-bg-control-secondary-default);
-    border-radius: var(--spacing-xs);
-    width: 90px;
+    border-radius: var(--spacing-m);
+    width: 100px;
     top: 0;
-    left: -90px;
+    left: -100px;
     min-height: calc(var(--chat-header-menu-item-height) + var(--spacing-xs) * 2);
     box-shadow:
       0 0 2px 0 var(--shadow-key-1),

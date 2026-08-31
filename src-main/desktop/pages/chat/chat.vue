@@ -213,7 +213,7 @@
                       icon="outline-reply"
                       width="24"
                       height="24"
-                      :h-flip="initialMessageType === 'forward'"
+                      :horizontal-flip="initialMessageType === 'forward'"
                       color="var(--color-icon-block-accent-default)"
                     />
                   </div>

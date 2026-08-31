@@ -25,12 +25,24 @@
   import { useOpenAttachment } from './useOpenAttachment';
   import type { AttachmentViewInfo } from './types';
   import ChatMessageAttachmentView from './chat-message-attachment-view.vue';
+  import { makeLogger } from '@shared/logger';
+
+  const log = makeLogger('MsgAttachment');
+
+  import { useI18n } from 'vue-i18n';
 
   const props = defineProps<{
     item: AttachmentViewInfo;
     incomingMsgId?: string;
+    /**
+     * Whether this message's files live only on the device that sent it. Decided
+     * once per message by the container (chat-message-attachments.vue), which
+     * also shows the single caption explaining it.
+     */
+    blocked?: boolean;
   }>();
 
+  const { t } = useI18n();
   const { addTask } = inject('task-runner') as { addTask: (task: Task) => void };
 
   const { openEntity } = useOpenAttachment(props);
@@ -41,6 +53,10 @@
 
   const attachmentsItemPreviewSize = 96;
   const attachmentsItemPreviewSizeCss = computed(() => `${attachmentsItemPreviewSize}px`);
+
+  const unavailableTooltip = computed(() =>
+    props.blocked ? t('chat.message.attachment.not_available_on_this_device') : '',
+  );
 
   const isThumbnailAvailable = computed(
     () =>
@@ -60,6 +76,10 @@
   });
 
   async function onAttachmentElementClick() {
+    if (props.blocked) {
+      return;
+    }
+
     if (props.item.isActionAvailable) {
       isViewOpen.value = true;
       return;
@@ -91,14 +111,14 @@
         });
       }
     } catch (e) {
-      w3n.log('error', `The thumbnail making error for the file ${props.item.name}.`, e);
+      log.error(`The thumbnail making error for the file ${props.item.name}.`, e);
     } finally {
       isThumbnailCreationProcessGoingOn.value = false;
     }
   }
 
   async function makeThumbnail() {
-    if (!isThumbnailAvailable.value) {
+    if (!isThumbnailAvailable.value || props.blocked) {
       return;
     }
 
@@ -111,11 +131,17 @@
 
 <template>
   <div
-    :class="[$style.chatMessageAttachment, item.isActionAvailable && $style.chatMessageAttachmentClickable]"
+    :class="[
+      'chat-message-attachment',
+      $style.chatMessageAttachment,
+      item.isActionAvailable && $style.chatMessageAttachmentClickable,
+      blocked && $style.chatMessageAttachmentBlocked,
+    ]"
+    :title="unavailableTooltip"
     @click.stop.prevent="onAttachmentElementClick"
   >
     <div
-      v-if="isThumbnailAvailable"
+      v-if="isThumbnailAvailable && !blocked"
       :class="$style.previewWrap"
     >
       <div
@@ -141,7 +167,13 @@
       :class="$style.icon"
     >
       <ui3n-icon
-        v-if="isFileAudio({ fullName: item.name })"
+        v-if="blocked"
+        icon="outline-lock"
+        :size="attachmentsItemPreviewSize"
+      />
+
+      <ui3n-icon
+        v-else-if="isFileAudio({ fullName: item.name })"
         icon="sound-wave-circle"
         :size="attachmentsItemPreviewSize"
       />
@@ -179,7 +211,7 @@
 
     <teleport to="body">
       <chat-message-attachment-view
-        v-if="isViewOpen"
+        v-if="isViewOpen && !blocked"
         :item="item"
         :incoming-msg-id="incomingMsgId"
         @close="isViewOpen = false"
@@ -256,5 +288,11 @@
   .chatMessageAttachmentExt {
     flex-shrink: 0;
     line-height: var(--font-20);
+  }
+
+  .chatMessageAttachmentBlocked {
+    pointer-events: none;
+    cursor: default;
+    opacity: 0.5;
   }
 </style>

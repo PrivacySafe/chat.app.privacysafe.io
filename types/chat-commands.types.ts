@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ChatIdObj } from './asmail-msgs.types';
+import type { ChatIdObj } from './asmail-msgs.types';
 
 export type MainWindowCommand = 'open-chat-with' | 'incoming-call';
 
@@ -27,4 +27,16 @@ export interface OpenChatCmdArg {
 export interface IncomingCallCmdArg {
   peerAddress: string;
   chatId: ChatIdObj;
+  /**
+   * Session id of the ringing call. Echoed back on join/dismiss so the
+   * background service can refuse a click that was armed for a call that is
+   * already over (see joinOrDismissCallInRoom).
+   */
+  callSessionId?: string;
+  /**
+   * When the background service issued this command. A command can be
+   * re-delivered on window re-creation (getStartedCmd), and without an age
+   * check it used to arm the incoming-call UI for a call long over.
+   */
+  sentAt?: number;
 }

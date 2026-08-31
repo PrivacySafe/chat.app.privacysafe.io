@@ -44,10 +44,11 @@
 
   <ui3n-button
     type="icon"
+    size="large"
     color="var(--color-bg-button-primary-default)"
     icon="round-plus"
     icon-color="var(--color-icon-button-primary-default)"
-    icon-size="20"
+    icon-size="32"
     :class="$style.createBtn"
     @click.stop.prevent="() => openCreateChatDialog(true)"
   />

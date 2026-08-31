@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2025 3NSoft Inc.
+ Copyright (C) 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,6 +18,7 @@
 declare namespace web3n.caps.startup {
 
 	interface DefaultProviderSite {
+		openInExternal: (url: string) => Promise<void>;
 		openSiteInChildWindow: (url: string) => Promise<void>;
 		closeSite: () => Promise<void>;
 		getSignupToken: () => Promise<string>;
@@ -32,5 +33,10 @@ declare namespace web3n.caps.startup {
 
 	interface W3N extends web3n.startup.W3N {
 		provider: DefaultProviderSite;
+		enableAutoLogin?: SetAutoLogin;
+		scanUrlQR?: (prefixies: string[]) => Promise<string|undefined>;
 	}
+
+	type SetAutoLogin = (enable: boolean) => Promise<void>;
+
 }

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2021 - 2022, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2021 - 2022, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -38,13 +38,15 @@ declare namespace web3n.shell.files {
 	 * @param btnLabel is a custom label for the confirmation button. If null is
 	 * given, then default label will be used.
 	 * @param defaultPath
-	 * @param filters is an optional parameter, that provides an array of file
-	 * types that can be displayed when you want to limit the user to a specific
-	 * type.
+	 * @param opts is an optional argument with other parameters:
+	 * - filters is an optional parameter, that provides an array of file types that can be displayed,
+	 * when you want to limit the user to a specific type.
 	 */
 	type SaveFileDialog = (
 		title: string, btnLabel: string, defaultPath: string,
-		filters?: FileTypeFilter[]
+		opts?: {
+			filters?: FileTypeFilter[];
+		}
 	) => Promise<web3n.files.WritableFile | undefined>;
 
 	/**
@@ -56,13 +58,15 @@ declare namespace web3n.shell.files {
 	 * @param btnLabel is a custom label for the confirmation button. If null is
 	 * given, then default label will be used.
 	 * @param defaultPath
-	 * @param filters is an optional parameter, that provides an array of file
-	 * types that can be displayed when you want to limit the user to a specific
-	 * type.
+	 * @param opts is an optional argument with other parameters:
+	 * - filters is an optional parameter, that provides an array of file types that can be displayed,
+	 * when you want to limit the user to a specific type.
 	 */
 	type SaveFolderDialog = (
 		title: string, btnLabel: string, defaultPath: string,
-		filters?: FileTypeFilter[]
+		opts?: {
+			filters?: FileTypeFilter[];
+		}
 	) => Promise<web3n.files.WritableFS | undefined>;
 
 	/**
@@ -74,13 +78,15 @@ declare namespace web3n.shell.files {
 	 * given, then default label will be used.
 	 * @param multiSelections if true, multiple items can be selected. If false,
 	 * only one item can be selected.
-	 * @param filters is an optional parameter, that provides an array of file
-	 * types that can be displayed or selected when you want to limit the user
-	 * to a specific type.
+	 * @param opts is an optional argument with other parameters:
+	 * - filters is an optional parameter, that provides an array of file types that can be displayed,
+	 * when you want to limit the user to a specific type.
 	 */
 	type OpenFileDialog = (
 		title: string, btnLabel: string, multiSelections: boolean,
-		filters?: FileTypeFilter[]
+		opts?: {
+			filters?: FileTypeFilter[];
+		}
 	) => Promise<web3n.files.ReadonlyFile[] | undefined>;
 
 	/**
@@ -92,13 +98,15 @@ declare namespace web3n.shell.files {
 	 * given, then default label will be used.
 	 * @param multiSelections if true, multiple items can be selected. If false,
 	 * only one item can be selected.
-	 * @param filters is an optional parameter, that provides an array of file
-	 * types that can be displayed or selected when you want to limit the user
-	 * to a specific type.
+	 * @param opts is an optional argument with other parameters:
+	 * - filters is an optional parameter, that provides an array of file types that can be displayed,
+	 * when you want to limit the user to a specific type.
 	 */
 	type OpenFolderDialog = (
 		title: string, btnLabel: string, multiSelections: boolean,
-		filters?: FileTypeFilter[]
+		opts?: {
+			filters?: FileTypeFilter[];
+		}
 	) => Promise<web3n.files.WritableFS[] | undefined>;
 
 	interface DeviceFiles {

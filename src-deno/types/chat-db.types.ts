@@ -20,6 +20,7 @@ import type { MsgDbEntry, RefsToMsgsDataNoInDB } from './msgs-db.types.ts';
 
 export interface ChatSettings {
   autoDeleteMessages?: string;
+  msgOwnersDeviceId?: string;
   [key: string]: unknown;
 }
 
@@ -61,6 +62,8 @@ export interface OTOChatTableFields {
 export type ChatDbEntry = (GroupChatDbEntry & { isGroupChat: true }) | (OTOChatDbEntry & { isGroupChat: false });
 
 export interface ChatsDb {
+  /** See MsgsDb.flush() - same contract, for the chats database file. */
+  flush(): Promise<void>;
   findChat(chatIdObj: ChatIdObj): ChatDbEntry | undefined;
   addOneToOneChat(
     params: Omit<OTOChatDbEntry, 'createdAt' | 'lastUpdatedAt' | 'peerCAddr'>,

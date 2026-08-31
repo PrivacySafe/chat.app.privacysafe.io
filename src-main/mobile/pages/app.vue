@@ -16,11 +16,13 @@
 -->
 <script lang="ts" setup>
   import { onBeforeMount } from 'vue';
-  import { Ui3nDialogProvider, Ui3nButton, Ui3nMenu } from '@v1nt1248/3nclient-lib';
+  import { Ui3nDialogProvider, Ui3nButton, Ui3nMenu, Ui3nProgressLinear } from '@v1nt1248/3nclient-lib';
   import { useAppView } from '@main/common/composables/useAppView';
   import { useAppStore } from '@main/common/store/app.store';
+  import OrientationNotice from '@main/common/components/app-shell/orientation-notice.vue';
 
-  const { appExit, t } = useAppView();
+  const { t, appExit, isSyncing, syncPending, syncPhase, syncStalled, syncStatusText, showSyncStatus } =
+    useAppView();
   const { setMobileMode } = useAppStore();
 
   onBeforeMount(() => {
@@ -33,6 +35,14 @@
     <div :class="$style.toolbar">
       <div :class="$style.title">
         {{ t('app.title') }}
+      </div>
+
+      <div
+        v-if="showSyncStatus"
+        :class="[$style.syncStatus, syncStalled && $style.syncStalled]"
+        :title="syncStalled ? t('app.sync.stalledTooltip') : t(`app.sync.tooltip.${syncPhase}`)"
+      >
+        {{ t(syncStatusText, { count: syncPending }) }}
       </div>
 
       <ui3n-menu>
@@ -55,6 +65,17 @@
           </div>
         </template>
       </ui3n-menu>
+
+      <div
+        v-if="isSyncing"
+        :class="$style.syncProgress"
+      >
+        <ui3n-progress-linear
+          :height="2"
+          indeterminate
+          bg-color="transparent"
+        />
+      </div>
     </div>
 
     <div :class="$style.body">
@@ -68,6 +89,8 @@
     <div id="notification" />
 
     <ui3n-dialog-provider />
+
+    <orientation-notice />
   </section>
 </template>
 
@@ -75,7 +98,7 @@
   @use '@main/common/assets/styles/_mixins.scss' as mixins;
 
   .app {
-    --main-toolbar-height: 48px;
+    --main-toolbar-height: 64px;
 
     position: fixed;
     inset: 0;
@@ -83,6 +106,7 @@
   }
 
   .toolbar {
+    position: relative;
     width: 100%;
     padding: 0 var(--spacing-m);
     height: var(--main-toolbar-height);
@@ -91,6 +115,31 @@
     align-items: center;
     background-color: var(--color-bg-block-primary-default);
     border-bottom: 1px solid var(--color-border-block-primary-default);
+  }
+
+  .syncStatus {
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 0 var(--spacing-m);
+    font-size: var(--font-12);
+    font-weight: 500;
+    line-height: var(--font-20);
+    color: var(--color-text-control-secondary-default);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .syncStalled {
+    color: var(--warning-content-default);
+  }
+
+  .syncProgress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
   }
 
   .title {

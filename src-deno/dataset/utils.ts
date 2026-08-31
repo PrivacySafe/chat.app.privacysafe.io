@@ -26,7 +26,14 @@ import type {
   OrphanedMsgDbEntry,
 } from '../types/index.ts';
 import { ensureIsAddressString } from '../../shared-libs/address-utils.ts';
-import { queryParamsFrom, andEqualExprFor, optStringAsEmptyTransform, booleanTransform, optJsonTransform, type TransformDefinition } from '../utils/for-sqlite.ts';
+import {
+  queryParamsFrom,
+  andEqualExprFor,
+  optStringAsEmptyTransform,
+  booleanTransform,
+  optJsonTransform,
+  type TransformDefinition,
+} from '../utils/for-sqlite.ts';
 import { makeDbRecordException } from '../utils/exceptions.ts';
 
 export const otoChatTabFields: TransformDefinition<OTOChatTableFields> = {
@@ -38,7 +45,16 @@ export const otoChatTabFields: TransformDefinition<OTOChatTableFields> = {
   lastUpdatedAt: 'as-is',
   settings: {
     toSQLValue: (v: object | null): string | null => (v ? JSON.stringify(v) : null),
-    fromSQLValue: (sv: SqlValue): object | null => (sv ? JSON.parse(sv as string) : null),
+    fromSQLValue: (sv: SqlValue): object | null => {
+      if (!sv || typeof sv !== 'string') {
+        return null;
+      }
+      try {
+        return JSON.parse(sv);
+      } catch {
+        return null;
+      }
+    },
   },
 };
 
@@ -70,7 +86,15 @@ export const groupChatTabFields: TransformDefinition<GroupChatTableFields> = {
       return JSON.stringify(admins);
     },
     fromSQLValue: (sv: SqlValue): GroupChatDbEntry['admins'] => {
-      return JSON.parse(sv as string);
+      if (!sv || typeof sv !== 'string') {
+        return [];
+      }
+      try {
+        const res = JSON.parse(sv);
+        return Array.isArray(res) ? res : [];
+      } catch {
+        return [];
+      }
     },
   },
   members: {
@@ -95,12 +119,29 @@ export const groupChatTabFields: TransformDefinition<GroupChatTableFields> = {
       return JSON.stringify(members);
     },
     fromSQLValue: (sv: SqlValue): GroupChatDbEntry['members'] => {
-      return JSON.parse(sv as string);
+      if (!sv || typeof sv !== 'string') {
+        return {};
+      }
+      try {
+        const res = JSON.parse(sv);
+        return typeof res === 'object' && res !== null ? res : {};
+      } catch {
+        return {};
+      }
     },
   },
   settings: {
     toSQLValue: (v: object | null): string | null => (v ? JSON.stringify(v) : null),
-    fromSQLValue: (sv: SqlValue): object | null => (sv ? JSON.parse(sv as string) : null),
+    fromSQLValue: (sv: SqlValue): object | null => {
+      if (!sv || typeof sv !== 'string') {
+        return null;
+      }
+      try {
+        return JSON.parse(sv);
+      } catch {
+        return null;
+      }
+    },
   },
 };
 
@@ -168,20 +209,25 @@ export const msgsTabFields: TransformDefinition<MsgDbEntry> = {
   settings: optJsonTransform,
 };
 
-export const  msgsOrphanedTabFiels: TransformDefinition<OrphanedMsgDbEntry> = {
-groupChatId: 'as-is',
-otoPeerCAddr: 'as-is',
-incomingMsgId: 'as-is',
-targetMessageId: 'as-is',
-rawPayload: optJsonTransform,
-bufferedAt: 'as-is',
+export const msgsOrphanedTabFiels: TransformDefinition<OrphanedMsgDbEntry> = {
+  // note: converted to/from '' like in msgsTabFields, so equality matching on
+  // groupChatId/otoPeerCAddr works (SQL NULL never equals NULL)
+  groupChatId: optStringAsEmptyTransform,
+  otoPeerCAddr: optStringAsEmptyTransform,
+  incomingMsgId: 'as-is',
+  targetMessageId: 'as-is',
+  rawPayload: optJsonTransform,
+  bufferedAt: 'as-is',
 };
 
 export function msgWhereParamsFor(id: ChatMessageId): {
   whereMsgParams: ParamsObject;
   whereMsg: string;
 } {
-  const { chatId: { isGroupChat, chatId }, chatMessageId } = id;
+  const {
+    chatId: { isGroupChat, chatId },
+    chatMessageId,
+  } = id;
   const whereMsgParams = queryParamsFrom<Pick<MsgDbEntry, 'chatMessageId' | 'groupChatId' | 'otoPeerCAddr'>>(
     {
       chatMessageId,

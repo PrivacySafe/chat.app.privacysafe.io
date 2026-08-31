@@ -17,9 +17,13 @@
 
 import type { ChatMenuItem, ChatMessageAction, MessageDeliveryStatusUI, OutgoingMessageStatus } from '~/index';
 
-export const chatMsgActionElementHeight = 24;
+export const chatMsgActionElementHeight = 32;
 
 export const messageDeliveryStatuses: Record<OutgoingMessageStatus, MessageDeliveryStatusUI> = {
+  ready_to_send: {
+    icon: 'round-rotate-right',
+    color: 'var(--color-icon-chat-bubble-user-quote)',
+  },
   sending: {
     icon: 'round-refresh',
     color: 'var(--color-icon-chat-bubble-user-quote)',
@@ -166,7 +170,7 @@ export const messageActions: ChatMessageAction[] = [
   },
   {
     id: 'forward',
-    icon: { name: 'outline-reply', horizontalFlip: true },
+    icon: { name: 'outline-forward' },
     title: 'chat.message.menu.forward',
     conditions: ['incoming:::', 'outgoing:sent,read,error,canceled::'],
   },

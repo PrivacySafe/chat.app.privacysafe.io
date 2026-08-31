@@ -20,22 +20,18 @@ import { createPinia } from 'pinia';
 import { Router } from 'vue-router';
 import {
   dialogs,
-  i18n,
-  I18nOptions,
   notifications,
   storeVueBus,
-  storeI18n,
   storeNotifications,
   vueBus,
 } from '@v1nt1248/3nclient-lib/plugins';
 
-import en from '@main/common/data/i18/en.json';
+import i18n from '@main/common/data/i18';
 
 export function setupMainApp(app: App<Element>, router: Router) {
 
   const pinia = createPinia();
   pinia.use(storeVueBus);
-  pinia.use(storeI18n);
   pinia.use(storeNotifications);
 
   app.config.globalProperties.$router = router;
@@ -45,7 +41,7 @@ export function setupMainApp(app: App<Element>, router: Router) {
 
   app
   .use(pinia)
-  .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
+  .use(i18n)
   .use(vueBus)
   .use(dialogs)
   .use(notifications)

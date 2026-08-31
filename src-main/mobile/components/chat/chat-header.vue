@@ -27,6 +27,7 @@
   const props = defineProps<{
     chat: ChatListItemView;
     messages: ChatMessageView[];
+    readonly?: boolean;
   }>();
 
   const chatVal = computed(() => props.chat);
@@ -41,12 +42,14 @@
     currentChatObjId,
     isIncomingCall,
     chatWithCall,
+    isCallActive,
     callDuration,
     selectAction,
     joinIncomingCall,
     dismissIncomingCall,
     startCall,
     endCall,
+    rejoinCall,
   } = useChatHeader({
     chat: chatVal,
     messages: chatMessagesVal,
@@ -124,11 +127,22 @@
     </template>
 
     <ui3n-button
+      v-else-if="isCallActive"
+      type="icon"
+      color="var(--success-content-default)"
+      icon="round-phone"
+      icon-color="var(--success-fill-default)"
+      :class="$style.rejoinBtn"
+      @click.stop.prevent="() => rejoinCall(currentChatObjId)"
+    />
+
+    <ui3n-button
       v-else
       type="icon"
       color="var(--color-bg-block-primary-default)"
       icon="round-phone"
       icon-color="var(--color-icon-block-primary-default)"
+      :disabled="readonly"
       @click.stop.prevent="startCall(currentChatObjId)"
     />
 
@@ -145,7 +159,7 @@
   @use '@main/common/assets/styles/_mixins.scss' as mixins;
 
   .chatHeader {
-    --chat-header-height: 48px;
+    --chat-header-height: 64px;
 
     display: flex;
     width: 100%;
@@ -182,5 +196,20 @@
     font-weight: 400;
     line-height: 14px;
     color: var(--color-text-block-secondary-default);
+  }
+
+  .rejoinBtn {
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.7;
+    }
   }
 </style>

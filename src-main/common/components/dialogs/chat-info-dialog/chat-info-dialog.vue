@@ -88,11 +88,16 @@
 
           <ui3n-input
             v-model="userSearch"
-            icon="round-search"
             clearable
             :class="$style.chatInfoDialogContentSearch"
             :placeholder="t('chat.dialog.info.search_placeholder')"
-          />
+          >
+            <template #prepend-icon>
+              <ui3n-icon
+                icon="round-search"
+              />
+            </template>
+          </ui3n-input>
 
           <div :class="$style.chatInfoDialogUserList">
             <contact-list
@@ -161,11 +166,16 @@
 
             <ui3n-input
               v-model="memberSearch"
-              icon="round-search"
               clearable
               :class="$style.chatInfoDialogContentSearch"
               :placeholder="t('chat.dialog.info.search_placeholder')"
-            />
+            >
+              <template #prepend-icon>
+                <ui3n-icon
+                  icon="round-search"
+                />
+              </template>
+            </ui3n-input>
 
             <div :class="[$style.chatInfoDialogUserList, isUserAdmin(ownAddr) && $style.pointer]">
               <contact-list

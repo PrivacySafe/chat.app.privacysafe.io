@@ -15,56 +15,58 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { computed } from 'vue';
-import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
-import { messageDeliveryStatuses } from '@main/common/constants';
-import type { OutgoingMessageStatus } from '~/index.ts';
+  import { computed } from 'vue';
+  import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
+  import { messageDeliveryStatuses } from '@main/common/constants';
+  import type { OutgoingMessageStatus } from '~/index.ts';
 
-const props = defineProps<{
-  value: OutgoingMessageStatus | undefined;
-  iconSize?: number | string;
-}>();
+  const props = defineProps<{
+    value: OutgoingMessageStatus | undefined;
+    iconSize?: number | string;
+  }>();
 
-const iconSize = computed(() => {
-  const isSizeNotNumber = isNaN(Number(props.iconSize));
-  return isSizeNotNumber ? 16 : Number(props.iconSize);
-});
+  const iconSize = computed(() => {
+    const isSizeNotNumber = isNaN(Number(props.iconSize));
+    return isSizeNotNumber ? 16 : Number(props.iconSize);
+  });
 
-const statusUiInfo = computed(() => {
-  if (props.value) {
-    return messageDeliveryStatuses[props.value] || null;
-  }
-  return null;
-});
+  const statusUiInfo = computed(() => {
+    if (props.value) {
+      return messageDeliveryStatuses[props.value] || null;
+    }
+    return null;
+  });
 </script>
 
 <template>
-  <div :class="[$style.chatMessageStatus, value === 'sending' && $style.sending]">
+  <div :class="$style.chatMessageStatus">
     <ui3n-icon
       v-if="statusUiInfo"
       :icon="statusUiInfo.icon"
       :size="iconSize"
       :color="statusUiInfo.color"
+      :class="value === 'sending' && $style.sending"
     />
   </div>
 </template>
 
 <style lang="scss" module>
-.chatMessageStatus {
-  @keyframes rotation {
-    from {
-      transform: rotate(0deg);
+  .chatMessageStatus {
+    @keyframes rotation {
+      from {
+        transform: rotate(0deg);
+      }
+
+      to {
+        transform: rotate(360deg);
+      }
     }
-    
-    to {
-      transform: rotate(360deg);
-    }
+
+    position: relative;
   }
 
-  position: relative;
-}
-
-.sending {
-  animation: rotation 1s infinite linear;
-}
+  .sending {
+    animation: rotation 1s infinite linear;
+    transform-origin: 50% 50%;
+  }
 </style>

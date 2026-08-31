@@ -24,7 +24,7 @@ export function useRouting() {
 
   function goToChatRoute(
     chatIdObj: ChatIdObj,
-    opts?: { callingPeer?: string },
+    opts?: { callingPeer?: string; callSessionId?: string; callSentAt?: number },
   ) {
     const r: ChatRoute = {
       name: 'chat',
@@ -38,6 +38,8 @@ export function useRouting() {
       (r as ChatWithIncomingCall).query = {
         call: 'yes',
         peerAddress: opts.callingPeer,
+        ...(opts.callSessionId && { callSessionId: opts.callSessionId }),
+        ...(opts.callSentAt && { callSentAt: `${opts.callSentAt}` }),
       };
     }
 
@@ -69,15 +71,20 @@ export function useRouting() {
 
   function getIncomingCallParamsFromRoute(route: ChatWithIncomingCall): {
     chatId: ChatIdObj,
-    peerAddress: string
+    peerAddress: string,
+    callSessionId?: string,
+    callSentAt?: number,
   } | undefined {
     if (route.query.call !== 'yes') {
       return;
     }
 
+    const sentAtNum = route.query.callSentAt ? parseInt(route.query.callSentAt, 10) : undefined;
     return {
       chatId: getChatIdFromRoute(route.params)!,
       peerAddress: route.query.peerAddress,
+      callSessionId: route.query.callSessionId,
+      callSentAt: Number.isFinite(sentAtNum) ? sentAtNum : undefined,
     };
   }
 

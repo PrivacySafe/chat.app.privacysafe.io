@@ -37,6 +37,10 @@
     relatedMessage?: RegularMsgView['relatedMessage'];
     prevMsgSender: string | undefined;
     isProcessing?: boolean;
+    isOriginDevice?: boolean;
+  }>();
+  const emits = defineEmits<{
+    (event: 'click', value: MouseEvent): void;
   }>();
 
   const { t } = useI18n();
@@ -94,6 +98,18 @@
     return bodyChanges.length > 0;
   });
   const hasMsgReactions = computed(() => size(props.msg.reactions) > 0);
+
+  const isSendingFromOtherDevice = computed(() => {
+    if (props.isOriginDevice !== false) {
+      return false;
+    }
+
+    if (isIncomingMsg.value) {
+      return false;
+    }
+
+    return outgoingMsgStatus.value === 'sending' || outgoingMsgStatus.value === 'syncing_self';
+  });
 </script>
 
 <template>
@@ -103,7 +119,10 @@
       isMobileMode && $style.chatMessageRegularMobile,
       isIncomingMsg ? $style.incoming : $style.outgoing,
       isProcessing && $style.chatMessageRegularProcessing,
+      isSendingFromOtherDevice && $style.fromOtherDevice,
     ]"
+    @click="emits('click', $event)"
+    @contextmenu="emits('click', $event)"
   >
     <div
       :id="msg.chatMessageId"
@@ -151,8 +170,9 @@
         />
 
         <chat-message-attachments
-          v-if="msg.attachments"
+          v-if="msg.attachments?.length"
           :message="msg"
+          :is-origin-device="isOriginDevice"
           :class="$style.chatMessageAttachments"
         />
 
@@ -182,6 +202,13 @@
               :value="outgoingMsgStatus"
               icon-size="12"
             />
+          </div>
+
+          <div
+            v-if="isSendingFromOtherDevice"
+            :class="$style.otherDeviceLabel"
+          >
+            {{ t('chat.message.label.sending_from_other_device') }}
           </div>
         </div>
 
@@ -258,6 +285,15 @@
 
     &.chatMessageRegularProcessing {
       pointer-events: none;
+    }
+
+    &.fromOtherDevice {
+      opacity: 0.6;
+
+      :global(.chat-message-attachment) {
+        pointer-events: none;
+        cursor: default;
+      }
     }
   }
 
@@ -364,5 +400,15 @@
     display: flex;
     justify-content: center;
     align-items: center;
+  }
+
+  .otherDeviceLabel {
+    display: block;
+    font-size: var(--font-11);
+    line-height: var(--font-14);
+    font-weight: 400;
+    font-style: italic;
+    color: var(--color-icon-chat-bubble-user-quote);
+    margin-top: var(--spacing-xs);
   }
 </style>

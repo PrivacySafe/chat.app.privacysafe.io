@@ -16,36 +16,97 @@
 */
 import { fileStoreService } from '@deno/services/file-store-service/file-store-service.ts';
 import { makeServiceCaller } from '@shared/ipc/ipc-service-caller';
+import { sleep } from '@shared/processes/sleep';
 import type { ChatSrv, FileStoreService } from '@deno/types/index.ts';
 import type { ContactsService, VideoGUIOpener } from '~/index.ts';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('ExternalServices');
 
 export let fileLinkStoreSrv: FileStoreService;
-export let appContactsSrv: ContactsService;
 export let chatService: ChatSrv;
 export let videoOpenerSrv: VideoGUIOpener;
 
+/**
+ * Waits between attempts to reach the contacts app.
+ *
+ * The platform allows a service ten seconds from the spawn of its component to
+ * `exposeService()`, and the contacts app exposes AppContacts only after its
+ * whole start-up - synced storage, SQLite, an initial synchronization with the
+ * server. On a loaded machine that does not fit, and the connect fails. The
+ * component keeps starting after that, though, so a second attempt a few
+ * seconds later connects at once - which is why one retry is worth more here
+ * than any amount of patience in the first one.
+ */
+const CONTACTS_CONNECT_RETRY_DELAYS_MILLIS = [3_000, 10_000];
+
+let contactsConn: Promise<ContactsService> | undefined = undefined;
+
+async function connectToContactsApp(): Promise<ContactsService> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= CONTACTS_CONNECT_RETRY_DELAYS_MILLIS.length; attempt += 1) {
+    if (attempt > 0) {
+      await sleep(CONTACTS_CONNECT_RETRY_DELAYS_MILLIS[attempt - 1]);
+    }
+    try {
+      const srvConn = await w3n.rpc!.otherAppsRPC!(
+        'contacts.app.privacysafe.io', 'AppContacts',
+      );
+      return makeServiceCaller<ContactsService>(srvConn, [
+        'getContact',
+        'getContactByMail',
+        'getContactList',
+        'addContact',
+        'upsertContact',
+      ]) as ContactsService;
+    } catch (err) {
+      lastErr = err;
+      log.info(
+        `Attempt ${attempt + 1} to connect to the contacts app failed`
+          + `${(attempt < CONTACTS_CONNECT_RETRY_DELAYS_MILLIS.length) ? '; will try again' : ''}`,
+        err,
+      );
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * The contacts service, connected on first use.
+ *
+ * Deliberately outside initializeServices(): this is the only service of
+ * *another* app, and it is the only one this app cannot make answer quickly (the
+ * services of this app answer from a facade before their work is done - see
+ * facadeOver in src-deno/services/chat-service/ipc-expose.ts). Having it in the
+ * start-up barrier made a slow contacts app stop this one from starting at all:
+ * on 2026-08-14 every window of a test run died on it, and in production the
+ * same failure leaves a blank window. Messaging, synchronization and calls do
+ * not use contacts at all - only names in the UI do.
+ *
+ * A failed connect is not remembered, so the next use tries again.
+ */
+export function contactsSrv(): Promise<ContactsService> {
+  if (!contactsConn) {
+    contactsConn = connectToContactsApp().catch(err => {
+      contactsConn = undefined;
+      throw err;
+    });
+  }
+  return contactsConn;
+}
+
 export async function initializeServices() {
   try {
-    [fileLinkStoreSrv, appContactsSrv, chatService, videoOpenerSrv] = await Promise.all([
+    [fileLinkStoreSrv, chatService, videoOpenerSrv] = await Promise.all([
       fileStoreService(),
-
-      w3n.rpc!.otherAppsRPC!('contacts.app.privacysafe.io', 'AppContacts').then(
-        srvConn =>
-          makeServiceCaller<ContactsService>(srvConn, [
-            'isThereContactWithTheMail',
-            'getContactByMail',
-            'getContact',
-            'getContactList',
-            'upsertContact',
-            'insertContact',
-          ]) as ContactsService,
-      ),
 
       w3n.rpc!.thisApp!('AppChatsInternal').then(
         srvConn =>
           makeServiceCaller<ChatSrv>(
             srvConn,
             [
+              'getAppDeviceId',
+              'logFromGui',
               'createOneToOneChat',
               'createGroupChat',
               'acceptChatInvitation',
@@ -60,8 +121,15 @@ export async function initializeServices() {
               'deleteMessage',
               'deleteMessages',
               'deleteExpiredMessages',
+              'collectGarbageInAuxiliaryDB',
+              'releasePendingSyncPhantoms',
+              'countPendingSyncPhantoms',
+              'countSyncPhantomsInDelivery',
+              'getSyncActivityState',
+              'removeExpiredInboxMessages',
               'getMessage',
               'getMessagesByChat',
+              'getMessagesPageByChat',
               'getRecentReactions',
               'sendRegularMessage',
               'markMessageAsReadNotifyingSender',
@@ -72,6 +140,8 @@ export async function initializeServices() {
               'changeMessageReaction',
               'sendSystemDeletableMessage',
               'makeAndSaveMsgToDb',
+              'saveAndSyncLocalSystemMsg',
+              'handleIncomingMsg',
             ],
             ['watch'],
           ) as ChatSrv,
@@ -87,9 +157,18 @@ export async function initializeServices() {
       ),
     ]);
 
+    // Started here, but deliberately not awaited: the contacts app takes its
+    // time to come up, and the point of keeping it out of the barrier above is
+    // that this app must not wait for it. Kicking it off all the same, because
+    // the cost has to be paid by somebody, and paying it in the background
+    // beats paying it inside whatever first asks for a contact's name.
+    contactsSrv().catch(err => log.error(
+      `Contacts app is not reachable; names will show as addresses`, err,
+    ));
+
     console.info('<- SERVICES ARE INITIALIZED ->');
   } catch (err) {
-    w3n.log('error', '# ERROR WHILE SERVICES INITIALISE # ', err);
+    log.error('# ERROR WHILE SERVICES INITIALISE # ', err);
     throw err;
   }
 }

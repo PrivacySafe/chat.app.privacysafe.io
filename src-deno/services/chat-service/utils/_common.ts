@@ -58,8 +58,15 @@ export function serializeInvitation(inviteParams: StoredInvitationParams): strin
   return JSON.stringify(inviteParams);
 }
 
-export function deserializeInvitation(msgBody: string): StoredInvitationParams {
-  return JSON.parse(msgBody);
+export function deserializeInvitation(msgBody: string): StoredInvitationParams | undefined {
+  if (!msgBody || typeof msgBody !== 'string') {
+    return undefined;
+  }
+  try {
+    return JSON.parse(msgBody);
+  } catch {
+    return undefined;
+  }
 }
 
 export function triggerMainUIOpening(chatId: ChatIdObj, sender: string): void {

@@ -19,29 +19,29 @@ import { excerpt } from 'jsr:@dbushell/hyperless';
 import type {
   ChatIdObj,
   ChatIncomingMessage,
-  ChatMessageId,
   ChatRegularMsgV1,
   RelatedMessage,
 } from '../../../../types/asmail-msgs.types.ts';
-import type {
-  ChatMessageAttachmentsInfo,
-  ChatMessageHistory,
-  ChatMessageHistoryErrors,
-  LocalMetadataInDelivery,
-} from '../../../../types/chat.types.ts';
+import type { ChatMessageAttachmentsInfo } from '../../../../types/chat.types.ts';
 import type { OpenChatCmdArg } from '../../../../types/chat-commands.types.ts';
 import type { AttachmentsContainer, FileWithId, ReadonlyFsWithId } from '../../../../types/app.types.ts';
-import type { ChatDbEntry, ChatSrvEmit, DB, FileStoreService, SendingProgressInfo } from '../../../types/index.ts';
+import type { ChatDbEntry, ChatSrvEmit, DB, FileStoreService, MsgDbEntry } from '../../../types/index.ts';
 import { LOGO_ICON_AS_ARRAY } from '../../../../src-main/common/constants/files.ts';
-import { AUTO_DELETE_MESSAGES_BY_ID, AUTODELETE_OFF } from '../../../../shared-libs/constants.ts';
+import { AUTO_DELETE_MESSAGES_BY_ID, AUTODELETE_OFF } from '../../../../shared-libs/constants/chat-settings.ts';
 import { addFolderTo, addFileTo } from '../../../../shared-libs/attachments-container.ts';
 import { generateChatMessageId } from '../../../../shared-libs/chat-ids.ts';
 import { getFileStat, getEntityStat } from '../../../../shared-libs/get-stats-safely.ts';
 import { AppSettings } from '../../../utils/app-settings.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
-import { sendRegularMessage as _sendRegularMessage, sendSystemMessage } from '../../../utils/send-chat-msg.ts';
+import {
+  makeMsgRecordPhantom,
+  queueSyncPhantom,
+  sendRegularMessage as _sendRegularMessage,
+  sendSystemMessage,
+} from '../../mail-sending-service/index.ts';
 import { chatIdOfChat, recipientsInChat } from './_chats-related-methods.ts';
-import { makeMsgDbEntry, removeMessageFromInbox } from './_msgs-related-methods.ts';
+import { createSyncMsgBasedOnRegularMsg, makeMsgDbEntry } from './_msgs-related-methods.ts';
+import { msgEntityId } from './sync-versions.ts';
 
 export async function msgSending({
   data,
@@ -49,12 +49,16 @@ export async function msgSending({
   filesStore,
   appSettings,
   ownAddr,
+  getAppDeviceId,
+  nextSyncStamp,
 }: {
   data: DB;
   emit: ChatSrvEmit;
   filesStore: FileStoreService;
   appSettings: AppSettings;
   ownAddr: string;
+  getAppDeviceId: () => string;
+  nextSyncStamp: () => Promise<number>;
 }) {
   async function prepOutgoingAttachments(
     entities: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined,
@@ -147,8 +151,16 @@ export async function msgSending({
     const { timestamp, chatMessageId: newChatMessageId } = generateChatMessageId();
     const msgId = chatMessageId || newChatMessageId;
 
-    if (chatMessageId) {
-      await data.updateMessageRecord({ chatId, chatMessageId }, { status: 'sending' });
+    const existingMsg = await data.getMessage({ chatId, chatMessageId: msgId });
+
+    if (existingMsg) {
+      const updatedMsg = await data.updateMessageRecord({ chatId, chatMessageId: msgId }, { status: 'sending' });
+
+      // Record of the message already exists on other devices, only its status
+      // needs to get back to a non-terminal one there.
+      if (updatedMsg) {
+        await sendStatusSyncMsg(chatId, updatedMsg);
+      }
 
       const { attachmentContainer } = await prepOutgoingAttachments(files);
       const recipients = recipientsInChat(chat, ownAddr);
@@ -175,9 +187,61 @@ export async function msgSending({
 
     await data.addMessage(msg);
 
+    // Phantom (sync) message goes out optimistically, right after the record is
+    // placed into a database, and not on a delivery to peers being done. Own
+    // devices should learn about the message even if peers are unreachable, and
+    // phantoms of subsequent changes (reactions, edits, status) reference it.
+    // Terminal status is synchronized later, with 'update:msg-record' phantom.
+    await sendSyncMsgOfRegularMsg(chatId, msg);
+
     const recipients = recipientsInChat(chat, ownAddr);
     await _sendRegularMessage(chatId, msgId, recipients, text, attachmentContainer, relatedMessage);
     emit.message.added(msg);
+  }
+
+  /**
+   * A phantom of the message record itself: it carries the entity rather than
+   * a change of one of its aspects, so there is no version to stamp - a
+   * record's creation is guarded by tombstones instead.
+   */
+  async function sendSyncMsgOfRegularMsg(chatId: ChatIdObj, msg: MsgDbEntry): Promise<void> {
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: createSyncMsgBasedOnRegularMsg({
+        msg,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp: await nextSyncStamp(),
+      }),
+      entity: {
+        entityType: 'msg',
+        entityId: msgEntityId(chatId, msg.chatMessageId),
+        aspect: 'record',
+      },
+    });
+  }
+
+  /**
+   * Status of a (re)sending that just started. Not stamped as the 'status'
+   * aspect: the authoritative terminal status comes from the delivery-progress
+   * hook, which does stamp it (handle-regular-sending-progress.ts).
+   */
+  async function sendStatusSyncMsg(chatId: ChatIdObj, msg: MsgDbEntry): Promise<void> {
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeMsgRecordPhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp: await nextSyncStamp(),
+        msg,
+      }),
+      entity: {
+        entityType: 'msg',
+        entityId: msgEntityId(chatId, msg.chatMessageId),
+        aspect: 'record',
+      },
+    });
   }
 
   async function cancelSendingMessage(deliveryId: string): Promise<void> {
@@ -191,8 +255,21 @@ export async function msgSending({
   ): Promise<void> {
     const { msgId, sender, plainTxtBody, attachments: attachmentsFS, deliveryTS } = incomingMsg;
     const { chatMessageId, relatedMessage } = chatMsgBody;
-    const attachments = await infoOfIncomingAttachments(attachmentsFS);
     const removeFromInbox = !incomingMsg.attachments;
+
+    const chatId = chatIdOfChat(chat);
+    const existingMsg = await data.getMessage({ chatId, chatMessageId });
+    if (existingMsg) {
+      // Already processed - this is a redelivery within the deferred inbox
+      // removal window (P1); re-applying would violate the messages table PK
+      // and would re-send the 'sent' status notification pointlessly.
+      if (removeFromInbox) {
+        await data.scheduleInboxMsgRemoval(msgId);
+      }
+      return;
+    }
+
+    const attachments = await infoOfIncomingAttachments(attachmentsFS);
 
     const { settings } = chat;
     const autoDeleteMessagesId = settings?.autoDeleteMessages as '0' | '1' | '2' | '3' | '4' | '5';
@@ -216,7 +293,7 @@ export async function msgSending({
     emit.message.added(msg);
 
     if (removeFromInbox) {
-      await removeMessageFromInbox(msgId);
+      await data.scheduleInboxMsgRemoval(msgId);
     }
 
     const icon = Uint8Array.from(LOGO_ICON_AS_ARRAY);
@@ -253,64 +330,9 @@ export async function msgSending({
     });
   }
 
-  async function handleSendingProgress({ progress }: SendingProgressInfo): Promise<void> {
-    const localMeta = progress.localMeta as LocalMetadataInDelivery;
-    const chatMessageId: ChatMessageId = {
-      chatId: localMeta.chatId,
-      chatMessageId: localMeta.chatMessageId!,
-    };
-
-    const msg = await data.getMessage(chatMessageId);
-
-    if (!msg) {
-      return;
-    }
-
-    // eslint-disable-next-line no-useless-assignment
-    let { status, history } = msg;
-    if (progress.allDone) {
-      status = progress.allDone === 'all-ok' ? 'sent' : 'error';
-
-      if (progress.allDone === 'with-errors') {
-        const errors = Object.keys(progress.recipients).reduce((res, address) => {
-          const { err } = progress.recipients[address];
-          if (err) {
-            res![address] = err;
-          }
-
-          return res;
-        }, {} as ChatMessageHistoryErrors);
-
-        if (Object.keys(errors).length > 0) {
-          if (!history) {
-            history = {
-              changes: [],
-            } as ChatMessageHistory;
-          }
-
-          history.changes?.push({
-            user: ownAddr,
-            timestamp: Date.now(),
-            type: 'error',
-            value: errors,
-          });
-        }
-      }
-    } else {
-      // TODO
-      // XXX instead of return we can add more info depending on progress state,
-      //     like different status, history entries
-      return;
-    }
-
-    const updatedMsg = await data.updateMessageRecord(chatMessageId, { status, history });
-    emit.message.updated(updatedMsg);
-  }
-
   return {
     sendRegularMessage,
     cancelSendingMessage,
     handleRegularMsg,
-    handleSendingProgress,
   };
 }

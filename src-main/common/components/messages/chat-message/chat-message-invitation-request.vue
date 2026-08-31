@@ -15,11 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { computed } from 'vue';
+  import { computed, inject, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import get from 'lodash/get';
   import { Ui3nButton, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
+  import { NOTIFICATIONS_KEY, type NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
   import { getTextForChatInvitationMessage } from '@main/common/utils/chat-ui.helper';
   import { areChatIdsEqual } from '@shared/chat-ids';
@@ -35,7 +36,10 @@
   }>();
 
   const { t } = useI18n();
+  const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
   const { router } = useRouting();
+
+  const isAddingContact = ref(false);
 
   const { user, isMobileMode } = storeToRefs(useAppStore());
 
@@ -85,8 +89,24 @@
   }
 
   async function addContactToList() {
-    await addContact(props.msg.sender);
-    await fetchContacts();
+    if (isAddingContact.value) {
+      return;
+    }
+    isAddingContact.value = true;
+    try {
+      await addContact(props.msg.sender);
+      await fetchContacts();
+    } catch (err) {
+      // Invoked from a template click, so a rejection here used to end up as
+      // an Uncaught (in promise) with nothing shown to the user.
+      console.error(`Failed to add contact ${props.msg.sender}:`, err);
+      notification.$createNotice({
+        type: 'error',
+        content: t('chat.contact.add.error.unknown', { addr: props.msg.sender }),
+      });
+    } finally {
+      isAddingContact.value = false;
+    }
   }
 </script>
 
@@ -97,7 +117,7 @@
       isMobileMode && $style.chatMessageInvitationRequestMobile,
       doesAllowAddingContact && $style.clickable,
     ]"
-    v-on="doesAllowAddingContact ? { click: addContactToList } : {}"
+    v-on="doesAllowAddingContact && !isAddingContact ? { click: addContactToList } : {}"
   >
     <ui3n-tooltip
       :content="tooltipText"
@@ -142,24 +162,22 @@
 </template>
 
 <style lang="scss" module>
-  @use '@main/common/assets/styles/mixins' as mixins;
-
   .chatMessageInvitationRequest {
     position: relative;
     width: fit-content;
     max-width: 90%;
     overflow: hidden;
-    height: var(--spacing-l);
     margin: var(--spacing-s) auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    column-gap: var(--spacing-s);
     padding: 0 12px;
     font-size: var(--font-12);
     font-weight: 500;
     user-select: none;
     color: var(--color-text-block-secondary-default);
+    flex-direction: column;
+    gap: var(--spacing-s);
 
     &.clickable {
       cursor: pointer;
@@ -186,12 +204,10 @@
     min-width: 100px;
     color: var(--color-text-block-secondary-default);
     text-align: center;
-
-    @include mixins.text-overflow-ellipsis();
+    line-height: 1.4;
   }
 
   .date {
-    flex-grow: 1;
     min-width: fit-content;
     white-space: nowrap;
     position: relative;
@@ -199,7 +215,6 @@
   }
 
   .action {
-    flex-grow: 1;
     display: flex;
     justify-content: center;
     align-items: center;

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 - 2023 3NSoft Inc.
+ Copyright (C) 2022 - 2023, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,9 +18,27 @@
 declare namespace web3n.rpc {
 
 	interface RPC {
+
+		/**
+		 * Method calls service(s), provided by same app.
+		 */
 		thisApp?: client.AppRPC;
+
+		/**
+		 * Method calls service(s), provided by other app(s).
+		 */
 		otherAppsRPC?: client.OtherAppsRPC;
+
+		/**
+		 * Method exposes service.
+		 */
 		exposeService?: service.ExposeService;
+
+		/**
+		 * Method exposes implementation(s) of system CAP(s).
+		 */
+		provideCAPtoSystem?: typeof provideCAPtoSystem;
+
 	}
 
 	interface ObjProxyMember {
@@ -48,9 +66,15 @@ declare namespace web3n.rpc {
 		connectionNotAccepted?: true;
 		serviceAlreadyExposed?: true;
 		serviceNotFound?: true;
+		capImplementingServiceNotFound?: true;
 		connectionAlreadyWatched?: true;
 		connectionClosed?: true;
 	}
+
+	function provideCAPtoSystem(capName: 'w3n.shell.fileDialogs.openFileDialog', capImpl: web3n.shell.files.OpenFileDialog): void;
+	function provideCAPtoSystem(capName: 'w3n.shell.fileDialogs.openFolderDialog', capImpl: web3n.shell.files.OpenFolderDialog): void; 
+	function provideCAPtoSystem(capName: 'w3n.shell.fileDialogs.saveFileDialog', capImpl: web3n.shell.files.SaveFileDialog): void;
+	function provideCAPtoSystem(capName: 'w3n.shell.fileDialogs.saveFolderDialog', capImpl: web3n.shell.files.SaveFolderDialog): void;
 
 }
 
@@ -58,18 +82,13 @@ declare namespace web3n.rpc.client {
 
 	type AppRPC = (service: string) => Promise<RPCConnection>;
 
-	type OtherAppsRPC = (
-		appDomain: string, service: string
-	) => Promise<RPCConnection>;
+	type OtherAppsRPC = (appDomain: string, service: string) => Promise<RPCConnection>;
 
 	interface RPCConnection {
 		close(): Promise<void>;
-		makeRequestReplyCall(
-			method: string, req: PassedDatum|undefined
-		): Promise<PassedDatum|undefined>;
+		makeRequestReplyCall(method: string, req: PassedDatum|undefined): Promise<PassedDatum|undefined>;
 		startObservableCall(
-			method: string, req: PassedDatum|undefined,
-			obs: Observer<PassedDatum|undefined>
+			method: string, req: PassedDatum|undefined, obs: Observer<PassedDatum|undefined>
 		): () => void;
 	}
 

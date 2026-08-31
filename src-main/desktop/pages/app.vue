@@ -18,6 +18,7 @@
   import {
     Ui3nDialogProvider,
     Ui3nMenu,
+    Ui3nProgressLinear,
     Ui3nRipple as vUi3nRipple,
     Ui3nResize as vUi3nResize,
   } from '@v1nt1248/3nclient-lib';
@@ -26,7 +27,21 @@
   import { useAppStore } from '@main/common/store/app.store';
   import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
 
-  const { me, customLogoSrc, appVersion, connectivityStatusText, openDashboard, appExit, t } = useAppView();
+  const {
+    me,
+    customLogoSrc,
+    appVersion,
+    connectivityStatusText,
+    isSyncing,
+    syncPending,
+    syncPhase,
+    syncStalled,
+    syncStatusText,
+    showSyncStatus,
+    openDashboard,
+    appExit,
+    t,
+  } = useAppView();
   const appStore = useAppStore();
 </script>
 
@@ -43,15 +58,25 @@
           :class="$style.toolbarLogo"
           @click="openDashboard"
         >
+
         <div :class="$style.delimiter">
           /
         </div>
+
         <div :class="$style.info">
           {{ t('app.title') }}
           <div :class="$style.version">
             v {{ appVersion }}
           </div>
         </div>
+      </div>
+
+      <div
+        v-if="showSyncStatus"
+        :class="[$style.syncStatus, syncStalled && $style.syncStalled]"
+        :title="syncStalled ? t('app.sync.stalledTooltip') : t(`app.sync.tooltip.${syncPhase}`)"
+      >
+        {{ t(syncStatusText, { count: syncPending }) }}
       </div>
 
       <div :class="$style.user">
@@ -66,6 +91,7 @@
             </span>
           </span>
         </div>
+
         <ui3n-menu
           position-strategy="fixed"
           :offset-y="4"
@@ -92,6 +118,17 @@
             </div>
           </template>
         </ui3n-menu>
+      </div>
+
+      <div
+        v-if="isSyncing"
+        :class="$style.syncProgress"
+      >
+        <ui3n-progress-linear
+          :height="2"
+          indeterminate
+          bg-color="transparent"
+        />
       </div>
     </div>
 
@@ -168,6 +205,30 @@
     font-weight: 500;
     color: var(--color-text-control-secondary-default);
     line-height: var(--font-16);
+  }
+
+  .syncStatus {
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 0 var(--spacing-m);
+    font-size: var(--font-12);
+    font-weight: 500;
+    color: var(--color-text-control-secondary-default);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .syncStalled {
+    color: var(--warning-content-default);
+  }
+
+  .syncProgress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
   }
 
   .user {

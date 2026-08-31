@@ -15,12 +15,15 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { useI18n } from 'vue-i18n';
+import dayjs from 'dayjs';
 import get from 'lodash/get';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { useAppStore } from '@main/common/store/app.store';
 import { AUTO_DELETE_MESSAGES_BY_ID } from '@shared/constants';
+import { callCancelWording } from '@shared/call-record-wording';
 import {
   ChatListItemView,
+  ChatListItemUiView,
   ChatSysMsgView,
   ChatInvitationMsgView,
   OneToOneChatParameters,
@@ -36,6 +39,24 @@ export function getChatName(chat: ChatListItemView): string {
   const { getContactName } = useContactsStore();
 
   return isGroupChat ? name || 'Untitled' : name ? name : getContactName(chat.peerAddr);
+}
+
+/**
+ * Chat names are not unique: two group chats may carry the same name (even with
+ * the same members), and two contacts may share a display name. Where a name is
+ * shared with another chat in the list, this gives the text that tells them
+ * apart - the peer's address for a one-to-one chat, and the creation date for a
+ * group chat, which neither address nor member list can distinguish. For a name
+ * that is unique in the list, an empty string.
+ */
+export function getChatNameHint(chat: ChatListItemUiView): string {
+  if (!chat.isNameDuplicated) {
+    return '';
+  }
+  const { t } = useI18n();
+  return chat.isGroupChat
+    ? t('chat.list.item.created_at', { date: dayjs(chat.createdAt).format('DD MMM YYYY') })
+    : chat.peerAddr;
 }
 
 export function getTextForChatSystemMessage(
@@ -171,16 +192,15 @@ export function getTextForChatSystemMessage(
     }
 
     case 'webrtc-call': {
-      const { sender: byUser, subType } = systemData.value as WebRTCMsgBodySysMsgData['value'];
-      if (isIncomingMsg) {
-        return subType === 'outgoing-call-cancelled'
-          ? t('va.text.missed_incoming_call', { sender: byUser })
-          : isGroupChat
-            ? t('va.text.incoming_call_not_accepted', { user: byUser })
-            : t('va.text.outgoing_call_cancelled_by', { user: byUser });
-      }
-
-      return subType === 'outgoing-call-cancelled' ? '' : t('va.text.incoming_call_cancelled', { sender: byUser });
+      const { sender: byUser, subType, callSessionId } =
+        systemData.value as WebRTCMsgBodySysMsgData['value'];
+      // Which way the cancelled call went is decided by the session's host, not
+      // by isIncomingMsg: these records are written locally on every device of
+      // ours, so that flag is always false here (see callCancelWording).
+      const { i18nKey } = callCancelWording(subType, callSessionId, ownAddr, isGroupChat);
+      // Both placeholder names: the keys this returns name the person either as
+      // {sender} or as {user}, and the unused one is simply not substituted.
+      return t(i18nKey, { sender: byUser, user: byUser });
     }
 
     default:

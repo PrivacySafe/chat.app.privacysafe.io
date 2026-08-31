@@ -17,4 +17,38 @@
 export interface DeliveryServiceData {
   appDeviceId: string;
   lastReceivedMessageTimestamp: number;
+  /**
+   * Stamp of the run of the background component that wrote this file last.
+   * Backs the detection of a second app instance started on the same data
+   * folder, which would share this file's appDeviceId and make synchronization
+   * between devices impossible (see startForeignInstanceWatch).
+   */
+  instanceStamp?: string;
+  /**
+   * Highest synchronization stamp this device has either issued or seen in a
+   * received phantom. Backs the hybrid logical clock that orders changes
+   * between devices of the same user (see nextSyncStamp/observeSyncStamp).
+   */
+  lastSyncClockTs?: number;
+  /**
+   * Number of call sessions this device has ever hosted. Backs the counter part
+   * of WebRTCMsg.callSessionId, and is persisted so that a restart of the
+   * background component cannot hand out an id a previous call already used.
+   */
+  lastCallSessionCounter?: number;
+  /**
+   * The first phantom from another device of this user that this device ever
+   * saw - the only proof the app has that the user synchronizes with anything
+   * at all. Until it exists, the synchronization indicator stays silent: a user
+   * with one device has nobody to synchronize with, and every phantom in their
+   * inbox is their own copy coming back to them.
+   *
+   * The device id and the time, rather than a bare flag, for the same reason
+   * `appDeviceId` is printed at start-up: when something looks wrong, the
+   * question is always *which* device and *when*.
+   */
+  otherDeviceSeen?: {
+    deviceId: string;
+    at: number;
+  };
 }

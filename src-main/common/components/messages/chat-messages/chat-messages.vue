@@ -15,69 +15,84 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { computed } from 'vue';
-import dayjs from 'dayjs';
-import { type Nullable, Ui3nLongPress as vUi3nLongPress, Ui3nList } from '@v1nt1248/3nclient-lib';
-import useChatMessages from './useChatMessages';
-import type { ChatListItemView, ChatMessageView, RegularMsgView } from '~/index';
-import ChatMessage from '../chat-message/chat-message.vue';
-import ChatMessageActions from '../chat-message/chat-message-actions.vue';
-import ReactionsDialog from '@main/common/components/dialogs/reactions-dialog.vue';
+  import { computed } from 'vue';
+  import dayjs from 'dayjs';
+  import { type Nullable, Ui3nLongPress as vUi3nLongPress, Ui3nList } from '@v1nt1248/3nclient-lib';
+  import useChatMessages from './useChatMessages';
+  import type { ChatListItemView, ChatMessageView, RegularMsgView } from '~/index';
+  import ChatMessage from '../chat-message/chat-message.vue';
+  import ChatMessageActions from '../chat-message/chat-message-actions.vue';
+  import ReactionsDialog from '@main/common/components/dialogs/reactions-dialog.vue';
 
-export interface ChatMessagesProps {
-  chat: ChatListItemView;
-  messages: ChatMessageView[];
-  readonly?: boolean;
-}
+  export interface ChatMessagesProps {
+    chat: ChatListItemView;
+    messages: ChatMessageView[];
+    readonly?: boolean;
+  }
 
-export interface ChatMessagesEmits {
-  (event: 'init', value: Nullable<HTMLDivElement>): void;
-  (event: 'reply', value: RegularMsgView): void;
-  (event: 'edit', value: RegularMsgView): void;
-  (event: 'show:info', value: RegularMsgView): void;
-}
+  export interface ChatMessagesEmits {
+    (event: 'init', value: Nullable<HTMLDivElement>): void;
+    (event: 'reply', value: RegularMsgView): void;
+    (event: 'edit', value: RegularMsgView): void;
+    (event: 'show:info', value: RegularMsgView): void;
+  }
 
-const props = defineProps<ChatMessagesProps>();
-const emits = defineEmits<ChatMessagesEmits>();
+  const props = defineProps<ChatMessagesProps>();
+  const emits = defineEmits<ChatMessagesEmits>();
 
-const chatId = computed(() => props.chat.chatId);
-const readonlyRef = computed(() => props.readonly);
+  const chatId = computed(() => props.chat.chatId);
+  const readonlyRef = computed(() => props.readonly);
 
-const processedMessages = computed(() => Object.values(props.messages
-  .reduce((res, msg) => {
-    const { timestamp } = msg;
-    const date = dayjs(timestamp).format('YYYY-MM-DD');
-    if (!res[date]) {
-      res[date] = {
-        date,
-        items: [],
-      };
+  const processedMessages = computed(() =>
+    Object.values(
+      props.messages.reduce(
+        (res, msg) => {
+          const { timestamp } = msg;
+          const date = dayjs(timestamp).format('YYYY-MM-DD');
+          if (!res[date]) {
+            res[date] = {
+              date,
+              items: [],
+            };
+          }
+
+          res[date].items.push(msg);
+          return res;
+        },
+        {} as Record<string, { date: string; items: ChatMessageView[] }>,
+      ),
+    )
+      .map(dateBlock => ({
+        date: dateBlock.date,
+        items: dateBlock.items.sort((a, b) => a.timestamp - b.timestamp),
+      }))
+      .sort((a, b) => (a.date > b.date ? 1 : -1)),
+  );
+
+  const {
+    showMessages,
+    selectedMessages,
+    messagesAreProcessing,
+    msgActionsMenuProps,
+    msgReactionsMenuProps,
+    recentReactions,
+    selectMessage,
+    handleClickOnMessagesBlock,
+    onMsgClick,
+    clearMessageMenu,
+    handleAction,
+    handleSelectionReaction,
+    checkIsOriginDevice,
+  } = useChatMessages(chatId, readonlyRef, emits);
+
+  function getPrevMsgSender(prevMsg: ChatMessageView) {
+    const { chatMessageType, isIncomingMsg } = prevMsg;
+    if (chatMessageType !== 'regular' || (chatMessageType === 'regular' && !isIncomingMsg)) {
+      return '';
     }
 
-    res[date].items.push(msg);
-    return res;
-  }, {} as Record<string, { date: string; items: ChatMessageView[] }>))
-  .map(dateBlock => ({
-    date: dateBlock.date,
-    items: dateBlock.items.sort((a, b) => a.timestamp - b.timestamp),
-  }))
-  .sort((a, b) => a.date > b.date ? 1 : -1),
-);
-
-const {
-  showMessages,
-  selectedMessages,
-  messagesAreProcessing,
-  msgActionsMenuProps,
-  msgReactionsMenuProps,
-  recentReactions,
-  selectMessage,
-  handleClickOnMessagesBlock,
-  onMsgClick,
-  clearMessageMenu,
-  handleAction,
-  handleSelectionReaction,
-} = useChatMessages(chatId, readonlyRef, emits);
+    return prevMsg.sender;
+  }
 </script>
 
 <template>
@@ -107,16 +122,17 @@ const {
               :msg="msg"
               :selected-messages="selectedMessages"
               :messages-are-processing="messagesAreProcessing"
-              :prev-msg-sender="index === 0 ? '' : item.items[index - 1].sender"
+              :prev-msg-sender="index === 0 ? '' : getPrevMsgSender(item.items[index - 1])"
               :prev-msg-info="
                 index === 0
                   ? null
                   : {
                     isIncomingMsg: item.items[index - 1].isIncomingMsg,
-                    status: item.items[index - 1].status
+                    status: item.items[index - 1].status,
                   }
               "
               :related-message="(msg as RegularMsgView).relatedMessage"
+              :is-origin-device="checkIsOriginDevice(msg)"
               @select="selectMessage"
             />
           </template>
@@ -155,40 +171,40 @@ const {
 </template>
 
 <style lang="scss" module>
-.chatMessages {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  background-color: var(--color-bg-chat-bubble-general-bg);
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-
-  .scroller {
+  .chatMessages {
+    position: relative;
+    width: 100%;
     height: 100%;
+    background-color: var(--color-bg-chat-bubble-general-bg);
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+
+    .scroller {
+      height: 100%;
+    }
+
+    & > div {
+      --ui3n-list-bg-color: transparent !important;
+    }
   }
 
-  & > div {
-    --ui3n-list-bg-color: transparent !important;
+  .date {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: var(--font-12);
+    font-weight: 600;
+    font-style: italic;
+    color: var(--color-text-block-accent-default);
+    padding: 2px 0;
   }
-}
 
-.date {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: var(--font-12);
-  font-weight: 600;
-  font-style: italic;
-  color: var(--color-text-block-accent-default);
-  padding: 2px 0;
-}
-
-.dateValue {
-  position: relative;
-  width: fit-content;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: 10px;
-  background-color: var(--color-bg-block-primary-default);
-}
+  .dateValue {
+    position: relative;
+    width: fit-content;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: 10px;
+    background-color: var(--color-bg-block-primary-default);
+  }
 </style>

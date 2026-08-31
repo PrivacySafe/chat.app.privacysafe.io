@@ -48,7 +48,7 @@ export function useNavigation() {
     { params: Partial<RouteChat['params']>, query?: Partial<RouteChat['query']> },
   ) {
     const { chatId, chatType = 's' } = route.params as RouteChat['params'];
-    const { call, peerAddress } = route.query as RouteChat['query'];
+    const { call, peerAddress, callSessionId, callSentAt } = route.query as RouteChat['query'];
 
     const newRouteData: RouteChat = {
       name: APP_ROUTES.CHAT,
@@ -59,6 +59,8 @@ export function useNavigation() {
       query: {
         ...((query?.call || call) && { call: query?.call || call }),
         ...((query?.peerAddress || peerAddress) && { peerAddress: query?.peerAddress || peerAddress }),
+        ...((query?.callSessionId || callSessionId) && { callSessionId: query?.callSessionId || callSessionId }),
+        ...((query?.callSentAt || callSentAt) && { callSentAt: query?.callSentAt || callSentAt }),
       },
     };
 
@@ -101,14 +103,19 @@ export function useNavigation() {
   function getIncomingCallParamsFromRoute(route: RouteChat): {
     chatId: ChatIdObj;
     peerAddress: string;
+    callSessionId?: string;
+    callSentAt?: number;
   } | undefined {
     if (route.query.call !== 'yes') {
       return;
     }
 
+    const sentAtNum = route.query.callSentAt ? parseInt(route.query.callSentAt, 10) : undefined;
     return {
       chatId: getChatIdFromRoute(route.params)!,
       peerAddress: route.query.peerAddress as string,
+      callSessionId: route.query.callSessionId,
+      callSentAt: Number.isFinite(sentAtNum) ? sentAtNum : undefined,
     };
   }
 

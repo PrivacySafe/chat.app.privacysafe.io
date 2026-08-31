@@ -16,7 +16,8 @@
 */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import type { ChatDbEntry, ChatSrvEmit, DB, GroupChatDbEntry, MsgDbEntry } from '../../../types/index.ts';
-import { generateChatMessageId } from '../../../../shared-libs/chat-ids.ts';
+import { chatIdOfChat } from './_chats-related-methods.ts';
+import { chatEntityId } from './sync-versions.ts';
 
 export async function chatMemberRemoval({
   data,
@@ -30,8 +31,18 @@ export async function chatMemberRemoval({
   async function handleMemberRemovedChat(
     sender: string,
     chat: ChatDbEntry,
+    chatMessageId: string,
+    timestamp: number,
     chatDeleted: boolean | undefined,
   ): Promise<void> {
+    const chatId = chatIdOfChat(chat);
+    const existingMsg = await data.getMessage({ chatId, chatMessageId });
+    if (existingMsg) {
+      // Already processed - see the matching comment in handleRegularMsg()
+      // (msg-sending.ts).
+      return;
+    }
+
     if (chat.isGroupChat) {
       const updatedMembers = { ...(chat as GroupChatDbEntry).members };
 
@@ -53,7 +64,13 @@ export async function chatMemberRemoval({
       updatedChat && emit.chat.updated(updatedChat);
     }
 
-    const { chatMessageId, timestamp } = generateChatMessageId();
+    // Peer-originated change of the chat's composition and status - see the
+    // matching comment in handleUpdateChatName() (chat-renaming.ts) on the
+    // token used here.
+    const token = { ts: timestamp, deviceId: sender };
+    await data.setSyncVersion('chat', chatEntityId(chatId), 'members', token);
+    await data.setSyncVersion('chat', chatEntityId(chatId), 'status', token);
+
     const msg: MsgDbEntry = {
       groupChatId: chat.isGroupChat ? chat.chatId : null,
       otoPeerCAddr: chat.isGroupChat ? null : chat.peerCAddr,

@@ -20,6 +20,8 @@ import { defineStore } from 'pinia';
 import { AvailableColorTheme, AvailableLanguage } from '~/app.types';
 import { useSystemLevelAppConfig } from './app/system-level-app-config';
 import { useConnectivityStatus } from './app/connectivity';
+import { useSyncState } from './app/sync-state';
+import { chatService } from '@main/common/services/external-services';
 import { type Ui3nResizeCbArg } from '@v1nt1248/3nclient-lib';
 
 export interface AppStoreState {
@@ -44,6 +46,7 @@ export interface AppWindowSize {
 export const useAppStore = defineStore('app', () => {
   const commonLoading = ref(false);
   const isMobileMode = ref<boolean>(false);
+  const appDeviceId = ref<string>('');
   const appWindowSize = ref<{ width: number; height: number }>({
     width: 0,
     height: 0,
@@ -54,6 +57,12 @@ export const useAppStore = defineStore('app', () => {
 
   const commonAppConfs = useSystemLevelAppConfig();
   const { appVersion, user, lang, colorTheme, customLogoSrc } = commonAppConfs;
+
+  // Deliberately not initialized here: initialize() runs before the GUI
+  // subscribes to background events (see useAppView), and asking for the current
+  // state before that would leave a gap in which changes go unnoticed. The ask is
+  // made right after the subscription instead - see useInitialize.
+  const sync = useSyncState();
 
   function setMobileMode(value: boolean) {
     isMobileMode.value = value;
@@ -70,6 +79,10 @@ export const useAppStore = defineStore('app', () => {
     await Promise.all([
       connectivity.initialize(),
       commonAppConfs.initialize(),
+      (async () => {
+        const id = await chatService.getAppDeviceId();
+        appDeviceId.value = id;
+      })(),
     ]);
   }
 
@@ -81,6 +94,7 @@ export const useAppStore = defineStore('app', () => {
   return {
     commonLoading,
     isMobileMode,
+    appDeviceId,
     appVersion,
     appWindowSize,
     user,
@@ -88,6 +102,7 @@ export const useAppStore = defineStore('app', () => {
     colorTheme,
     customLogoSrc,
     connectivityStatus,
+    ...sync,
     setMobileMode,
     setAppWindowSize,
     initialize,

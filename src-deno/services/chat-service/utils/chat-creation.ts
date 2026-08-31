@@ -15,7 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import type { ChatSrvEmit, DB, GroupChatDbEntry, MsgDbEntry, OTOChatDbEntry } from '../../../types/index.ts';
-import type { GroupChatStatus, GroupChatView, SingleChatView } from '../../../../types/chat.types.ts';
+import type {
+  GroupChatStatus,
+  GroupChatView,
+  SingleChatStatus,
+  SingleChatView,
+} from '../../../../types/chat.types.ts';
 import type {
   AcceptedInvitationReference,
   ChatIdObj,
@@ -29,25 +34,105 @@ import type {
 import type { OpenChatCmdArg } from '../../../../types/chat-commands.types.ts';
 import { LOGO_ICON_AS_ARRAY } from '../../../../src-main/common/constants/files.ts';
 import { AppSettings } from '../../../utils/app-settings.ts';
-import { sendChatInvitation } from '../../../utils/send-chat-msg.ts';
+import {
+  sendChatInvitation,
+  makeInvitationPhantom,
+  makeInvitationAcceptedPhantom,
+  queueSyncPhantom,
+} from '../../mail-sending-service/index.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
 import { generateChatMessageId } from '../../../../shared-libs/chat-ids.ts';
 import { includesAddress } from '../../../../shared-libs/address-utils.ts';
+import { toCanonicalAddress } from '../../../../shared-libs/address-utils.ts';
 import { inviteChatId, serializeInvitation } from './_common.ts';
 import { chatIdOfGroupChat, chatIdOfOTOChat, excludeAddrFrom } from './_chats-related-methods.ts';
 import { makeMsgDbEntry, removeMessageFromInbox } from './_msgs-related-methods.ts';
+import { processOrphanedForChatCreation } from './handle-incoming-sync.ts';
+import type { ResyncCtx } from './msg-resync.ts';
+import { chatEntityId } from './sync-versions.ts';
 
 export async function chatCreation({
   data,
   emit,
   appSettings,
   ownAddr,
+  getAppDeviceId,
+  nextSyncStamp,
+  resync,
 }: {
   data: DB;
   emit: ChatSrvEmit;
   appSettings: AppSettings;
   ownAddr: string;
+  getAppDeviceId: () => string;
+  nextSyncStamp: () => Promise<number>;
+  resync?: ResyncCtx;
 }) {
+  /**
+   * Phantoms of this chat's content may have arrived before the chat itself
+   * and sit in the orphan buffer. Draining used to happen only when the chat
+   * was created from an *own-devices* invitation sync; a chat created from a
+   * peer's real invitation (or made locally) left them stuck until the 15-day
+   * garbage collection - the chat existed, but stayed empty.
+   */
+  async function drainOrphanedSyncsOf(chatId: ChatIdObj): Promise<void> {
+    try {
+      await processOrphanedForChatCreation(data, emit, chatId, ownAddr, resync);
+    } catch (err) {
+      await w3n.log('error', `Failed to process orphaned syncs buffered before chat ${chatId.chatId} existed`, err);
+    }
+  }
+  /**
+   * An invitation phantom carries the chat record itself rather than a change
+   * of one of its aspects, so there is no version to stamp - creation is
+   * guarded by tombstones instead.
+   */
+  async function sendInvitationSync(
+    chatId: ChatIdObj,
+    chatMessageId: string,
+    inviteData: ChatInvitationMsgV1['inviteData'],
+  ): Promise<void> {
+    const syncStamp = await nextSyncStamp();
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeInvitationPhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp: syncStamp,
+        chatMessageId,
+        inviteData,
+      }),
+      entity: { entityType: 'chat', entityId: chatEntityId(chatId), aspect: 'record' },
+    });
+  }
+
+  async function sendInvitationAcceptedSync(
+    chatId: ChatIdObj,
+    status: GroupChatStatus | SingleChatStatus,
+  ): Promise<void> {
+    const syncStamp = await nextSyncStamp();
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeInvitationAcceptedPhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp: syncStamp,
+        value: { sender: ownAddr, status },
+      }),
+      versions: [
+        {
+          entityType: 'chat',
+          entityId: chatEntityId(chatId),
+          aspect: 'status',
+          ts: syncStamp,
+          deviceId: getAppDeviceId(),
+        },
+      ],
+    });
+  }
+
   async function showSystemNotification({ sender, chatId }: { sender: string; chatId: ChatIdObj }) {
     const icon = Uint8Array.from(LOGO_ICON_AS_ARRAY);
     const notificationTitle = await appSettings.t('app.notification.invite', { sender });
@@ -66,12 +151,62 @@ export async function chatCreation({
     });
   }
 
-  async function createDisplayableSystemMessage({ chatId, sender }: { chatId: ChatIdObj; sender: string }) {
-    const { chatMessageId: newChatMsgId, timestamp } = generateChatMessageId();
+  /**
+   * Puts a peer's acceptance of an invitation into the chat history.
+   *
+   * `timestamp` is the message's `deliveryTS`, not the moment of processing, and
+   * that is the whole point of passing it in: the history is ordered by
+   * timestamp alone (ORDER BY timestamp in msgs-db.ts), while this record is
+   * created by every one of the user's devices on its own from the same shared
+   * inbox message - there is no phantom for it. A device that reads that message
+   * an hour later used to stamp it with its own clock, which put the acceptance
+   * of an invitation *after* every message that followed it (seen on a device
+   * started 13 minutes into a chat, 2026-08-14). deliveryTS is stamped once by
+   * the ASMail server, so all devices derive the same one - the same reasoning as
+   * for a peer's system events, spelled out in chat-renaming.ts.
+   */
+  async function createDisplayableSystemMessage({
+    chatId,
+    sender,
+    dedupeKey,
+    timestamp,
+  }: {
+    chatId: ChatIdObj;
+    sender: string;
+    dedupeKey: string;
+    timestamp: number;
+  }) {
+    const chatMessageId = `accept-invitation:${dedupeKey}`;
+    const existingMsg = await data.getMessage({ chatId, chatMessageId });
+    if (existingMsg) {
+      // Already created - this is a redelivery within the deferred inbox
+      // removal window (P1); re-creating would either violate the messages
+      // table PK (deterministic id) or, with a fresh random id, silently
+      // duplicate this notification in the chat history.
+      //
+      // A record left by an earlier build carries the processing time instead of
+      // deliveryTS, and a redelivery is the one occasion on which that can be
+      // repaired: the id is deterministic, so this is the same record, and the
+      // message keeps being listed by catch-up scans for the fifteen days it
+      // stays in the inbox.
+      if (existingMsg.timestamp !== timestamp) {
+        const fixed = await data.updateMessageRecord({ chatId, chatMessageId }, { timestamp });
+        if (fixed) {
+          emit.message.updated(fixed);
+          await w3n.log(
+            'info',
+            `Restamped the 'invitation accepted' record ${chatMessageId} from ${existingMsg.timestamp} `
+              + `to the message's deliveryTS ${timestamp}, so that it sits where it belongs in history.`,
+          );
+        }
+      }
+      return;
+    }
+
     const msg: MsgDbEntry = {
       groupChatId: chatId.isGroupChat ? chatId.chatId : null,
       otoPeerCAddr: chatId.isGroupChat ? null : chatId.chatId,
-      chatMessageId: newChatMsgId,
+      chatMessageId,
       isIncomingMsg: false,
       incomingMsgId: null,
       groupSender: chatId.isGroupChat ? sender : null,
@@ -99,6 +234,12 @@ export async function chatCreation({
     name,
     ownName,
   }: Pick<SingleChatView, 'peerAddr' | 'name'> & { ownName: string }): Promise<ChatIdObj> {
+    const existingChat = data.findChat({ isGroupChat: false, chatId: toCanonicalAddress(peerAddr) });
+
+    if (existingChat) {
+      return chatIdOfOTOChat(existingChat as OTOChatDbEntry);
+    }
+
     const chat = await data.addOneToOneChat({
       peerAddr,
       name,
@@ -125,10 +266,22 @@ export async function chatCreation({
     emit.message.added(msg);
 
     const chatId = chatIdOfOTOChat(chat);
+
+    // own other devices must learn about this chat regardless of whether the
+    // invitation ever reaches the peer
+    await sendInvitationSync(chatId, chatMessageId, {
+      type: 'oto-chat-invite',
+      name, // peer's real display name (chat record), not ownName sent to the peer below
+      status: chat.status,
+      settings: chat.settings ?? undefined,
+    });
+
     await sendChatInvitation(chatId, [peerAddr], {
       chatMessageId,
       inviteData,
     });
+
+    await drainOrphanedSyncsOf(chatId);
 
     return chatId;
   }
@@ -142,6 +295,12 @@ export async function chatCreation({
     // some checks
     if (!includesAddress(Object.keys(members), ownAddr) || !includesAddress(admins, ownAddr)) {
       throw new Error(`Own address is not among of both members and admins`);
+    }
+
+    const existingChat = data.findChat({ isGroupChat: true, chatId: groupChatId });
+
+    if (existingChat) {
+      return chatIdOfGroupChat(existingChat as GroupChatDbEntry);
     }
 
     // create chat db record
@@ -178,8 +337,18 @@ export async function chatCreation({
       await data.addMessage(msg);
       emit.message.added(msg);
 
+      // own other devices must learn about this chat regardless of whether
+      // the invitation ever reaches any peer
+      await sendInvitationSync(chatId, chatMessageId, {
+        ...inviteData,
+        status: chat.status,
+        settings: chat.settings ?? undefined,
+      });
+
       await sendChatInvitation(chatId, recipients, { chatMessageId, inviteData });
     }
+
+    await drainOrphanedSyncsOf(chatId);
 
     return chatId;
   }
@@ -222,6 +391,7 @@ export async function chatCreation({
     await data.addMessage(msg);
     emit.message.added(msg);
     await showSystemNotification({ sender, chatId: { isGroupChat: false, chatId: chat.peerCAddr } });
+    await drainOrphanedSyncsOf({ isGroupChat: false, chatId: chat.peerCAddr });
   }
 
   /* Creating a new group chat based on an invitation message */
@@ -265,6 +435,7 @@ export async function chatCreation({
     await data.addMessage(msg);
     emit.message.added(msg);
     await showSystemNotification({ sender, chatId: { isGroupChat: true, chatId: chat.chatId } });
+    await drainOrphanedSyncsOf({ isGroupChat: true, chatId: chat.chatId });
   }
 
   async function handleMalformedInvitation(msgId: string): Promise<void> {
@@ -304,7 +475,7 @@ export async function chatCreation({
       updatedMsg && emit.message.updated(updatedMsg);
     }
 
-    await removeMessageFromInbox(msgId);
+    await data.scheduleInboxMsgRemoval(msgId);
   }
 
   async function handleGroupChatInvitationAcceptance(
@@ -352,7 +523,7 @@ export async function chatCreation({
 
     updatedChat && emit.chat.updated(updatedChat);
 
-    await removeMessageFromInbox(incomingMessage.msgId);
+    await data.scheduleInboxMsgRemoval(incomingMessage.msgId);
 
     const updateMembersData: UpdatedMembersInvitationData = {
       type: 'updated-members-invitation-data',
@@ -414,7 +585,12 @@ export async function chatCreation({
       );
     }
 
-    await createDisplayableSystemMessage({ chatId, sender });
+    await createDisplayableSystemMessage({
+      chatId,
+      sender,
+      dedupeKey: message.msgId,
+      timestamp: message.deliveryTS,
+    });
   }
 
   async function handleUpdateMembersInvitationData(
@@ -429,6 +605,7 @@ export async function chatCreation({
         incomingMessage.msgId,
         `Incoming chat invitation acceptance message ${incomingMessage.msgId} is for unknown chat. Removing it from inbox.`,
       );
+      return;
     }
 
     const { members, admins } = chat as GroupChatDbEntry;
@@ -452,7 +629,12 @@ export async function chatCreation({
 
     for (const acceptedMember of newAcceptedMembers) {
       if (acceptedMember !== ownAddr) {
-        await createDisplayableSystemMessage({ chatId, sender: acceptedMember });
+        await createDisplayableSystemMessage({
+          chatId,
+          sender: acceptedMember,
+          dedupeKey: `${incomingMessage.msgId}:${acceptedMember}`,
+          timestamp: incomingMessage.deliveryTS,
+        });
       }
 
       updatedChatMembers[acceptedMember] = { hasAccepted: true };
@@ -465,7 +647,7 @@ export async function chatCreation({
 
     updatedChat && emit.chat.updated(updatedChat);
 
-    await removeMessageFromInbox(incomingMessage.msgId);
+    await data.scheduleInboxMsgRemoval(incomingMessage.msgId);
   }
 
   /* Creating a new chat based on an invitation message (entry point) */
@@ -505,7 +687,7 @@ export async function chatCreation({
           deliveryTS,
           neverContactedInitiator,
         );
-        return removeMessageFromInbox(msg.msgId);
+        return data.scheduleInboxMsgRemoval(msg.msgId);
       }
 
       case 'group-chat-invite': {
@@ -523,7 +705,7 @@ export async function chatCreation({
             deliveryTS,
             neverContactedInitiator,
           );
-          return removeMessageFromInbox(msg.msgId);
+          return data.scheduleInboxMsgRemoval(msg.msgId);
         }
 
         return handleMalformedInvitation(msg.msgId);
@@ -555,14 +737,34 @@ export async function chatCreation({
       emit.message.updated(updatedMsg);
     }
 
+    // Whom the invitation came from: the address the acceptance goes back to,
+    // and `initiator` of AcceptedInvitationReference, by which the receiving
+    // side tells whether it is itself the chat's initiator (that decides the
+    // status a group chat moves to, see handleGroupChatInvitationAcceptance()).
+    // `groupSender` is filled only in group chats, so for a one-to-one chat the
+    // initiator is the chat's peer - and it is indeed the side that sent the
+    // invitation, since only an incoming invitation puts a chat into the
+    // `invited` status checked above.
+    const initiator = chatId.isGroupChat ? msg.groupSender : (chat as OTOChatDbEntry).peerAddr;
+    if (!initiator) {
+      throw makeDbRecordException({
+        invalidChatInsertData: true,
+        message: `Invitation ${chatMessageId} has no sender recorded, so there is nobody to accept it to`,
+      });
+    }
+
     if (chatId.isGroupChat) {
       const updatedChat = await data.updateGroupChatRecord(chatId.chatId, { status: 'accepted' });
       emit.chat.updated(updatedChat);
 
+      if (updatedChat) {
+        await sendInvitationAcceptedSync(chatId, updatedChat.status);
+      }
+
       const inviteData: AcceptedInvitationReference = {
         type: 'invite-acceptance',
         chatMessageId,
-        initiator: msg.groupSender!,
+        initiator,
         groupChat: {
           type: 'group-chat-invite',
           groupChatId: (chat as GroupChatDbEntry).chatId,
@@ -570,7 +772,7 @@ export async function chatCreation({
           name: ownName,
         },
       };
-      await sendChatInvitation(chatId, [msg.groupSender!], { chatMessageId, inviteData });
+      await sendChatInvitation(chatId, [initiator], { chatMessageId, inviteData });
 
       return;
     }
@@ -578,16 +780,20 @@ export async function chatCreation({
     const updatedChat = await data.updateOTOChatRecord(chatId.chatId, { status: 'on' });
     emit.chat.updated(updatedChat);
 
+    if (updatedChat) {
+      await sendInvitationAcceptedSync(chatId, updatedChat.status);
+    }
+
     const inviteData: AcceptedInvitationReference = {
       type: 'invite-acceptance',
       chatMessageId,
-      initiator: msg.groupSender!,
+      initiator,
       oneToOneChat: {
         type: 'oto-chat-invite',
         name: ownName,
       },
     };
-    await sendChatInvitation(chatId, [(chat as OTOChatDbEntry).peerAddr], { chatMessageId, inviteData });
+    await sendChatInvitation(chatId, [initiator], { chatMessageId, inviteData });
   }
 
   return {

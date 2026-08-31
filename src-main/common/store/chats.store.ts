@@ -27,14 +27,21 @@ import type {
   ChatIdObj,
   ChatMessageId,
   ChatListItemView,
+  ChatListItemUiView,
+  ChatViewBase,
   IncomingCallCmdArg,
   AddressCheckResult,
   ChatEvent,
+  ChatSummary,
+  ChatSystemMessageData,
   ChatWebRTCCallEvent,
 } from '~/index';
 import { getChatName } from '@main/common/utils/chat-ui.helper';
 import { chatService } from '@main/common/services/external-services';
-import { areChatIdsEqual, generateChatMessageId } from '@shared/chat-ids';
+import { areChatIdsEqual, chatMessageIdForCallEvent, generateChatMessageId } from '@shared/chat-ids';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('ChatsStore');
 
 export type ChatsStore = ReturnType<typeof useChatsStore>;
 
@@ -59,22 +66,76 @@ export const useChatsStore = defineStore('chats', () => {
   const uiIncomingStore = useUiIncomingStore();
 
   const chatList = ref<ChatListItemView[]>([]);
+  // Distinguishes "still loading" from "no chats": the first getChatList()
+  // answers only after the deno component has opened its databases, which on a
+  // cold start takes seconds - an empty sidebar for that whole time reads as a
+  // hang (or as an account with no chats).
+  const chatListLoaded = ref(false);
   const incomingCalls = ref<IncomingCallCmdArg[]>([]);
 
-  const chatListSortedByTime = computed(() => chatList.value
-    .map(c => ({
+  const chatListSortedByTime = computed<ChatListItemUiView[]>(() => {
+    const named = chatList.value.map(c => ({
       ...c,
       displayName: getChatName(c),
-    }))
-    .sort((a, b) => {
-      const tA = a.lastMsg?.timestamp || a.createdAt;
-      const tB = b.lastMsg?.timestamp || b.createdAt;
-      return tB - tA;
-    }),
-  );
+    }));
+
+    // Whether a name is shared with another chat is a property of the whole
+    // list, so it is established here, once, and not by every list item.
+    const countsByName = named.reduce((counts, { displayName }) => {
+      counts[displayName] = (counts[displayName] ?? 0) + 1;
+      return counts;
+    }, {} as Record<string, number>);
+
+    return named
+      .map(c => ({
+        ...c,
+        isNameDuplicated: countsByName[c.displayName] > 1,
+      }))
+      .sort((a, b) => {
+        const tA = a.lastMsg?.timestamp || a.createdAt;
+        const tB = b.lastMsg?.timestamp || b.createdAt;
+        return tB - tA;
+      });
+  });
 
   function getChatView(chatId: ChatIdObj): ChatListItemView | undefined {
     return chatList.value.find(cv => areChatIdsEqual(cv, chatId));
+  }
+
+  /**
+   * Call-related fields of a chat list item that live only in memory: they are
+   * never persisted, so they must be carried over whenever an item is rebuilt
+   * from DB data — otherwise an unrelated chat update (a new message, a rename)
+   * silently drops the ongoing-call state and, with it, the "Join Call" button.
+   */
+  function ephemeralCallFields(
+    item: ChatListItemView | undefined,
+  ): Pick<ChatViewBase, 'callStart' | 'incomingCall' | 'isCallActive'> {
+    return item
+      ? {
+        callStart: item.callStart,
+        incomingCall: item.incomingCall,
+        isCallActive: item.isCallActive,
+      }
+      : {};
+  }
+
+  /**
+   * Applies the aggregates that came along with a message event, sparing us the
+   * getChat() request that refreshChatViewData() makes.
+   * The fields are merged into the item in place rather than replacing it, so
+   * ephemeralCallFields() is not needed here: the in-memory call state stays
+   * where it is by construction.
+   */
+  function applyChatSummary({ chatId, unread, lastMsg }: ChatSummary): void {
+    const ind = findIndexOfChatInCurrentList(chatId);
+    if (ind >= 0) {
+      chatList.value[ind] = {
+        ...chatList.value[ind],
+        unread,
+        lastMsg,
+      };
+    }
   }
 
   async function refreshChatViewData(chatId: ChatIdObj) {
@@ -83,13 +144,9 @@ export const useChatsStore = defineStore('chats', () => {
     if (chatViewData) {
       const ind = findIndexOfChatInCurrentList(chatViewData);
       if (ind >= 0) {
-        const callStart = chatList.value[ind].callStart;
-        const incomingCall = chatList.value[ind].incomingCall;
-
         chatList.value[ind] = {
           ...chatViewData,
-          callStart,
-          incomingCall,
+          ...ephemeralCallFields(chatList.value[ind]),
         };
       }
     }
@@ -97,6 +154,116 @@ export const useChatsStore = defineStore('chats', () => {
 
   function clearIncomingCallsData() {
     incomingCalls.value = [];
+  }
+
+  /**
+   * Puts "the caller cancelled this call" into the chat history.
+   *
+   * Two things report the same fact, and whichever comes first records it: the
+   * caller's 'outgoing-call-cancelled' system message, and — since a
+   * 'disconnect' of a call that is still ringing is now acted upon — the
+   * 'call-ended' event carrying `reason: 'unanswered-here'`. Signalling is sent
+   * out-of-queue, so the event usually wins; the system message travels an
+   * ordinary delivery and remains the fallback for a lost 'disconnect'.
+   *
+   * Both callers guard on `incomingCall` still being set, which is what keeps
+   * the second one from recording the call twice: the first clears it. That
+   * guard is per window, though, and this record is written by a window — so
+   * the guard says nothing about the user's other devices, and the record is
+   * synchronized (see recordCallEvent).
+   */
+  async function recordCallCancelledByCaller(
+    chatId: ChatIdObj, sender: string | undefined, callSessionId?: string,
+  ): Promise<void> {
+    const chat = getChatView(chatId);
+    if (!chat) {
+      return;
+    }
+    await recordCallEvent({
+      chat,
+      chatId,
+      sender,
+      subType: 'outgoing-call-cancelled',
+      // The event path (reason 'unanswered-here') carries no session of its own,
+      // and does not need to: it is guarded on the ringing call that this window
+      // was told about, and that is where the session id came in.
+      callSessionId: callSessionId ?? chat.incomingCall?.callSessionId,
+    });
+  }
+
+  /**
+   * Writes - and synchronizes - this window's record of a call event that
+   * somebody else brought about: the caller withdrawing a call, or a peer
+   * declining one.
+   *
+   * Both used to be saved locally with a generated id and nothing else. Every
+   * device of ours does hear the peer's system message, so the record was
+   * usually everywhere - but only on devices with a window open, and with a
+   * different id in each of them. Deriving the id from the event and queueing a
+   * phantom fixes both: the devices agree on the record, and a device whose
+   * window is closed gets it from one whose window is not.
+   *
+   * A session id is needed for a derived id, and a peer on a build that predates
+   * the field sends none. Then the record stays local, exactly as before: a
+   * generated id cannot be agreed upon, and synchronizing it would put a second
+   * line about one cancellation on every other device.
+   */
+  async function recordCallEvent(
+    { chat, chatId, sender, subType, callSessionId }: {
+      chat: ChatListItemView;
+      chatId: ChatIdObj;
+      sender: string | undefined;
+      subType: 'outgoing-call-cancelled' | 'incoming-call-cancelled';
+      callSessionId: string | undefined;
+    },
+  ): Promise<void> {
+    const chatSystemData: ChatSystemMessageData = {
+      event: 'webrtc-call',
+      value: {
+        sender: sender!,
+        subType,
+        chatId,
+        callSessionId,
+      },
+    };
+    // `sender` is in the id because one call session yields one such record per
+    // person: in a group call two members declining are two lines, and an id
+    // that named only the session would drop the second of them as a record
+    // already there. The kinds are apart for the same reason - the host
+    // withdrawing a call and the user declining it name the same `sender` in a
+    // one-to-one chat.
+    const derivedId = (callSessionId && sender)
+      ? chatMessageIdForCallEvent(
+        (subType === 'outgoing-call-cancelled') ? 'call-withdrawn' : 'call-cancelled',
+        callSessionId,
+        sender,
+      )
+      : undefined;
+    const msgData = {
+      // Not an incoming message, for all that it reports someone else's doing:
+      // it is a record this device writes, and the copy that reaches the user's
+      // other devices is written as a local one there too (see the
+      // 'call'/'webrtc-call' branch of handleSystemSync). The two must not
+      // differ. Nothing is lost - a system record never counts as unread, and
+      // who did what is inside the body.
+      isIncomingMsg: false,
+      groupChatId: chat.isGroupChat ? chat.chatId : null,
+      otoPeerCAddr: chat.isGroupChat ? null : chat.chatId,
+      groupSender: chat.isGroupChat ? (sender ?? null) : null,
+      timestamp: Date.now(),
+    };
+
+    const systemMsg = derivedId
+      ? await chatService.saveAndSyncLocalSystemMsg(
+        appStore.user, chatId, chatSystemData, { ...msgData, chatMessageId: derivedId },
+      )
+      : await chatService.makeAndSaveMsgToDb(appStore.user, {
+        ...msgData,
+        ...generateChatMessageId(),
+        chatMessageType: 'system',
+        body: JSON.stringify(chatSystemData),
+      });
+    await messagesStore.handleAddedMsg(systemMsg);
   }
 
   async function createNewOneToOneChat(
@@ -111,7 +278,7 @@ export const useChatsStore = defineStore('chats', () => {
         type: 'error',
         content: 'Error creating a one to one chat.',
       });
-      w3n.log('error', 'Error creating a one to one chat. ', error);
+      log.error('Error creating a one to one chat. ', error);
     }
   }
 
@@ -130,7 +297,7 @@ export const useChatsStore = defineStore('chats', () => {
         type: 'error',
         content: 'Error creating a group chat.',
       });
-      w3n.log('error', 'Error creating a group chat. ', error);
+      log.error('Error creating a group chat. ', error);
     }
   }
 
@@ -142,13 +309,22 @@ export const useChatsStore = defineStore('chats', () => {
 
       return await chatService.acceptChatInvitation(chatId, chatMessageId, ownName);
     } catch (err) {
-      w3n.log('error', `Accepting chat invite failed with `, err);
+      log.error(`Accepting chat invite failed with `, err);
       throw err;
     }
   }
 
   async function refreshChatList() {
-    chatList.value = await chatService.getChatList();
+    const previousList = chatList.value;
+    const freshList = await chatService.getChatList();
+    // Re-apply in-memory call state: getChatList() returns DB data only, so an
+    // unrelated refresh (chat added/removed) would otherwise wipe the ongoing
+    // call state of every chat in the list.
+    chatList.value = freshList.map(chat => ({
+      ...chat,
+      ...ephemeralCallFields(previousList.find(item => areChatIdsEqual(item, chat))),
+    }));
+    chatListLoaded.value = true;
     resetRouteIfItPointsToRemovedChat();
   }
 
@@ -168,14 +344,22 @@ export const useChatsStore = defineStore('chats', () => {
     );
   }
 
-  async function updateChatItemInList(chatId: ChatIdObj, value: Partial<ChatListItemView>) {
+  /**
+   * Returns whether the item was found and updated. Callers that report the
+   * update to the log need that: an incoming call whose chat is not in this
+   * window's list is armed nowhere, and a success line written regardless turns
+   * the log into a false witness.
+   */
+  async function updateChatItemInList(
+    chatId: ChatIdObj, value: Partial<ChatListItemView>,
+  ): Promise<boolean> {
     let chatInd = findIndexOfChatInCurrentList(chatId);
     if (chatInd < 0) {
       await refreshChatList();
       chatInd = findIndexOfChatInCurrentList(chatId);
       if (chatInd < 0) {
-        w3n.log('error', `The chat with chatId ${chatId.chatId} does not exist.`);
-        return;
+        log.error(`The chat with chatId ${chatId.chatId} does not exist.`);
+        return false;
       }
     }
 
@@ -185,6 +369,7 @@ export const useChatsStore = defineStore('chats', () => {
       ...currentValue,
       ...value,
     };
+    return true;
   }
 
   async function handleBackgroundChatEvents(event: ChatEvent): Promise<void> {
@@ -195,13 +380,9 @@ export const useChatsStore = defineStore('chats', () => {
         if (chatInd < 0) {
           await refreshChatList();
         } else {
-          const callStart = chatList.value[chatInd].callStart;
-          const incomingCall = chatList.value[chatInd].incomingCall;
-
           chatList.value[chatInd] = {
             ...chat,
-            callStart,
-            incomingCall,
+            ...ephemeralCallFields(chatList.value[chatInd]),
           };
         }
         break;
@@ -228,82 +409,83 @@ export const useChatsStore = defineStore('chats', () => {
         break;
       }
 
+      case 'messages-removed': {
+        const { chatId, chatSummary } = event;
+        if (chatSummary) {
+          applyChatSummary(chatSummary);
+        }
+        messagesStore.handleAllMsgsRemoved(chatId);
+        break;
+      }
+
       case 'webRTCCall': {
         const { value } = event as ChatWebRTCCallEvent;
         const { data } = value || {};
-        const { chatId, sender, subType } = data || {};
+        const { chatId, sender, subType, callSessionId } = data || {};
         if (!chatId) {
           return;
         }
 
         const chatInd = findIndexOfChatInCurrentList(chatId);
         if (chatInd === -1) {
+          log.warn(
+            `Ignoring '${subType}' call system message: chat ${chatId.chatId} is not in the list`,
+          );
           return;
         }
 
         const chat = chatList.value[chatInd];
-        const { isGroupChat, callStart, incomingCall } = chat;
-        if (!callStart && !incomingCall) {
-          return;
-        }
+        const { callStart, incomingCall } = chat;
 
-        if (incomingCall && subType === 'outgoing-call-cancelled') {
-          const { chatMessageId, timestamp } = generateChatMessageId();
-          const systemMsg = await chatService.makeAndSaveMsgToDb(appStore.user, {
-              chatMessageType: 'system',
-              isIncomingMsg: true,
-              groupChatId: isGroupChat ? chat.chatId : null,
-              otoPeerCAddr: isGroupChat ? null : chat.chatId,
-              groupSender: isGroupChat ? sender : null,
-              chatMessageId,
-              timestamp,
-              body: JSON.stringify({
-                event: 'webrtc-call',
-                value: {
-                  sender,
-                  subType,
-                  chatId,
-                },
-              }),
-            },
-          );
+        if (subType === 'outgoing-call-cancelled') {
+          // Only meaningful while a call is ringing here: it is the ringing UI
+          // that this withdraws, and recordCallCancelledByCaller() guards on the
+          // same field to keep the call out of the history twice.
+          if (!incomingCall) {
+            return;
+          }
+          // The host's own session id is preferred over the one this window was
+          // told when the call started ringing: they are the same call, but only
+          // the message is authoritative about which session it withdraws.
+          await recordCallCancelledByCaller(chatId, sender, callSessionId);
           await uiIncomingStore.dismissIncomingCall(chatId, true);
-          await messagesStore.handleAddedMsg(systemMsg);
           return;
         }
 
         if (subType === 'incoming-call-cancelled') {
-          const { chatMessageId, timestamp } = generateChatMessageId();
-          const systemMsg = await chatService.makeAndSaveMsgToDb(
-            appStore.user,
-            {
-              chatMessageType: 'system',
-              isIncomingMsg: true,
-              groupChatId: isGroupChat ? chat.chatId : null,
-              otoPeerCAddr: isGroupChat ? null : chat.chatId,
-              groupSender: isGroupChat ? sender : null,
-              chatMessageId,
-              timestamp,
-              body: JSON.stringify({
-                event: 'webrtc-call',
-                value: {
-                  sender,
-                  subType,
-                  chatId,
-                },
-              }),
-            },
+          // Only the chat history is this window's business; ending the call is
+          // the background service's (see onIncomingCallSysMsg). It is the side
+          // that knows which call session this message names and can refuse a
+          // cancellation of an earlier call - the inbox keeps these for days and
+          // replays them at start-up, and one such replay used to close a call
+          // that had only just started. This window has no session id to check
+          // against, so it must not be a second decider.
+          //
+          // Deliberately not guarded on `callStart`/`incomingCall` either: those
+          // are ephemeral fields of this window's chat list, set from a
+          // 'call-started' event (see useInitialize.ts), so a window opened after
+          // the call began - or reloaded during it - has neither and used to drop
+          // the message on the floor, leaving the cancelled call out of the
+          // history.
+          log.info(
+            `Call in chat ${chatId.chatId} was declined by ${sender ?? 'unknown'} `
+              + `(call known to this window: ${!!callStart || !!incomingCall})`,
           );
 
-          !isGroupChat && await uiIncomingStore.endCall(chatId);
-          await messagesStore.handleAddedMsg(systemMsg);
+          await recordCallEvent({ chat, chatId, sender, subType, callSessionId });
         }
 
         break;
       }
 
-      default:
-        throw Error(`Unknown chat event: ${event.event}`);
+      default: {
+        // Every ChatEvent variant is handled above, so getting here means the
+        // backend sends something this build doesn't know about. Typing the
+        // value as never also makes the compiler flag a forgotten branch when a
+        // new event is added - which is how 'messages-removed' went unhandled.
+        const unhandledEvent: never = event;
+        throw Error(`Unknown chat event: ${JSON.stringify(unhandledEvent)}`);
+      }
     }
   }
 
@@ -313,16 +495,19 @@ export const useChatsStore = defineStore('chats', () => {
 
   return {
     chatList,
+    chatListLoaded,
     chatListSortedByTime,
     refreshChatList,
     findIndexOfChatInCurrentList,
     getChatView,
     refreshChatViewData,
+    applyChatSummary,
     handleBackgroundChatEvents,
     createNewOneToOneChat,
     createNewGroupChat,
     acceptChatInvitation,
     updateChatItemInList,
+    recordCallCancelledByCaller,
     clearIncomingCallsData,
     setIncomingCallsData,
   };

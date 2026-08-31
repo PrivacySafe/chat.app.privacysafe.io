@@ -16,13 +16,23 @@
 */
 
 export interface ContactsService {
-  isThereContactWithTheMail(mail: string): boolean;
-  getContactByMail(mail: string): Person | undefined;
-  getContactList(): Promise<PersonView[]>;
-  getContact(id: string): Promise<Person|undefined>;
-  insertContact(contact: Person): Promise<void | { errorType: string; errorMessage: string }>;
-  upsertContact(contact: Person): Promise<void | { errorType: string; errorMessage: string }>;
-  watchContactList(obs: web3n.Observer<PersonView[]>): () => void;
+  getContact: (id: string) => Promise<Person | undefined>;
+  getContactByMail: (mail: string) => Promise<Person | undefined>;
+  getContactList: (withImage?: boolean) => Promise<Person[]>;
+  addContact: (contact: Omit<Person, 'timestamp'>) => Promise<
+    | Person
+    | {
+        errorType: string;
+        errorMessage: string;
+      }
+  >;
+  upsertContact: (contact: Person | Omit<Person, 'timestamp'>) => Promise<
+    | Person
+    | {
+        errorType: string;
+        errorMessage: string;
+      }
+  >;
 }
 
 export interface PersonView {

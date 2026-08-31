@@ -16,6 +16,23 @@
 */
 export interface LocalDataStore {
   getAppDeviceId(): string;
+  /**
+   * Starts watching for another app instance using this same local data folder,
+   * which would share this device's identity. Calls back once, and only in that
+   * (misconfigured) case; the returned function stops the watch.
+   */
+  startForeignInstanceWatch(onForeign: (foreignStamp: string) => void): () => void;
   getLastReceivedMessageTimestamp(): number;
   setLastReceivedMessageTimestamp(ts: number): Promise<void>;
+  nextSyncStamp(): Promise<number>;
+  observeSyncStamp(ts: number): Promise<void>;
+  /**
+   * Whether a phantom from another device of this user has ever been seen here.
+   * The synchronization indicator stays silent until it has: a user with one
+   * device synchronizes with nobody, and every phantom in their inbox is their
+   * own copy coming back.
+   */
+  hasSeenOtherDevice(): boolean;
+  noteOtherDeviceSeen(deviceId: string): Promise<void>;
+  nextCallSessionId(hostAddr: string): Promise<string>;
 }

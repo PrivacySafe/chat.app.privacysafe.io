@@ -17,6 +17,29 @@
 import type { CallFromVideoGUI, ChatInfoForCall, VideoChatComponent } from '../../../types/services.types.ts';
 import type { VideoComponentInstance, WebRTCSignalListener } from '../../types/index.ts';
 import { makeServiceCaller } from '../../../shared-libs/ipc/ipc-service-caller.js';
+import { makeLogger } from '../../../shared-libs/logger.ts';
+
+const log = makeLogger('VideoComponentInstance');
+
+/**
+ * Methods of the call window this component calls over IPC.
+ *
+ * makeServiceCaller builds the RPC wrapper from this list alone, so one left
+ * out is silently `undefined` at the call site - and the optional-call `?.` on
+ * the other side swallows that without a line in any log. The window's own list
+ * of what it answers (VIDEO_WINDOW_IPC_METHODS in
+ * src-video/common/services/service-provider.ts) has to hold every one of
+ * these; a spec compares the two, because the halves drifting apart already
+ * left two notifications dead for four days.
+ */
+export const VIDEO_WINDOW_METHODS_CALLED_HERE: (keyof VideoChatComponent)[] = [
+  'startVideoCallComponentForChat',
+  'focusWindow',
+  'endCall',
+  'handleWebRTCSignal',
+  'notifyOfUndeliveredSignal',
+  'notifyOfRejoiningPeer',
+];
 
 export async function videoComponentInstance(
   chat: ChatInfoForCall,
@@ -25,7 +48,7 @@ export async function videoComponentInstance(
   const srvConn = await w3n.rpc!.thisApp!('VideoChatComponent');
   const guiSrv = makeServiceCaller<VideoChatComponent>(
     srvConn,
-    ['startVideoCallComponentForChat', 'focusWindow', 'endCall', 'handleWebRTCSignal'],
+    VIDEO_WINDOW_METHODS_CALLED_HERE,
     ['watchRequests'],
   ) as VideoChatComponent;
 
@@ -38,13 +61,19 @@ export async function videoComponentInstance(
   }
 
   function getListenerForChannelTo(peer: string): WebRTCSignalListener {
-    return msg => guiSrv.handleWebRTCSignal(peer, msg);
+    return msg => {
+      guiSrv.handleWebRTCSignal(peer, msg).catch(err => {
+        log.warn(`Failed to forward WebRTC signal to GUI for peer ${peer}`, err);
+      });
+    };
   }
 
   const instance: VideoComponentInstance = {
     focusWindow,
     endCall,
     getListenerForChannelTo,
+    notifyOfUndeliveredSignal: (peer, stage) => guiSrv.notifyOfUndeliveredSignal(peer, stage),
+    notifyOfRejoiningPeer: peer => guiSrv.notifyOfRejoiningPeer(peer),
   };
 
   guiSrv.watchRequests(obs);

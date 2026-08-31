@@ -18,6 +18,7 @@
 import type {
   StoredInvitationParams,
   ChatIdObj,
+  ChatMessageId,
   ChatSystemMessageData,
   ChatMessageType,
 } from './asmail-msgs.types';
@@ -49,9 +50,21 @@ export interface ChatViewBase extends ChatIdObj {
   createdAt: number;
   lastUpdatedAt: number;
   callStart?: number;
+  /**
+   * Indicates whether a call is currently active in this chat room.
+   * Set to true when heartbeat messages are received from other participants.
+   * Used for re-join feature: shows "Join call" button when user is not in the call.
+   */
+  isCallActive?: boolean;
   incomingCall?: {
     chatId: ChatIdObj;
     peerAddress: string;
+    /**
+     * Session id the incoming-call command named. Echoed back on join/dismiss
+     * so the background service can refuse a click armed for a call that is
+     * already over.
+     */
+    callSessionId?: string;
   };
   settings: ChatSettings;
 }
@@ -76,25 +89,44 @@ export type GroupChatStatus = 'initiated' | 'partially-on' | 'on' | 'invited' | 
 export type ChatView = SingleChatView | GroupChatView;
 
 export interface ChatMessageReaction {
-  type?: 'emoji' | 'icon',
+  type?: 'emoji' | 'icon';
   name: string;
   color?: string;
 }
 
-export type ChatMessageHistoryErrors = Record<
-  string,
-  web3n.asmail.DeliveryException | web3n.RuntimeException | Error
->;
+export interface SerializedDeliveryError {
+  message: string;
+  type?: string;
+  domainNotFound?: true;
+  noServiceRecord?: true;
+  unknownRecipient?: true;
+  senderNotAllowed?: true;
+  inboxIsFull?: true;
+  badRedirect?: true;
+  authFailedOnDelivery?: true;
+  msgTooBig?: true;
+  allowedSize?: number;
+  recipientHasNoPubKey?: true;
+  recipientPubKeyFailsValidation?: true;
+  msgNotFound?: true;
+  msgCancelled?: true;
+}
+
+export type ChatMessageHistoryErrors = Record<string, SerializedDeliveryError>;
 
 export interface ChatMessageHistoryChange {
   user: string;
   timestamp: number;
-  type: 'body' | 'reaction' | 'error';
+  /**
+   * 'unconfirmed-delivery': the delivery never reported completion and was
+   * reconciled to 'sent' (see delivery-reconcile.ts); `value` is a text note.
+   */
+  type: 'body' | 'reaction' | 'error' | 'unconfirmed-delivery';
   value: string | Record<string, ChatMessageReaction> | ChatMessageHistoryErrors;
 }
 
 export interface ChatMessageHistory {
-  changes?: ChatMessageHistoryChange[],
+  changes?: ChatMessageHistoryChange[];
 }
 
 export interface ChatMessageAttachmentsInfo {
@@ -102,6 +134,8 @@ export interface ChatMessageAttachmentsInfo {
   name: string;
   isFolder?: boolean;
   size: number;
+  hasNoLocalSource?: boolean;
+  originDeviceId?: string;
 }
 
 export interface ChatMessageViewBase {
@@ -144,7 +178,7 @@ export interface RegularMsgView extends ChatMessageViewBase {
     };
     forwardFrom?: {
       sender: string;
-    },
+    };
     msgNotFound?: true;
   };
   body: string;
@@ -153,10 +187,7 @@ export interface RegularMsgView extends ChatMessageViewBase {
   history?: ChatMessageHistory;
   reactions?: Record<string, ChatMessageReaction>;
   removeAfter: number;
-  settings: {
-    autoDeleteMessages: string;
-    [key: string]: unknown;
-  };
+  settings: ChatSettings;
 }
 
 export interface ChatSysMsgView extends ChatMessageViewBase {
@@ -166,7 +197,6 @@ export interface ChatSysMsgView extends ChatMessageViewBase {
   chatMessageType: 'system';
   systemData: ChatSystemMessageData;
   status?: undefined;
-
 }
 
 export interface ChatInvitationMsgView extends ChatMessageViewBase {
@@ -180,14 +210,42 @@ export interface ChatInvitationMsgView extends ChatMessageViewBase {
 
 export type ChatMessageView = RegularMsgView | ChatSysMsgView | ChatInvitationMsgView;
 
+/**
+ * Position in a chat's history, used to ask for the page preceding it.
+ * Both fields are needed: timestamps come from Date.now() and are not unique,
+ * so a message sharing a millisecond with the one on a page boundary would fall
+ * out of the paging otherwise.
+ */
+export type MsgPageCursor = Pick<ChatMessageView, 'timestamp' | 'chatMessageId'>;
+
+/**
+ * Outcome of a bulk deletion of messages.
+ *
+ * Deletion of one message is several steps (a database row, an inbox message,
+ * attachment files), so a batch can succeed partly. The caller gets both lists
+ * because only the deleted ones are gone from the database, while the failed
+ * ones are still there and still shown.
+ */
+export interface MsgsDeletionResult {
+  deleted: ChatMessageId[];
+  failed: ChatMessageId[];
+}
+
 export type IncomingMessageStatus = 'read' | 'unread';
 
-export type OutgoingMessageStatus = 'sending' | 'syncing_self' | 'sent' | 'error' | 'canceled' | 'read';
+export type OutgoingMessageStatus =
+  | 'ready_to_send'
+  | 'sending'
+  | 'syncing_self'
+  | 'sent'
+  | 'error'
+  | 'canceled'
+  | 'read';
 
 export type MessageStatus = IncomingMessageStatus | OutgoingMessageStatus;
 
 export type ChatMessageActionType =
-  'reaction'
+  | 'reaction'
   | 'reply'
   | 'copy'
   | 'forward'
@@ -204,7 +262,7 @@ export interface ChatMessageAction {
   icon: {
     name: string;
     horizontalFlip?: boolean;
-    rotateIcon?: 1 | 2 | 3,
+    rotateIcon?: 1 | 2 | 3;
   };
   title: string;
   conditions: string[];
@@ -217,6 +275,22 @@ export interface ChatMessageAction {
 export type ChatListItemView = ChatView & {
   unread: number;
   lastMsg?: ChatMessageView | null;
+};
+
+/**
+ * Chat list item as list views consume it. Both extra fields are properties of
+ * the list as a whole, not of a single record, hence they are computed once,
+ * where the list is assembled:
+ * - `displayName` is the name to show (a one-to-one chat may have none of its
+ *   own and fall back to the contact name);
+ * - `isNameDuplicated` says that some other chat in the list shows the very same
+ *   name, so the item has to add something that tells them apart. Chat names are
+ *   not unique by design: two group chats may share a name (and even members),
+ *   and two contacts may share a display name.
+ */
+export type ChatListItemUiView = ChatListItemView & {
+  displayName: string;
+  isNameDuplicated: boolean;
 };
 
 export interface ChatException extends web3n.RuntimeException {
@@ -234,4 +308,14 @@ export interface LocalMetadataInDelivery {
   chatMessageId?: ChatMessageView['chatMessageId'];
   chatMessageType: ChatMessageType;
   chatSystemData?: ChatSystemMessageData;
+  isDeletable?: boolean;
+  /**
+   * Which row of the outgoing-phantom journal this delivery carries.
+   *
+   * Diagnostics only - it makes a log line and a `listMsgs()` dump name the
+   * change. Settling a row is always decided by the in-memory flight registry
+   * (phantom-flight.ts) and never by this field: a row id from a previous run of
+   * the component would point at a row that has since been released again.
+   */
+  syncJournalRowId?: number;
 }

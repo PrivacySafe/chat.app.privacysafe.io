@@ -6102,11 +6102,48 @@ function makeObservableMethodCaller(connection, method, transforms) {
                 if (!obs.next) {
                     return;
                 }
-                const ev = replyFromPassedDatum(data, transforms === null || transforms === void 0 ? void 0 : transforms.unpackReply);
-                obs.next(ev);
+                try {
+                    const ev = replyFromPassedDatum(data, transforms === null || transforms === void 0 ? void 0 : transforms.unpackReply);
+                    const res = obs.next(ev);
+                    if (res && typeof res.catch === 'function') {
+                        res.catch(err => {
+                            console.error(`Error in observer.next async for method ${method}:`, err);
+                        });
+                    }
+                } catch (err) {
+                    console.error(`Error in observer.next for method ${method}:`, err);
+                }
             },
-            complete: obs.complete,
-            error: obs.error
+            complete: () => {
+                if (!obs.complete) {
+                    return;
+                }
+                try {
+                    const res = obs.complete();
+                    if (res && typeof res.catch === 'function') {
+                        res.catch(err => {
+                            console.error(`Error in observer.complete async for method ${method}:`, err);
+                        });
+                    }
+                } catch (err) {
+                    console.error(`Error in observer.complete for method ${method}:`, err);
+                }
+            },
+            error: err => {
+                if (!obs.error) {
+                    return;
+                }
+                try {
+                    const res = obs.error(err);
+                    if (res && typeof res.catch === 'function') {
+                        res.catch(asyncErr => {
+                            console.error(`Error in observer.error async for method ${method}:`, asyncErr);
+                        });
+                    }
+                } catch (syncErr) {
+                    console.error(`Error in observer.error for method ${method}:`, syncErr);
+                }
+            }
         };
         return connection.startObservableCall(method, req, obsWrap);
     });

@@ -17,52 +17,55 @@
 import type {
   ChatIdObj,
   ChatIncomingMessage,
+  ChatInvitationMsgV1,
   ChatMessageId,
-  ChatOutgoingMessage,
+  ChatSyncMsgV1,
   ChatSystemMessageData,
   ChatSystemMsgV1,
+  PhantomSyncMsgDataBasedOnRegularMsgV1,
   RelatedMessage,
   UpdatedMsgBodySysMsgData,
   UpdatedMsgReactionSysMsgData,
-  WebRTCMsgBodySysMsgData,
 } from '../../../types/asmail-msgs.types.ts';
 import type {
   ChatListItemView,
   ChatMessageReaction,
   ChatMessageView,
   GroupChatView,
-  LocalMetadataInDelivery,
+  MsgPageCursor,
   RegularMsgView,
   SingleChatView,
 } from '../../../types/chat.types.ts';
-import type { UpdateEvent } from '../../../types/services.types.ts';
 import type {
   ChatDbEntry,
-  ChatMessagesHandler,
   ChatSrv,
-  ChatSrvEmit,
-  GroupChatDbEntry,
+  DB,
   LocalDataStore,
   MsgDbEntry,
-  OTOChatDbEntry,
-  SendingProgressInfo,
 } from '../../types/index.ts';
-import { MultiConnectionIPCWrap } from '../../../shared-libs/ipc/ipc-service.js';
-import { ObserversSet } from '../../../shared-libs/observer-utils.ts';
+import { createChatEvents } from './events.ts';
+import type { GuiLogLine } from '../../../shared-libs/log-relay.ts';
 import { includesAddress } from '../../../shared-libs/address-utils.ts';
-import { generateChatMessageId } from '../../../shared-libs/chat-ids.ts';
-import { dataset } from '../../dataset/index.ts';
 import { fileStoreService } from '../file-store-service/file-store-service.ts';
 import { AppSettings } from '../../utils/app-settings.ts';
 import { makeDbRecordException } from '../../utils/exceptions.ts';
-import { checkAddressExistenceForASMail, ensureAllAddressesExist } from '../../utils/for-msg-sending.ts';
-import { sendSystemDeletableMessage as _sendSystemDeletableMessage } from '../../utils/send-chat-msg.ts';
+import { checkAddressExistenceForASMail, ensureAllAddressesExist } from '../../utils/address-checks.ts';
+import {
+  countPhantomsAwaitingRelease,
+  countSyncPhantomsInDelivery,
+  makeMsgRecordPhantom,
+  makeSystemEventPhantom,
+  queueSyncPhantom,
+  setSyncDeliveryOutcomeSink,
+  setSyncPassOutcomeSink,
+  releasePendingSyncPhantoms,
+  sendSystemDeletableMessage as _sendSystemDeletableMessage,
+} from '../mail-sending-service/index.ts';
 import {
   canReceiveRegularMessages,
   getIncomingMessage,
   msgViewFromDbEntry,
   removeMessageFromInbox,
-  removeMsgFromDelivery,
 } from './utils/_msgs-related-methods.ts';
 import {
   chatViewForGroupChat,
@@ -82,167 +85,197 @@ import { msgStatusUpdating as _msgStatusUpdating } from './utils/msg-status-upda
 import { msgReactions as _msgReactions } from './utils/msg-reactions.ts';
 import { msgEditing as _msgEditing } from './utils/msg-editing.ts';
 import { checkChatMessageJSON } from './utils/_msgs-related-methods.ts';
+import { handleIncomingSync } from './utils/handle-incoming-sync.ts';
+import { makeResyncCtx, requestResyncForStuckOrphans } from './utils/msg-resync.ts';
+import { msgEntityId } from './utils/sync-versions.ts';
+import { makeSyncActivityTracker, type SyncActivityTracker } from '../../utils/sync-activity.ts';
 
-function exposeServiceOnIPC(chats: ChatSrv): () => void {
-  const srvWrapInternal = new MultiConnectionIPCWrap('AppChatsInternal');
-  srvWrapInternal.exposeReqReplyMethods(chats, [
-    'createOneToOneChat',
-    'createGroupChat',
-    'acceptChatInvitation',
-    'getChatList',
-    'getChat',
-    'findChatEntry',
-    'renameChat',
-    'chatSetUp',
-    'deleteChat',
-    'updateGroupMembers',
-    'updateGroupAdmins',
-    'deleteMessagesInChat',
-    'deleteMessage',
-    'deleteMessages',
-    'deleteExpiredMessages',
-    'getLatestIncomingMsgTimestamp',
-    'getMessage',
-    'getMessagesByChat',
-    'getRecentReactions',
-    'sendRegularMessage',
-    'markMessageAsReadNotifyingSender',
-    'checkAddressExistenceForASMail',
-    'cancelSendingMessage',
-    'getIncomingMessage',
-    'updateEarlySentMessage',
-    'changeMessageReaction',
-    'sendSystemDeletableMessage',
-    'makeAndSaveMsgToDb',
-  ]);
-  srvWrapInternal.exposeObservableMethods(chats, ['watch']);
-  return srvWrapInternal.startIPC();
+
+/**
+ * Names a phantom in a log line: its kind, and for a system event the event
+ * itself. "Applied a sync message" without this says nothing about what got
+ * synchronized, which is the only thing worth reading afterwards.
+ */
+function describeSyncPhantom(
+  syncMsg: ChatSyncMsgV1<PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1>,
+): string {
+  const { value } = syncMsg;
+  const kind = (value as { chatMessageType?: string }).chatMessageType ?? 'unknown';
+  const event = (value as ChatSystemMsgV1).chatSystemData?.event;
+  return event ? `${kind}/${event}` : kind;
 }
+
 
 export async function chatService(
   ownAddr: string,
   localDataStoreSrv: LocalDataStore,
-): Promise<{ chatsSrv: ChatSrv; stopChatsService: () => void }> {
-  const data = await dataset();
+  data: DB,
+): Promise<{ chatsSrv: ChatSrv; syncActivity: SyncActivityTracker }> {
   const filesStore = await fileStoreService();
   const appSettings = new AppSettings();
 
-  const updateEventsObservers = new ObserversSet<UpdateEvent>();
+  const { emit: emitEventAfterAction, watch } = createChatEvents(ownAddr, data);
 
-  function watch(obs: web3n.Observer<UpdateEvent>): () => void {
-    updateEventsObservers.add(obs);
-    return () => updateEventsObservers.delete(obs);
-  }
+  /**
+   * Tracker of synchronization work, for the indicator in the GUI. It is made
+   * here, where both the event sink and the database are already at hand, and
+   * handed out to the inbox dispatcher through startup wiring.
+   */
+  const syncActivity = makeSyncActivityTracker({
+    // Rows awaiting release, not every journal row: a row inside a delivery is
+    // waiting for a confirmation, which is not work the user can be told about -
+    // counting it would keep the indicator lit for as long as the platform takes
+    // to report an outcome (tens of seconds, sometimes never).
+    countOutboundPending: () => countPhantomsAwaitingRelease(data),
+    // Nothing is reported until this user is known to have a second device.
+    // Their own phantoms come back to their own inbox, so a single-device user
+    // was told about "synchronization" that consisted entirely of this device
+    // cleaning up after itself (2026-08-14).
+    isReportable: () => localDataStoreSrv.hasSeenOtherDevice(),
+  });
+  syncActivity.onChange(state => emitEventAfterAction.common({
+    updatedEntityType: 'sync-state',
+    event: 'changed',
+    state,
+  }));
 
-  function emitChatEvent(event: UpdateEvent): void {
-    if (updateEventsObservers.isEmpty()) {
-      // TODO this may turn into other notifications form later
-      // if (event.updatedEntityType === 'message' && event.event === 'added') {
-      //   const { chatId, sender } = event.msg;
-      //   triggerMainUIOpening(chatId, sender);
-      // }
-    } else {
-      updateEventsObservers.next(event);
-    }
-  }
+  // Wired here, at the construction of the service, because the first pass over
+  // the journal runs at start-up (index.ts) - and because most passes are
+  // started from inside the sending service itself, where this service is not
+  // in reach. Reporting the outcome only from the IPC method below left every
+  // pass of a running app unreported: a journal held back by a call looked to
+  // the indicator exactly like work in progress, so it showed "Synchronizing…"
+  // for the whole length of every call (2026-08-14).
+  setSyncPassOutcomeSink(outcome => syncActivity.noteOutboundPass(outcome));
+  setSyncDeliveryOutcomeSink(outcome => syncActivity.noteOutboundDeliveryOutcome(outcome));
 
-  const emitEventAfterAction: ChatSrvEmit = {
-    chat: {
-      added: (chat: GroupChatDbEntry | OTOChatDbEntry) =>
-        emitChatEvent({
-          updatedEntityType: 'chat',
-          event: 'added',
-          chat: chatViewFromChatDbEntry(chat),
-        }),
+  /**
+   * Shared context of the record-resync mechanism (see msg-resync.ts): its
+   * per-session dedup of asks must be one for all the places that can notice
+   * a missing record - incoming sync handling and the start-up pass alike.
+   */
+  const resyncCtx = makeResyncCtx({ db: data, ownAddr, getAppDeviceId, nextSyncStamp });
 
-      removed: (chatId: ChatIdObj) =>
-        emitChatEvent({
-          updatedEntityType: 'chat',
-          event: 'removed',
-          chatId,
-        }),
-
-      updated: (chat: GroupChatDbEntry | OTOChatDbEntry | undefined) =>
-        chat
-          ? emitChatEvent({
-              updatedEntityType: 'chat',
-              event: 'updated',
-              chat: chatViewFromChatDbEntry(chat),
-            })
-          : undefined,
-
-      allMsgsRemoved: (chatId: ChatIdObj) =>
-        emitChatEvent({
-          updatedEntityType: 'chat',
-          event: 'messages-removed',
-          chatId,
-        }),
-
-      webRTCCall: (msg: ChatIncomingMessage | ChatOutgoingMessage, value: WebRTCMsgBodySysMsgData['value']) =>
-        emitChatEvent({
-          updatedEntityType: 'chat',
-          event: 'webRTCCall',
-          value: {
-            msg,
-            data: value,
-          },
-        }),
-    },
-
-    message: {
-      added: (msg: MsgDbEntry) => {
-        const sendingMsg = msgViewFromDbEntry(msg, msg.relatedMessage ?? undefined, ownAddr);
-
-        return emitChatEvent({
-          updatedEntityType: 'message',
-          event: 'added',
-          msg: sendingMsg,
-        });
-      },
-
-      removed: (msgId: ChatMessageId) =>
-        emitChatEvent({
-          updatedEntityType: 'message',
-          event: 'removed',
-          msgId,
-        }),
-
-      removedMultiple: (chatMsgIds: ChatMessageId[]) =>
-        emitChatEvent({
-          updatedEntityType: 'message',
-          event: 'removed-multiple',
-          chatMsgIds,
-        }),
-
-      updated: (msg: MsgDbEntry | undefined) =>
-        msg
-          ? emitChatEvent({
-              updatedEntityType: 'message',
-              event: 'updated',
-              msg: msgViewFromDbEntry(msg, msg.relatedMessage ?? undefined, ownAddr),
-            })
-          : undefined,
-    },
-  };
-
-  const chatCreation = await _chatCreation({ ownAddr, data, appSettings, emit: emitEventAfterAction });
-  const chatRenaming = await _chatRenaming({ ownAddr, data, emit: emitEventAfterAction });
-  const chatSettingUp = await _chatSettingUp({ ownAddr, data, emit: emitEventAfterAction });
-  const chatDeletion = await _chatDeletion({ ownAddr, data, emit: emitEventAfterAction, filesStore });
+  const chatCreation = await _chatCreation({
+    ownAddr,
+    data,
+    appSettings,
+    emit: emitEventAfterAction,
+    getAppDeviceId,
+    nextSyncStamp,
+    resync: resyncCtx,
+  });
+  const chatRenaming = await _chatRenaming({
+    ownAddr,
+    data,
+    emit: emitEventAfterAction,
+    getAppDeviceId,
+    nextSyncStamp,
+  });
+  const chatSettingUp = await _chatSettingUp({
+    ownAddr,
+    data,
+    emit: emitEventAfterAction,
+    getAppDeviceId,
+    nextSyncStamp,
+  });
+  const chatDeletion = await _chatDeletion({
+    ownAddr,
+    data,
+    emit: emitEventAfterAction,
+    filesStore,
+    getAppDeviceId,
+    nextSyncStamp,
+  });
   const chatMemberRemoval = await _chatMemberRemoval({ ownAddr, data, emit: emitEventAfterAction });
-  const chatMembersUpdating = await _chatMembersUpdating({ ownAddr, data, emit: emitEventAfterAction });
+  const chatMembersUpdating = await _chatMembersUpdating({
+    ownAddr,
+    data,
+    emit: emitEventAfterAction,
+    getAppDeviceId,
+    nextSyncStamp,
+  });
   const webRTCCallReaction = await _webRTCCallReaction(emitEventAfterAction);
-  const msgSending = await _msgSending({ ownAddr, data, appSettings, emit: emitEventAfterAction, filesStore });
-  const msgDeletion = await _msgDeletion({ ownAddr, data, emit: emitEventAfterAction, filesStore });
-  const msgStatusUpdating = await _msgStatusUpdating({ ownAddr, data, emit: emitEventAfterAction });
-  const msgReactions = await _msgReactions({ ownAddr, data, emit: emitEventAfterAction });
-  const msgEditing = await _msgEditing({ ownAddr, data, emit: emitEventAfterAction });
+  const msgSending = await _msgSending({
+    ownAddr,
+    data,
+    appSettings,
+    emit: emitEventAfterAction,
+    filesStore,
+    getAppDeviceId,
+    nextSyncStamp,
+  });
+  const msgDeletion = await _msgDeletion({
+    ownAddr,
+    data,
+    emit: emitEventAfterAction,
+    filesStore,
+    getAppDeviceId,
+    nextSyncStamp,
+  });
+  const msgStatusUpdating = await _msgStatusUpdating({
+    ownAddr,
+    data,
+    emit: emitEventAfterAction,
+    getAppDeviceId,
+    nextSyncStamp,
+  });
+  const msgReactions = await _msgReactions({
+    ownAddr,
+    data,
+    emit: emitEventAfterAction,
+    getAppDeviceId,
+    nextSyncStamp,
+  });
+  const msgEditing = await _msgEditing({
+    ownAddr,
+    data,
+    emit: emitEventAfterAction,
+    getAppDeviceId,
+    nextSyncStamp,
+  });
 
   function getAppDeviceId() {
     return localDataStoreSrv.getAppDeviceId();
   }
 
+  /**
+   * The main window's log lines, printed through this component so that the
+   * whole run reads as one story (see ChatSrv.logFromGui).
+   *
+   * `w3n.log` directly rather than a scoped logger: the line arrives with its
+   * own time, user address and scope already in it, and stamping it again with
+   * this component's clock would put the moment of delivery where the moment of
+   * the event should be.
+   */
+  async function logFromGui(lines: GuiLogLine[]): Promise<void> {
+    for (const { level, line, details } of lines) {
+      await w3n.log(level, `[GUI:main] ${line}`, details).catch(() => {});
+    }
+  }
+
+  function nextSyncStamp() {
+    return localDataStoreSrv.nextSyncStamp();
+  }
+
+  /**
+   * In-process listeners of incoming call system messages - the video chat
+   * service, which needs them as its fallback for a lost 'call-declined' signal.
+   * See ChatSrv.onIncomingCallSysMsg for why this is not a watch() subscription.
+   */
+  const callSysMsgHandlers = new Set<Parameters<ChatSrv['onIncomingCallSysMsg']>[0]>();
+
+  function onIncomingCallSysMsg(
+    handler: Parameters<ChatSrv['onIncomingCallSysMsg']>[0],
+  ): () => void {
+    callSysMsgHandlers.add(handler);
+    return () => callSysMsgHandlers.delete(handler);
+  }
+
   async function handleIncomingMsg(msg: ChatIncomingMessage): Promise<void> {
+    // Orphaned messages handling is implemented in handle-incoming-sync.ts
+    // and in individual message handlers (handleRegularMsg, handleSystemMsg, etc.)
+
     const checkMsgBody = checkChatMessageJSON(msg);
     if (!checkMsgBody) {
       return await removeMessageFromInbox(
@@ -255,6 +288,59 @@ export async function chatService(
 
     if (chatMsgBody.chatMessageType === 'invitation') {
       return await chatCreation.handleChatInvitation(msg);
+    }
+
+    if (chatMsgBody.chatMessageType === 'synchronization') {
+      const currentDeviceId = getAppDeviceId();
+      const syncMsg = chatMsgBody as ChatSyncMsgV1<
+        PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1
+      >;
+      const { sourceDeviceId } = syncMsg;
+
+      if (currentDeviceId === sourceDeviceId) {
+        // Inbox is shared across all of the user's own devices, so this device
+        // must not remove it immediately - that would rob every other device of
+        // ever seeing it. It is only scheduled for deferred removal (P0-3).
+        //
+        // The device id is printed, and not just implied by this branch, for a
+        // reason that cost a whole debugging session: two app instances started
+        // on the same data folder share this file, hence this id, and then every
+        // phantom looks like this device's own on both of them - synchronization
+        // is dead and no other line says so.
+        await w3n.log(
+          'info',
+          `Sync message ${msg.msgId} is from this device (${currentDeviceId}). Scheduling deferred removal.`,
+        );
+        return await data.scheduleInboxMsgRemoval(msg.msgId);
+      }
+
+      // Noted on receipt rather than on a successful apply: seeing a phantom
+      // from another device is by itself the proof that this user has one, and
+      // that is what the indicator waits for before saying anything at all.
+      await localDataStoreSrv.noteOtherDeviceSeen(sourceDeviceId);
+
+      syncActivity.beginApplyingInbound();
+      try {
+        await handleIncomingSync({
+          syncMsg,
+          db: data,
+          emit: emitEventAfterAction,
+          ownAddr,
+          observeSyncStamp: ts => localDataStoreSrv.observeSyncStamp(ts),
+          resync: resyncCtx,
+        });
+      } finally {
+        syncActivity.endApplyingInbound();
+      }
+
+      // Same reasoning: don't remove the phantom right after processing it here -
+      // other devices (possibly offline right now) still need to see it.
+      await w3n.log(
+        'info',
+        `Applied sync ${msg.msgId} from device ${sourceDeviceId} `
+          + `(${describeSyncPhantom(syncMsg)}, ts ${syncMsg.timestamp}). Scheduling deferred removal.`,
+      );
+      return await data.scheduleInboxMsgRemoval(msg.msgId);
     }
 
     const chat = data.findChat(chatId);
@@ -289,39 +375,6 @@ export async function chatService(
     );
   }
 
-  async function handleSendingProgress(info: SendingProgressInfo): Promise<void> {
-    emitChatEvent({
-      updatedEntityType: 'message',
-      event: 'sending-progress',
-      data: info,
-    });
-
-    const {
-      id,
-      progress: { allDone, localMeta },
-    } = info;
-
-    try {
-      const { chatMessageType } = localMeta as LocalMetadataInDelivery;
-      if (chatMessageType === 'regular') {
-        return await msgSending.handleSendingProgress(info);
-      }
-
-      // TODO other types may plug here to track sending progress
-    } finally {
-      if (allDone) {
-        await removeMsgFromDelivery(id);
-      }
-    }
-  }
-
-  function makeChatMessagesHandler(): ChatMessagesHandler {
-    return {
-      handleIncomingMsg,
-      handleSendingProgress,
-    };
-  }
-
   async function handleSystemMsg(
     msg: ChatIncomingMessage,
     chat: ChatDbEntry,
@@ -329,94 +382,121 @@ export async function chatService(
   ): Promise<void> {
     const { chatSystemData: sysData, chatMessageId } = chatMsgBody;
 
-    try {
-      switch (sysData.event) {
-        case 'update:status':
-          return msgStatusUpdating.handleUpdateMessageStatus(msg.sender, chat, sysData.value, msg.deliveryTS);
+    switch (sysData.event) {
+      case 'update:status':
+        await msgStatusUpdating.handleUpdateMessageStatus(msg.sender, chat, sysData.value, msg.deliveryTS);
+        break;
 
-        case 'delete:message':
-          return await msgDeletion.handleDeleteChatMessage(chat, sysData.value);
+      case 'delete:message':
+        await msgDeletion.handleDeleteChatMessage(chat, sysData.value);
+        break;
 
-        case 'update:members':
-          return await chatMembersUpdating.handleUpdateChatMembers(
-            msg.sender,
-            chat,
-            chatMessageId!,
-            msg.deliveryTS,
-            sysData.value,
-          );
+      case 'update:members':
+        await chatMembersUpdating.handleUpdateChatMembers(
+          msg.sender,
+          chat,
+          chatMessageId!,
+          msg.deliveryTS,
+          sysData.value,
+        );
+        break;
 
-        case 'update:admins':
-          return await chatMembersUpdating.handleUpdateChatAdmins(
-            msg.sender,
-            chat,
-            chatMessageId!,
-            msg.deliveryTS,
-            sysData.value,
-          );
+      case 'update:admins':
+        await chatMembersUpdating.handleUpdateChatAdmins(
+          msg.sender,
+          chat,
+          chatMessageId!,
+          msg.deliveryTS,
+          sysData.value,
+        );
+        break;
 
-        case 'update:chatName':
-          return await chatRenaming.handleUpdateChatName(
-            msg.sender,
-            chat,
-            chatMessageId!,
-            msg.deliveryTS,
-            sysData,
-          );
+      case 'update:chatName':
+        await chatRenaming.handleUpdateChatName(msg.sender, chat, chatMessageId!, msg.deliveryTS, sysData);
+        break;
 
-        case 'update:settings':
-          return await chatSettingUp.handleUpdateSettings(
-            msg.sender,
-            chat,
-            chatMessageId!,
-            msg.deliveryTS,
-            sysData,
-          );
+      case 'update:settings':
+        await chatSettingUp.handleUpdateSettings(msg.sender, chat, chatMessageId!, msg.deliveryTS, sysData);
+        break;
 
-        case 'member-removed':
-          return await chatMemberRemoval.handleMemberRemovedChat(msg.sender, chat, sysData.chatDeleted);
+      case 'member-removed':
+        await chatMemberRemoval.handleMemberRemovedChat(
+          msg.sender,
+          chat,
+          chatMessageId!,
+          msg.deliveryTS,
+          sysData.chatDeleted,
+        );
+        break;
 
-        case 'webrtc-call':
-          return await webRTCCallReaction.handleReactionToWebRTCCall(msg, {
-            ...sysData.value,
-            chatId: {
-              isGroupChat: chat.isGroupChat,
-              chatId: chat.isGroupChat ? chat.chatId : chat.peerCAddr,
-            },
-          });
-
-        case 'update:body':
-          return await msgEditing.handleUpdateOfMessageBody({
-            user: msg.sender,
-            chatId: chat.isGroupChat
-              ? { isGroupChat: true, chatId: chat.chatId }
-              : { isGroupChat: false, chatId: chat.peerCAddr },
-            chatMessageId: (sysData as UpdatedMsgBodySysMsgData).value.chatMessageId,
-            timestamp: msg.deliveryTS,
-            body: (sysData as UpdatedMsgBodySysMsgData).value.body,
-          });
-
-        case 'update:reactions':
-          return await msgReactions.handleChangeOfReactions({
-            user: msg.sender,
-            chatId: chat.isGroupChat
-              ? { isGroupChat: true, chatId: chat.chatId }
-              : { isGroupChat: false, chatId: chat.peerCAddr },
-            chatMessageId: (sysData as UpdatedMsgReactionSysMsgData).value.chatMessageId,
-            timestamp: msg.deliveryTS,
-            reactions: (sysData as UpdatedMsgReactionSysMsgData).value.reactions,
-          });
-
-        default:
-          await w3n.log(
-            'info',
-            `No handler found to handle chat system event ${(sysData as ChatSystemMessageData).event}`,
-          );
-          break;
+      case 'webrtc-call': {
+        // Our own view of the chat, not the `chatId` the sender put in the body:
+        // for a one-to-one chat that is the sender's projection of it, i.e. this
+        // very user's address.
+        const callChatId: ChatIdObj = {
+          isGroupChat: chat.isGroupChat,
+          chatId: chat.isGroupChat ? chat.chatId : chat.peerCAddr,
+        };
+        await webRTCCallReaction.handleReactionToWebRTCCall(msg, {
+          ...sysData.value,
+          chatId: callChatId,
+        });
+        // Reported to the rest of this process as well, so that acting on a
+        // cancelled call does not depend on a window being open. Each handler is
+        // guarded: this function's caller only takes the message out of the inbox
+        // once it returns, so a throwing listener would leave it there for good.
+        for (const handler of callSysMsgHandlers) {
+          try {
+            handler({
+              chatId: callChatId,
+              sender: msg.sender,
+              subType: sysData.value.subType,
+              callSessionId: sysData.value.callSessionId,
+              deliveryTS: msg.deliveryTS,
+            });
+          } catch (err) {
+            await w3n.log('error', `Handler of an incoming call system message threw`, err);
+          }
+        }
+        break;
       }
-    } finally {
-      await removeMessageFromInbox(msg.msgId);
+
+      case 'update:body':
+        await msgEditing.handleUpdateOfMessageBody({
+          user: msg.sender,
+          chatId: chat.isGroupChat
+            ? { isGroupChat: true, chatId: chat.chatId }
+            : { isGroupChat: false, chatId: chat.peerCAddr },
+          chatMessageId: (sysData as UpdatedMsgBodySysMsgData).value.chatMessageId,
+          timestamp: msg.deliveryTS,
+          body: (sysData as UpdatedMsgBodySysMsgData).value.body,
+        });
+        break;
+
+      case 'update:reactions':
+        await msgReactions.handleChangeOfReactions({
+          user: msg.sender,
+          chatId: chat.isGroupChat
+            ? { isGroupChat: true, chatId: chat.chatId }
+            : { isGroupChat: false, chatId: chat.peerCAddr },
+          chatMessageId: (sysData as UpdatedMsgReactionSysMsgData).value.chatMessageId,
+          timestamp: msg.deliveryTS,
+          reactions: (sysData as UpdatedMsgReactionSysMsgData).value.reactions,
+        });
+        break;
+
+      default:
+        await w3n.log(
+          'info',
+          `No handler found to handle chat system event ${(sysData as ChatSystemMessageData).event}`,
+        );
+        break;
     }
+
+    // Schedule deferred removal only once the event is durably applied - if a
+    // handler above threw, the message stays in the inbox and gets a chance to
+    // be reprocessed on the next start-up instead of being silently lost.
+    await data.scheduleInboxMsgRemoval(msg.msgId);
   }
 
   async function createOneToOneChat(
@@ -501,90 +581,6 @@ export async function chatService(
     }
   }
 
-  function postProcessingForVideoChat(): {
-    doAfterStartCall: ({
-      chatId,
-      direction,
-      sender,
-    }: {
-      chatId: ChatIdObj;
-      direction: 'incoming' | 'outgoing';
-      sender?: string;
-    }) => Promise<void>;
-    doAfterEndCall: (chatId: ChatIdObj) => Promise<void>;
-  } {
-    const doAfterStartCall = async ({
-      chatId,
-      direction,
-      sender,
-    }: {
-      chatId: ChatIdObj;
-      direction: 'incoming' | 'outgoing';
-      sender?: string;
-    }): Promise<void> => {
-      const { chatMessageId, timestamp } = generateChatMessageId();
-      const msg: MsgDbEntry = {
-        groupChatId: chatId.isGroupChat ? chatId.chatId : null,
-        otoPeerCAddr: chatId.isGroupChat ? null : chatId.chatId,
-        chatMessageId,
-        isIncomingMsg: false,
-        incomingMsgId: null,
-        groupSender: chatId.isGroupChat ? sender || ownAddr : null,
-        body: JSON.stringify({
-          event: 'call',
-          value: {
-            sender: sender || ownAddr,
-            direction,
-          },
-        }),
-        attachments: null,
-        chatMessageType: 'system',
-        relatedMessage: null,
-        status: null,
-        timestamp,
-        removeAfter: 0,
-        history: null,
-        reactions: null,
-        settings: null,
-      };
-      await data.addMessage(msg);
-      emitEventAfterAction.message.added(msg);
-    };
-
-    const doAfterEndCall = async (chatId: ChatIdObj): Promise<void> => {
-      const now = Date.now();
-      const notRegularMsgs = data.getNotRegularMessagesByChat(chatId);
-      const systemMsgs = notRegularMsgs
-        .filter(m => m.chatMessageType === 'system')
-        .sort((a, b) => (a.timestamp - b.timestamp ? -1 : 1));
-
-      if (systemMsgs.length > 0) {
-        const lastSystemMsg = systemMsgs[0];
-        const lastSystemMsgBody = lastSystemMsg.body
-          ? (JSON.parse(lastSystemMsg.body) as ChatSystemMessageData)
-          : null;
-
-        if (!lastSystemMsgBody || lastSystemMsgBody.event !== 'call') {
-          return;
-        }
-
-        lastSystemMsgBody.value.endTimestamp = now;
-
-        const updatedMsg = await data.updateMessageRecord(
-          { chatId, chatMessageId: lastSystemMsg.chatMessageId },
-          { body: JSON.stringify(lastSystemMsgBody) },
-        );
-
-        emitEventAfterAction.message.updated(updatedMsg);
-      }
-    };
-
-    return {
-      doAfterStartCall,
-      doAfterEndCall,
-    };
-  }
-
   async function getMessage(id: ChatMessageId): Promise<ChatMessageView | undefined> {
     const found = await data.getMessage(id);
     if (found) {
@@ -602,6 +598,24 @@ export async function chatService(
     return msgViews;
   }
 
+  async function getMessagesPageByChat(
+    chatId: ChatIdObj,
+    { limit, before }: { limit: number; before?: MsgPageCursor },
+  ): Promise<{ msgs: ChatMessageView[]; hasMoreOlder: boolean }> {
+    // One record over the asked-for page tells whether anything precedes it,
+    // sparing a second COUNT(*) query
+    const entries = data.getMessagesPageInChat(chatId, limit + 1, before);
+    const hasMoreOlder = entries.length > limit;
+    const page = hasMoreOlder ? entries.slice(entries.length - limit) : entries;
+    const msgs: ChatMessageView[] = [];
+
+    for (const msg of page) {
+      msgs.push(msgViewFromDbEntry(msg, msg.relatedMessage ?? undefined, ownAddr));
+    }
+
+    return { msgs, hasMoreOlder };
+  }
+
   async function sendRegularMessage({
     chatId,
     chatMessageId,
@@ -615,17 +629,34 @@ export async function chatService(
     files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined;
     relatedMessage: RelatedMessage | undefined;
   }): Promise<void> {
-    if (chatMessageId) {
-      await msgStatusUpdating.updateMessageStatus({ chatId, chatMessageId }, 'sending');
-    }
-
     return msgSending.sendRegularMessage({ chatId, chatMessageId, text, files, relatedMessage });
   }
 
   async function cancelSendingMessage(deliveryId: string, chatMsgId: ChatMessageId): Promise<void> {
     await msgSending.cancelSendingMessage(deliveryId);
     await msgStatusUpdating.updateMessageStatus(chatMsgId, 'canceled');
-    // TODO change msg status
+
+    // Cancelling removes the delivery, hence no progress event will ever report
+    // this terminal status. Other devices, which show the message as
+    // 'syncing_self', have to be told about it explicitly.
+    const msg = await data.getMessage(chatMsgId);
+    if (msg) {
+      await queueSyncPhantom({
+        db: data,
+        ownAddr,
+        phantom: makeMsgRecordPhantom({
+          chatId: chatMsgId.chatId,
+          sourceDeviceId: getAppDeviceId(),
+          timestamp: await nextSyncStamp(),
+          msg,
+        }),
+        entity: {
+          entityType: 'msg',
+          entityId: msgEntityId(chatMsgId.chatId, chatMsgId.chatMessageId),
+          aspect: 'record',
+        },
+      });
+    }
   }
 
   async function sendSystemDeletableMessage({
@@ -745,7 +776,7 @@ export async function chatService(
       history: null,
       reactions: null,
       relatedMessage: null,
-      status: chatMessageType === 'regular' ? (msgData.isIncomingMsg ? 'unread' : 'sending') : null,
+      status: chatMessageType === 'regular' ? (msgData.isIncomingMsg ? 'unread' : 'ready_to_send') : null,
       timestamp: 0,
       removeAfter: 0,
       settings: null,
@@ -758,9 +789,95 @@ export async function chatService(
     return msgViewFromDbEntry(msgDbEntry, msgDbEntry.relatedMessage as RegularMsgView['relatedMessage'], ownAddr);
   }
 
+  /**
+   * Stamps and synchronizes a system event whose record is created purely
+   * locally, with nothing ever sent to peers - a call record, say. Such events
+   * had no way to reach the user's other devices at all while synchronization
+   * hung off delivery progress to peers.
+   */
+  async function syncLocallyMadeSystemEvent(
+    chatId: ChatIdObj,
+    chatMessageId: string,
+    chatSystemData: ChatSystemMessageData,
+  ): Promise<void> {
+    const syncStamp = await nextSyncStamp();
+
+    // Creation of a record needs no version of its own - it is guarded by
+    // tombstones instead; an update of one does.
+    const isBodyUpdate = chatSystemData.event === 'update:body';
+    const entityId = msgEntityId(chatId, chatMessageId);
+
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeSystemEventPhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp: syncStamp,
+        chatMessageId,
+        chatSystemData,
+      }),
+      versions: isBodyUpdate
+        ? [
+            {
+              entityType: 'msg',
+              entityId,
+              aspect: 'body',
+              ts: syncStamp,
+              deviceId: getAppDeviceId(),
+            },
+          ]
+        : undefined,
+      entity: isBodyUpdate ? undefined : { entityType: 'msg', entityId, aspect: 'record' },
+    });
+  }
+
+  /**
+   * Writes a system record of a decision this device took on its own, and puts
+   * its phantom on the way - in one call, because the two must not be separable.
+   *
+   * A record written straight into the db with makeAndSaveMsgToDb is invisible
+   * to the user's other devices forever: nothing about it goes on the wire, so
+   * there is nothing for them to reconstruct it from. That is how the "call was
+   * cancelled" line came to exist only on the device where Decline was pressed.
+   *
+   * The body is serialized here rather than by the caller: it and the phantom
+   * describe the same event, and callers that build them apart let them drift.
+   *
+   * Records like these carry ids derived from the event they are about (see
+   * chatMessageIdForCallEvent), so the id may already be taken - by a device of
+   * ours whose phantom arrived first, or by a repeat of the action. addMessage
+   * is a bare INSERT, so that has to be checked here rather than left to each
+   * caller.
+   */
+  async function saveAndSyncLocalSystemMsg(
+    ownAddr: string,
+    chatId: ChatIdObj,
+    chatSystemData: ChatSystemMessageData,
+    msgData: Partial<MsgDbEntry>,
+  ): Promise<ChatMessageView> {
+    const { chatMessageId } = msgData;
+    if (chatMessageId) {
+      const existing = await getMessage({ chatId, chatMessageId });
+      if (existing) {
+        return existing;
+      }
+    }
+
+    const msgView = await makeAndSaveMsgToDb(ownAddr, {
+      ...msgData,
+      chatMessageType: 'system',
+      body: JSON.stringify(chatSystemData),
+    });
+    await syncLocallyMadeSystemEvent(chatId, msgView.chatMessageId, chatSystemData);
+    return msgView;
+  }
+
   const methods: ChatSrv = {
+    emitEventsOutward: emitEventAfterAction,
     getAppDeviceId,
-    makeChatMessagesHandler,
+    logFromGui,
+    handleIncomingMsg,
     createOneToOneChat,
     acceptChatInvitation,
     createGroupChat,
@@ -772,14 +889,30 @@ export async function chatService(
     updateGroupAdmins: chatMembersUpdating.updateGroupAdmins,
     getChat,
     findChatEntry,
-    postProcessingForVideoChat,
     deleteMessagesInChat: msgDeletion.deleteMessagesInChat,
     deleteMessage: msgDeletion.deleteMessage,
     deleteMessages: msgDeletion.deleteMessages,
     deleteExpiredMessages: msgDeletion.deleteExpiredMessages,
+    collectGarbageInAuxiliaryDB: data.collectGarbageInAuxiliaryDB,
+    removeExpiredInboxMessages: msgDeletion.removeExpiredInboxMessages,
+    resolveStuckSyncingSelfMessages: msgStatusUpdating.resolveStuckSyncingSelfMessages,
+    collectGarbageInSyncVersions: data.collectGarbageInSyncVersions,
+    // The outcome is reported by the pass itself, through the sink wired above:
+    // this method is one caller of many, and the ones it is not are the ones
+    // that run while the user is doing something.
+    releasePendingSyncPhantoms: () => releasePendingSyncPhantoms(data, ownAddr),
+    countPendingSyncPhantoms: async () => countPhantomsAwaitingRelease(data),
+    countSyncPhantomsInDelivery: async () => countSyncPhantomsInDelivery(),
+    getSyncActivityState: async () => syncActivity.snapshot(),
+    requestResyncForStuckOrphans: () => requestResyncForStuckOrphans(resyncCtx),
+    setResyncBusyCheck: isBusy => {
+      resyncCtx.isBusy = isBusy;
+    },
+    syncLocallyMadeSystemEvent,
     getLatestIncomingMsgTimestamp: data.getLatestIncomingMsgTimestamp,
     getMessage,
     getMessagesByChat,
+    getMessagesPageByChat,
     getIncomingMessage,
     getRecentReactions: data.getRecentReactions,
     sendRegularMessage,
@@ -790,13 +923,16 @@ export async function chatService(
     updateEarlySentMessage,
     changeMessageReaction,
     makeAndSaveMsgToDb,
+    saveAndSyncLocalSystemMsg,
     watch,
+    onIncomingCallSysMsg,
   };
 
-  const stopChatsService = exposeServiceOnIPC(methods);
+  // IPC exposure is NOT done here: it must happen at the very start of the
+  // component (see index.ts), long before this service can be constructed.
 
   return {
     chatsSrv: methods,
-    stopChatsService,
+    syncActivity,
   };
 }

@@ -21,6 +21,9 @@ import type { AttachmentViewInfo } from '@main/common/components/messages/chat-m
 import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
 import { getFileByInfoFromMsg } from '@main/common/utils/files.helper';
 import type { AttachmentAudioViewEmits } from './attachment-audio-view.vue';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('AudioView');
 
 export function useAudioView(
   { item, incomingMsgId, emits }:
@@ -103,7 +106,7 @@ export function useAudioView(
         render2();
         break;
       default:
-        w3n.log('error', 'Unknown audio visualization');
+        log.error('Unknown audio visualization');
         break;
     }
   }

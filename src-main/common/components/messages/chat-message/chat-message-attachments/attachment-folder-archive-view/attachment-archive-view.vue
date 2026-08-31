@@ -27,6 +27,9 @@ import type { EntityListItem } from './types';
 import isEmpty from 'lodash/isEmpty';
 import FolderViewFolder from './folder-view-folder.vue';
 import FolderViewFile from './folder-view-file.vue';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('ArchiveView');
 
 const props = defineProps<{
   item: AttachmentViewInfo;
@@ -91,7 +94,7 @@ onMounted(async () => {
       zip.forEach((path, entry) => handleZipEntry(path, entry));
     }
   } catch (e) {
-    w3n.log('error', `Error unzipping file ${props.item.filename}.`, e);
+    log.error(`Error unzipping file ${props.item.filename}.`, e);
     emits('error');
   } finally {
     isProcessing.value = false;

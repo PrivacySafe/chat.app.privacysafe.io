@@ -26,39 +26,58 @@ import {
   LIFETIME_DAYS_IN_AUXILIARY_DB,
 } from '../../shared-libs/constants/index.ts';
 import { msgsOrphanedTabFiels, msgsTabFields, msgWhereParamsFor } from './utils.ts';
+import { makeDbWriter } from './db-writer.ts';
 import type { ChatIdObj, ChatMessageId } from '../../types/asmail-msgs.types.ts';
-import type { ChatMessageReaction } from '../../types/chat.types.ts';
-import { MsgDbEntry, MsgsDb, OrphanedMsgDbEntry, RefsToMsgsDataNoInDB } from '../types/index.ts';
+import type { ChatMessageReaction, MessageStatus, MsgPageCursor } from '../../types/chat.types.ts';
+import type { ParamsObject } from '../../shared-libs/sqlite-on-3nstorage/sqljs.d.ts';
+import type {
+  MsgDbEntry,
+  MsgsDb,
+  OrphanedMsgDbEntry,
+  PendingSyncMsgDbEntry,
+  PendingSyncMsgEntry,
+  RefsToMsgsDataNoInDB,
+  SyncAspect,
+  SyncEntityType,
+  SyncVersionDbEntry,
+  SyncVersionWrite,
+} from '../types/index.ts';
 import {
   andEqualExprFor,
   forTableInsert,
   fromQueryResult,
   queryParamsFrom,
   setExprFor,
+  tableColumnNames,
 } from '../utils/for-sqlite.ts';
 
-const queryToCreateMsgsDbV2 = [
-  `--sql
-    CREATE TABLE messages (
-      groupChatId TEXT,
-      otoPeerCAddr TEXT,
-      chatMessageId TEXT NOT NULL,
-      isIncomingMsg INTEGER NOT NULL,
-      incomingMsgId TEXT,
-      groupSender TEXT,
-      body TEXT,
-      attachments TEXT,
-      chatMessageType TEXT NOT NULL,
-      relatedMessage TEXT,
-      status TEXT,
-      timestamp INTEGER NOT NULL,
-      removeAfter INTEGER NOT NULL,
-      history TEXT,
-      reactions TEXT,
-      settings TEXT,
-      PRIMARY KEY (chatMessageId, groupChatId, otoPeerCAddr)
-    ) STRICT
-  `,
+const queryToCreateMsgsTableV2 = `--sql
+  CREATE TABLE messages (
+    groupChatId TEXT,
+    otoPeerCAddr TEXT,
+    chatMessageId TEXT NOT NULL,
+    isIncomingMsg INTEGER NOT NULL,
+    incomingMsgId TEXT,
+    groupSender TEXT,
+    body TEXT,
+    attachments TEXT,
+    chatMessageType TEXT NOT NULL,
+    relatedMessage TEXT,
+    status TEXT,
+    timestamp INTEGER NOT NULL,
+    removeAfter INTEGER NOT NULL,
+    history TEXT,
+    reactions TEXT,
+    settings TEXT,
+    PRIMARY KEY (chatMessageId, groupChatId, otoPeerCAddr)
+  ) STRICT
+`;
+
+// Executed on every kind of messages table - freshly created, migrated from an
+// old schema, or one migrated by the 0.10.x dispatcher, which ran the ALTERs
+// but never created the *_lifetime indexes - so every statement must stay
+// IF NOT EXISTS, and the batch must run after the removeAfter column exists.
+const queryToCreateMsgsIndexes = [
   `--sql
     CREATE INDEX IF NOT EXISTS grchat_id_msg_ts ON messages (
       groupChatId, timestamp	ASC
@@ -96,16 +115,16 @@ const queryToCreateMsgsDbV2 = [
   `,
 ].join(';\n');
 
-const queryToCreateMsgsOrphanedDbV2 = [
+const queryToCreateMsgsOrphanedDbV3 = [
   `--sql
     CREATE TABLE orphaned_messages (
+      id INTEGER PRIMARY KEY,
       groupChatId TEXT,
       otoPeerCAddr TEXT,
-      incomingMsgId TEXT NOT NULL,
-      targetMessageId TEXT NOT NULL,
+      incomingMsgId TEXT,
+      targetMessageId TEXT,
       rawPayload TEXT NOT NULL,
-      bufferedAt INTEGER NOT NULL,
-      PRIMARY KEY (incomingMsgId, groupChatId, otoPeerCAddr)
+      bufferedAt INTEGER NOT NULL
     ) STRICT
   `,
   `--sql
@@ -113,7 +132,129 @@ const queryToCreateMsgsOrphanedDbV2 = [
       targetMessageId
     )
   `,
+  `--sql
+    CREATE INDEX IF NOT EXISTS idx_orphaned_chat ON orphaned_messages(
+      groupChatId, otoPeerCAddr
+    )
+  `,
 ].join(';\n');
+
+const queryToCreatePendingInboxRemovalsV1 = `--sql
+  CREATE TABLE pending_inbox_removals (
+    msgId TEXT PRIMARY KEY,
+    removeAfter INTEGER NOT NULL
+  ) STRICT
+`;
+
+/**
+ * Per-aspect ordering tokens for last-write-wins synchronization between the
+ * user's own devices.
+ *
+ * Kept in a table of its own rather than inside a chat's or a message's
+ * settings: a chat's settings are themselves a synchronized aspect, sent
+ * wholesale in an 'update:settings' phantom and written wholesale on receipt,
+ * so version data stored there would leak into phantoms and be clobbered.
+ *
+ * Lives in the main database, not the auxiliary one: a version must last as
+ * long as the entity it describes, while the auxiliary DB is garbage-collected
+ * by age. tombstonedAt is set only for the 'deleted' aspect, whose rows outlive
+ * the deleted entity (to keep it from being resurrected) and are the only ones
+ * collected by age.
+ */
+const queryToCreateSyncVersionsV1 = `--sql
+  CREATE TABLE sync_versions (
+    entityType TEXT NOT NULL,
+    entityId TEXT NOT NULL,
+    aspect TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    deviceId TEXT NOT NULL,
+    tombstonedAt INTEGER,
+    PRIMARY KEY (entityType, entityId, aspect)
+  ) STRICT
+`;
+
+/**
+ * Journal of outgoing sync phantoms.
+ *
+ * A change made on this device reaches the user's other devices as a phantom,
+ * and the change's ordering token is spent the moment the change is applied. If
+ * the phantom is then lost (the component is closed, delivery cannot be
+ * reached), nothing re-sends it and the other devices never learn about the
+ * change. So the intent to send is written down together with the change, and
+ * the actual sending is a separate pass that clears the row once delivery has
+ * accepted the message.
+ *
+ * Lives in the main database, next to sync_versions: the row and the token it
+ * belongs to must land in one file write.
+ */
+const queryToCreatePendingSyncMsgsV1 = `--sql
+  CREATE TABLE pending_sync_msgs (
+    id INTEGER PRIMARY KEY,
+    entityType TEXT NOT NULL,
+    entityId TEXT NOT NULL,
+    aspect TEXT NOT NULL,
+    ts INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    attempts INTEGER NOT NULL
+  ) STRICT
+`;
+
+const allMsgsIndexNames = [
+  'grchat_id_msg_ts',
+  'grchat_id_msg_ts_lifetime',
+  'grchat_msg_statuses',
+  'oto_peer_msg_ts',
+  'oto_peer_msg_ts_lifetime',
+  'oto_peer_msg_statuses',
+  'msg_direction_ts',
+];
+
+/**
+ * Brings an existing messages table to the current schema. Databases created
+ * by app versions <=0.10.x lack the removeAfter and settings columns: they were
+ * added only by the 2.1 branch of the old version dispatcher, which itself ran
+ * the ALTERs only on the second 0.10.x start and was removed in 0.11.0 with no
+ * replacement, so the first query naming removeAfter used to kill the whole
+ * component on such profiles.
+ *
+ * The decision goes by PRAGMA/sqlite_master, not by the dataset version xattr:
+ * the synced-to-local move above copies bytes only, losing xattrs. The ALTERs
+ * repeat the 2.1 migrator verbatim (nullable removeAfter DEFAULT 0), so a
+ * migrated file matches the schema shape already living on 2.1-migrated
+ * accounts, keeping two schema shapes in the wild instead of three. The chat
+ * settings' counterpart lives in chats-db.ts and MUST keep its DEFAULT there;
+ * message settings read safely as NULL (optJsonTransform, `settings?.` reads).
+ *
+ * @returns true when anything changed, i.e. the file has to be written back.
+ * The explicit check matters: DDL does not show in getRowsModified(), and the
+ * index batch alone is all no-ops on a healthy database.
+ */
+function migrateLegacyMsgsTable(sqlite: SQLiteOn3NStorage): boolean {
+  const columns = tableColumnNames(sqlite.db, 'messages');
+  let migrated = false;
+  if (!columns.includes('settings')) {
+    sqlite.db.exec(`ALTER TABLE messages ADD COLUMN settings TEXT DEFAULT '{}'`);
+    migrated = true;
+  }
+  if (!columns.includes('removeAfter')) {
+    sqlite.db.exec(`ALTER TABLE messages ADD COLUMN removeAfter INTEGER DEFAULT 0`);
+    migrated = true;
+  }
+  // 2.1-migrated databases also run without the *_lifetime indexes: the old
+  // dispatcher never created them. Must come after the ALTERs - two of the
+  // indexes reference removeAfter.
+  const [presentIndexes] = sqlite.db.exec(
+    `--sql
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'index' AND name IN (${allMsgsIndexNames.map(n => `'${n}'`).join(', ')})`,
+  );
+  if ((presentIndexes?.values.length ?? 0) < allMsgsIndexNames.length) {
+    sqlite.db.exec(queryToCreateMsgsIndexes);
+    migrated = true;
+  }
+  return migrated;
+}
 
 async function getSqliteDb({
   fs,
@@ -141,7 +282,13 @@ async function getSqliteDb({
 
   const res = sqlite.db.exec(`PRAGMA table_info(messages)`);
   if (res.length === 0) {
-    sqlite.db.exec(queryToCreateMsgsDbV2);
+    sqlite.db.exec(queryToCreateMsgsTableV2);
+    sqlite.db.exec(queryToCreateMsgsIndexes);
+    await saveLocally(sqlite);
+    await msgsDbFile.updateXAttrs({
+      set: { [DATASET_META_ATTR]: { datasetVersion: 2, db: MAIN_DB_META_ATTR } },
+    });
+  } else if (migrateLegacyMsgsTable(sqlite)) {
     await saveLocally(sqlite);
     await msgsDbFile.updateXAttrs({
       set: { [DATASET_META_ATTR]: { datasetVersion: 2, db: MAIN_DB_META_ATTR } },
@@ -150,13 +297,39 @@ async function getSqliteDb({
 
   const msgsOrphanedDbFile = await fsLocal.writableFile(`${MSGS_DBS_DIR_NAME}/${ORPHANED_MSGS_DBS_DIR_NAME}`);
   const auxiliarySqlite = await SQLiteOn3NStorage.makeAndStart(msgsOrphanedDbFile);
-  const res1 = auxiliarySqlite.db.exec(`PRAGMA table_info(orphaned_messages)`);
-  if (res1.length === 0) {
-    auxiliarySqlite.db.exec(queryToCreateMsgsOrphanedDbV2);
+
+  if (auxiliarySqlite.db.exec(`PRAGMA table_info(orphaned_messages)`).length > 0) {
+    // Schema V2 made every INSERT fail (incomingMsgId/targetMessageId NOT NULL), so a table
+    // left over from it is guaranteed to be empty; recreating it loses nothing. Unlike the
+    // main tables' migrations, the xattr is a good enough detector here: its worst-case loss
+    // only recreates a guaranteed-empty table.
+    const meta = (await msgsOrphanedDbFile.getXAttr(DATASET_META_ATTR)) as { datasetVersion?: number } | undefined;
+    if (meta?.datasetVersion !== 3) {
+      auxiliarySqlite.db.exec(`DROP TABLE orphaned_messages`);
+    }
+  }
+
+  if (auxiliarySqlite.db.exec(`PRAGMA table_info(orphaned_messages)`).length === 0) {
+    auxiliarySqlite.db.exec(queryToCreateMsgsOrphanedDbV3);
     await saveLocally(auxiliarySqlite);
     await msgsOrphanedDbFile.updateXAttrs({
-      set: { [DATASET_META_ATTR]: { datasetVersion: 2, db: AUXILIARY_DB_META_ATTR } },
+      set: { [DATASET_META_ATTR]: { datasetVersion: 3, db: AUXILIARY_DB_META_ATTR } },
     });
+  }
+
+  if (auxiliarySqlite.db.exec(`PRAGMA table_info(pending_inbox_removals)`).length === 0) {
+    auxiliarySqlite.db.exec(queryToCreatePendingInboxRemovalsV1);
+    await saveLocally(auxiliarySqlite);
+  }
+
+  if (sqlite.db.exec(`PRAGMA table_info(sync_versions)`).length === 0) {
+    sqlite.db.exec(queryToCreateSyncVersionsV1);
+    await saveLocally(sqlite);
+  }
+
+  if (sqlite.db.exec(`PRAGMA table_info(pending_sync_msgs)`).length === 0) {
+    sqlite.db.exec(queryToCreatePendingSyncMsgsV1);
+    await saveLocally(sqlite);
   }
 
   return {
@@ -172,21 +345,33 @@ export async function msgsDb({
   fs: web3n.files.WritableFS;
   fsLocal: web3n.files.WritableFS;
 }): Promise<MsgsDb> {
-  const { sqlite, auxiliarySqlite } = await getSqliteDb({ fs, fsLocal, saveLocally });
+  // Schema creation writes immediately: getSqliteDb() sets the dataset version
+  // xattr right after, and a file that lags behind its version attribute would
+  // read back as "version is there, tables are not".
+  const { sqlite, auxiliarySqlite } = await getSqliteDb({
+    fs,
+    fsLocal,
+    saveLocally: sql => sql.saveToFile({ skipUpload: true }),
+  });
 
-  async function saveLocally(sql: SQLiteOn3NStorage) {
-    await sql.saveToFile({ skipUpload: true });
+  const mainWriter = makeDbWriter(sqlite, 'messages');
+  const auxiliaryWriter = makeDbWriter(auxiliarySqlite, 'auxiliary messages');
+
+  /**
+   * Marks the database of a mutation as needing a write. The write itself is
+   * batched - see db-writer.ts, and flush() below for the durability points.
+   */
+  function saveLocally(sql: SQLiteOn3NStorage) {
+    (sql === sqlite ? mainWriter : auxiliaryWriter).scheduleSave();
+    return Promise.resolve();
+  }
+
+  async function flush(): Promise<void> {
+    await Promise.all([mainWriter.flush(), auxiliaryWriter.flush()]);
   }
 
   async function addMessage(msg: MsgDbEntry) {
-    const { insertParams, orderedColumns, orderedValues } = forTableInsert(
-      {
-        ...msg,
-        settings: {},
-        removeAfter: 0,
-      },
-      msgsTabFields,
-    );
+    const { insertParams, orderedColumns, orderedValues } = forTableInsert(msg, msgsTabFields);
 
     sqlite.db.exec(
       `--sql
@@ -243,6 +428,47 @@ export async function msgsDb({
 
   function getMessagesByChat({ isGroupChat, chatId }: ChatIdObj) {
     return isGroupChat ? getMessagesInGroupChat(chatId) : getMessagesInOneToOneChat(chatId);
+  }
+
+  /**
+   * Reads the newest `limit` messages of a chat, or the ones right before the
+   * cursor. Selection runs from newest to oldest to take the tail of the history
+   * without counting it first, and the result is reversed, so that callers get
+   * the same ascending order as getMessagesByChat().
+   *
+   * The cursor compares a (timestamp, chatMessageId) pair rather than the
+   * timestamp alone: timestamps come from Date.now() and repeat, and a plain
+   * `timestamp < cursor` would drop a message that shares a millisecond with the
+   * one on a page boundary.
+   */
+  function getMessagesPageInChat({ isGroupChat, chatId }: ChatIdObj, limit: number, before?: MsgPageCursor) {
+    const chatColumn = isGroupChat ? 'groupChatId' : 'otoPeerCAddr';
+    const params: ParamsObject = {
+      $chatId: chatId,
+      $limit: limit,
+    };
+    let beforeClause = '';
+
+    if (before) {
+      params.$beforeTs = before.timestamp;
+      params.$beforeId = before.chatMessageId;
+      beforeClause = `AND (
+        timestamp < $beforeTs
+        OR (timestamp = $beforeTs AND chatMessageId < $beforeId)
+      )`;
+    }
+
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT *
+      FROM messages
+      WHERE ${chatColumn} = $chatId ${beforeClause}
+      ORDER BY timestamp DESC, chatMessageId DESC
+      LIMIT $limit`,
+      params,
+    );
+
+    return sqlValue ? fromQueryResult<MsgDbEntry>(sqlValue, msgsTabFields).reverse() : [];
   }
 
   function getNotRegularMessagesByChat(chatId: ChatIdObj): MsgDbEntry[] {
@@ -302,22 +528,33 @@ export async function msgsDb({
     }
   }
 
+  /**
+   * Latest message of a chat, or null when the chat has none.
+   *
+   * ORDER BY + LIMIT rather than MAX(timestamp): a bare aggregate with no
+   * GROUP BY always yields exactly one row, so an empty chat used to come back
+   * as a row of NULLs instead of null. The GUI then showed a phantom last
+   * message with an empty sender for a chat whose history had just been cleared.
+   */
   function getLatestMsgInChat({ chatId }: ChatIdObj): MsgDbEntry | null {
     const query = `--sql
-      SELECT *, groupChatId || otoPeerCAddr AS chatId, MAX(timestamp) AS maxTS
+      SELECT *, groupChatId || otoPeerCAddr AS chatId
       FROM messages
       WHERE chatId=$chatId
+      ORDER BY timestamp DESC
+      LIMIT 1
     `;
 
     const [sqlValue] = sqlite.db.exec(query, { $chatId: chatId });
-    const msgs = sqlValue
-      ? fromQueryResult<MsgDbEntry & { chatId?: string; maxTS?: number }>(sqlValue, msgsTabFields)
-      : [null];
-
-    msgs[0]?.chatId && delete msgs[0].chatId;
-    msgs[0]?.maxTS && delete msgs[0].maxTS;
-
-    return msgs[0];
+    if (!sqlValue) {
+      return null;
+    }
+    const [msg] = fromQueryResult<MsgDbEntry & { chatId?: string }>(sqlValue, msgsTabFields);
+    if (!msg) {
+      return null;
+    }
+    delete msg.chatId;
+    return msg;
   }
 
   function getUnreadMsgsCountIn({ isGroupChat, chatId }: ChatIdObj): number {
@@ -553,6 +790,30 @@ export async function msgsDb({
     }
   }
 
+  async function updateMessageStatus(
+    chatMessageId: ChatMessageId,
+    status: MessageStatus,
+  ): Promise<MsgDbEntry | undefined> {
+    const { whereMsg, whereMsgParams } = msgWhereParamsFor(chatMessageId);
+    const updateParams = queryParamsFrom({ status }, msgsTabFields);
+    const setExpr = setExprFor<MsgDbEntry>(updateParams, []);
+    sqlite.db.exec(
+      `--sql
+      UPDATE messages
+      SET ${setExpr}
+      WHERE ${whereMsg}`,
+      {
+        ...updateParams,
+        ...whereMsgParams,
+      },
+    );
+
+    if (sqlite.db.getRowsModified() > 0) {
+      await saveLocally(sqlite);
+      return await getMessage(chatMessageId);
+    }
+  }
+
   /* block for working with "phantom" incoming messages */
   async function addOrphanedMessage(data: OrphanedMsgDbEntry) {
     const { insertParams, orderedColumns, orderedValues } = forTableInsert(
@@ -563,64 +824,404 @@ export async function msgsDb({
       msgsOrphanedTabFiels,
     );
 
-    const [sqlValue] = auxiliarySqlite.db.exec(
+    auxiliarySqlite.db.exec(
       `--sql
       INSERT INTO orphaned_messages (${orderedColumns})
       VALUES (${orderedValues})`,
       insertParams,
     );
-
-    if (sqlValue) {
-      await saveLocally(auxiliarySqlite);
-    }
+    await saveLocally(auxiliarySqlite);
   }
 
-  function getStuckMessageForTargetMessageId(id: string) {
+  function getStuckMessagesForTargetMessageId(targetMessageId: string): (OrphanedMsgDbEntry & { id: number })[] {
     const [sqlValue] = auxiliarySqlite.db.exec(
       `--sql
       SELECT *
       FROM orphaned_messages
-      WHERE targetMessageId=$targetMessageId`,
-      { $targetMessageId: id },
+      WHERE targetMessageId=$targetMessageId
+      ORDER BY bufferedAt ASC`,
+      { $targetMessageId: targetMessageId },
     );
 
-    if (sqlValue) {
-      return fromQueryResult(sqlValue, msgsOrphanedTabFiels)[0];
-    }
+    return sqlValue
+      ? (fromQueryResult(sqlValue, msgsOrphanedTabFiels) as (OrphanedMsgDbEntry & { id: number })[])
+      : [];
   }
 
-  async function deleteOrphanedMessage(id: string) {
+  function getStuckMessagesWithoutTarget(chatId: ChatIdObj): (OrphanedMsgDbEntry & { id: number })[] {
+    const whereParams = queryParamsFrom<Pick<OrphanedMsgDbEntry, 'groupChatId' | 'otoPeerCAddr'>>(
+      {
+        groupChatId: chatId.isGroupChat ? chatId.chatId : null,
+        otoPeerCAddr: chatId.isGroupChat ? null : chatId.chatId,
+      },
+      msgsOrphanedTabFiels,
+    );
+    const whereClause = andEqualExprFor(whereParams);
     const [sqlValue] = auxiliarySqlite.db.exec(
       `--sql
-      DELETE FROM orphaned_messages
-      WHERE targetMessageId=$targetMessageId`,
-      { $targetMessageId: id },
+      SELECT *
+      FROM orphaned_messages
+      WHERE ${whereClause} AND targetMessageId IS NULL
+      ORDER BY bufferedAt ASC`,
+      whereParams,
     );
 
-    if (sqlValue) {
+    return sqlValue
+      ? (fromQueryResult(sqlValue, msgsOrphanedTabFiels) as (OrphanedMsgDbEntry & { id: number })[])
+      : [];
+  }
+
+  /**
+   * Distinct (chat, message) targets that buffered phantoms are waiting for.
+   * This is the work-list of the start-up resync pass: each row is a record
+   * some other device has and this one lost, worth asking for again.
+   */
+  function getStuckOrphanTargets(): { chatId: ChatIdObj; targetMessageId: string }[] {
+    const [sqlValue] = auxiliarySqlite.db.exec(
+      `--sql
+      SELECT DISTINCT groupChatId, otoPeerCAddr, targetMessageId
+      FROM orphaned_messages
+      WHERE targetMessageId IS NOT NULL`,
+    );
+
+    if (!sqlValue) {
+      return [];
+    }
+
+    type TargetRow = { groupChatId: string | null; otoPeerCAddr: string | null; targetMessageId: string };
+    return objectFromQueryExecResult<TargetRow>(sqlValue).map(
+      ({ groupChatId, otoPeerCAddr, targetMessageId }: TargetRow) => ({
+        chatId: groupChatId
+          ? { isGroupChat: true, chatId: groupChatId }
+          : { isGroupChat: false, chatId: otoPeerCAddr! },
+        targetMessageId,
+      }),
+    );
+  }
+
+  /**
+   * How many phantoms wait in the buffer for a chat or a record to appear.
+   * Part of the startup diagnostics line: a number that stays high means this
+   * device keeps receiving changes whose subject it never gets.
+   */
+  function countOrphanedSyncs(): number {
+    const [sqlValue] = auxiliarySqlite.db.exec(
+      `--sql
+      SELECT COUNT(*) AS num
+      FROM orphaned_messages`,
+    );
+
+    return sqlValue ? objectFromQueryExecResult<{ num: number }>(sqlValue)[0].num : 0;
+  }
+
+  async function deleteOrphanedMessage(id: number) {
+    auxiliarySqlite.db.exec(
+      `--sql
+      DELETE FROM orphaned_messages
+      WHERE id=$id`,
+      { $id: id },
+    );
+
+    if (auxiliarySqlite.db.getRowsModified() > 0) {
       await saveLocally(auxiliarySqlite);
     }
   }
 
   async function collectGarbageInAuxiliaryDB() {
     const expirationTimestamp = Date.now() - LIFETIME_DAYS_IN_AUXILIARY_DB;
-    const [sqlValue] = auxiliarySqlite.db.exec(
+    auxiliarySqlite.db.exec(
       `--sql
       DELETE FROM orphaned_messages
       WHERE bufferedAt < $expirationTimestamp`,
       { $expirationTimestamp: expirationTimestamp },
     );
 
-    if (sqlValue) {
+    if (auxiliarySqlite.db.getRowsModified() > 0) {
       await saveLocally(auxiliarySqlite);
     }
   }
 
+  /* block for scheduling deferred removal of inbox messages (ASMail inbox is
+     shared across a user's own devices, so an inbox message can't be removed
+     as soon as one device is done with it) */
+  async function scheduleInboxMsgRemoval(msgId: string) {
+    const removeAfter = Date.now() + LIFETIME_DAYS_IN_AUXILIARY_DB;
+    auxiliarySqlite.db.exec(
+      `--sql
+      INSERT OR REPLACE INTO pending_inbox_removals (msgId, removeAfter)
+      VALUES ($msgId, $removeAfter)`,
+      { $msgId: msgId, $removeAfter: removeAfter },
+    );
+    await saveLocally(auxiliarySqlite);
+  }
+
+  function getDueInboxMsgRemovals(now: number): string[] {
+    const [sqlValue] = auxiliarySqlite.db.exec(
+      `--sql
+      SELECT msgId
+      FROM pending_inbox_removals
+      WHERE removeAfter < $now`,
+      { $now: now },
+    );
+
+    return sqlValue
+      ? objectFromQueryExecResult<{ msgId: string }>(sqlValue).map((r: { msgId: string }) => r.msgId)
+      : [];
+  }
+
+  async function clearInboxMsgRemovals(msgIds: string[]) {
+    if (msgIds.length === 0) {
+      return;
+    }
+
+    for (const msgId of msgIds) {
+      auxiliarySqlite.db.exec(
+        `--sql
+        DELETE FROM pending_inbox_removals
+        WHERE msgId=$msgId`,
+        { $msgId: msgId },
+      );
+    }
+
+    await saveLocally(auxiliarySqlite);
+  }
+
+  /* block for per-aspect synchronization versions (last-write-wins ordering
+     of changes made on the user's own devices) */
+  function getSyncVersion(
+    entityType: SyncEntityType,
+    entityId: string,
+    aspect: SyncAspect,
+  ): SyncVersionDbEntry | undefined {
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT ts, deviceId, tombstonedAt
+      FROM sync_versions
+      WHERE entityType=$entityType AND entityId=$entityId AND aspect=$aspect`,
+      { $entityType: entityType, $entityId: entityId, $aspect: aspect },
+    );
+
+    if (!sqlValue) {
+      return;
+    }
+    return objectFromQueryExecResult<SyncVersionDbEntry>(sqlValue)[0];
+  }
+
+  async function setSyncVersion(
+    entityType: SyncEntityType,
+    entityId: string,
+    aspect: SyncAspect,
+    { ts, deviceId, tombstonedAt }: { ts: number; deviceId: string; tombstonedAt?: number },
+  ): Promise<void> {
+    sqlite.db.exec(
+      `--sql
+      INSERT OR REPLACE INTO sync_versions (
+        entityType, entityId, aspect, ts, deviceId, tombstonedAt
+      ) VALUES ($entityType, $entityId, $aspect, $ts, $deviceId, $tombstonedAt)`,
+      {
+        $entityType: entityType,
+        $entityId: entityId,
+        $aspect: aspect,
+        $ts: ts,
+        $deviceId: deviceId,
+        $tombstonedAt: tombstonedAt ?? null,
+      },
+    );
+    await saveLocally(sqlite);
+  }
+
+  /**
+   * Drops versions of an entity, except its tombstones: the whole point of a
+   * tombstone is to outlive the entity and keep a late phantom from
+   * resurrecting it.
+   */
+  async function deleteSyncVersionsOf(entityType: SyncEntityType, entityId: string): Promise<void> {
+    sqlite.db.exec(
+      `--sql
+      DELETE FROM sync_versions
+      WHERE entityType=$entityType AND entityId=$entityId AND tombstonedAt IS NULL`,
+      { $entityType: entityType, $entityId: entityId },
+    );
+    await saveLocally(sqlite);
+  }
+
+  /* block for the journal of outgoing sync phantoms (see
+     queryToCreatePendingSyncMsgsV1 above) */
+
+  /**
+   * Writes a sync version, and, for a tombstone, drops the entity's other
+   * aspect versions first - same rule as recordDeletion() in sync-versions.ts.
+   * Synchronous on purpose: queueSyncPhantom() below relies on there being no
+   * await between the writes it makes.
+   */
+  function writeSyncVersion({
+    entityType,
+    entityId,
+    aspect,
+    ts,
+    deviceId,
+    tombstonedAt,
+    dropOtherAspects,
+  }: SyncVersionWrite): void {
+    if (dropOtherAspects) {
+      sqlite.db.exec(
+        `--sql
+        DELETE FROM sync_versions
+        WHERE entityType=$entityType AND entityId=$entityId AND tombstonedAt IS NULL`,
+        { $entityType: entityType, $entityId: entityId },
+      );
+    }
+    sqlite.db.exec(
+      `--sql
+      INSERT OR REPLACE INTO sync_versions (
+        entityType, entityId, aspect, ts, deviceId, tombstonedAt
+      ) VALUES ($entityType, $entityId, $aspect, $ts, $deviceId, $tombstonedAt)`,
+      {
+        $entityType: entityType,
+        $entityId: entityId,
+        $aspect: aspect,
+        $ts: ts,
+        $deviceId: deviceId,
+        $tombstonedAt: tombstonedAt ?? null,
+      },
+    );
+  }
+
+  async function queueSyncPhantom(entry: PendingSyncMsgEntry, versions?: SyncVersionWrite[]): Promise<void> {
+    for (const version of versions ?? []) {
+      writeSyncVersion(version);
+    }
+    sqlite.db.exec(
+      `--sql
+      INSERT INTO pending_sync_msgs (entityType, entityId, aspect, ts, payload, attempts)
+      VALUES ($entityType, $entityId, $aspect, $ts, $payload, 0)`,
+      {
+        $entityType: entry.entityType,
+        $entityId: entry.entityId,
+        $aspect: entry.aspect,
+        $ts: entry.ts,
+        $payload: entry.payload,
+      },
+    );
+    await saveLocally(sqlite);
+  }
+
+  function getPendingSyncPhantoms(): PendingSyncMsgDbEntry[] {
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT id, entityType, entityId, aspect, ts, payload, attempts
+      FROM pending_sync_msgs
+      ORDER BY ts ASC, id ASC`,
+    );
+
+    return sqlValue ? objectFromQueryExecResult<PendingSyncMsgDbEntry>(sqlValue) : [];
+  }
+
+  /**
+   * Same number as getPendingSyncPhantoms().length, without reading the
+   * payloads: this one is polled (by the sync activity tracker), and pulling
+   * every phantom's JSON body a few times a second is not what the journal is
+   * for.
+   */
+  function countPendingSyncPhantoms(): number {
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT COUNT(*) AS num
+      FROM pending_sync_msgs`,
+    );
+
+    return sqlValue ? objectFromQueryExecResult<{ num: number }>(sqlValue)[0].num : 0;
+  }
+
+  async function deletePendingSyncPhantom(id: number): Promise<void> {
+    sqlite.db.exec(
+      `--sql
+      DELETE FROM pending_sync_msgs
+      WHERE id=$id`,
+      { $id: id },
+    );
+
+    if (sqlite.db.getRowsModified() > 0) {
+      await saveLocally(sqlite);
+    }
+  }
+
+  /**
+   * Counts a failed release attempt. A counter only - a row is never dropped
+   * for failing: handing a message to delivery fails when the server cannot be
+   * reached, and dropping a phantom then would lose exactly the change this
+   * journal exists to keep. Rows leave by being delivered, or by aging out
+   * (see dropExpiredSyncPhantoms).
+   */
+  async function recordPendingSyncPhantomFailure(id: number): Promise<number> {
+    sqlite.db.exec(
+      `--sql
+      UPDATE pending_sync_msgs
+      SET attempts = attempts + 1
+      WHERE id=$id`,
+      { $id: id },
+    );
+    await saveLocally(sqlite);
+
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT attempts
+      FROM pending_sync_msgs
+      WHERE id=$id`,
+      { $id: id },
+    );
+
+    return sqlValue ? objectFromQueryExecResult<{ attempts: number }>(sqlValue)[0].attempts : 0;
+  }
+
+  /**
+   * Drops phantoms of changes older than the synchronization window, returning
+   * how many went.
+   *
+   * A device that was offline for longer than the window cannot announce its
+   * change usefully any more: the receiving devices collect tombstones and
+   * buffered phantoms by the same age, so such a phantom would be ignored - or
+   * worse, applied against state that has since moved on. This is also what
+   * keeps a payload that delivery refuses for good from holding the head of the
+   * queue forever.
+   */
+  async function dropExpiredSyncPhantoms(now: number): Promise<number> {
+    const expirationTimestamp = now - LIFETIME_DAYS_IN_AUXILIARY_DB;
+    sqlite.db.exec(
+      `--sql
+      DELETE FROM pending_sync_msgs
+      WHERE ts < $expirationTimestamp`,
+      { $expirationTimestamp: expirationTimestamp },
+    );
+
+    const dropped = sqlite.db.getRowsModified();
+    if (dropped > 0) {
+      await saveLocally(sqlite);
+    }
+    return dropped;
+  }
+
+  async function collectGarbageInSyncVersions(now: number): Promise<void> {
+    const expirationTimestamp = now - LIFETIME_DAYS_IN_AUXILIARY_DB;
+    sqlite.db.exec(
+      `--sql
+      DELETE FROM sync_versions
+      WHERE tombstonedAt IS NOT NULL AND tombstonedAt < $expirationTimestamp`,
+      { $expirationTimestamp: expirationTimestamp },
+    );
+
+    if (sqlite.db.getRowsModified() > 0) {
+      await saveLocally(sqlite);
+    }
+  }
+
   return {
+    flush,
     addMessage,
     getMessage,
     getExpiredMessages,
     getMessagesByChat,
+    getMessagesPageInChat,
     getNotRegularMessagesByChat,
     getMessagesWithSyncingSelfStatus,
     getLatestIncomingMsgTimestamp,
@@ -630,10 +1231,30 @@ export async function msgsDb({
     deleteMessage,
     deleteMessagesInChat,
     updateMessageRecord,
+    updateMessageStatus,
 
     addOrphanedMessage,
-    getStuckMessageForTargetMessageId,
+    getStuckMessagesForTargetMessageId,
+    getStuckMessagesWithoutTarget,
+    getStuckOrphanTargets,
+    countOrphanedSyncs,
     deleteOrphanedMessage,
     collectGarbageInAuxiliaryDB,
+
+    scheduleInboxMsgRemoval,
+    getDueInboxMsgRemovals,
+    clearInboxMsgRemovals,
+
+    getSyncVersion,
+    setSyncVersion,
+    deleteSyncVersionsOf,
+    collectGarbageInSyncVersions,
+
+    queueSyncPhantom,
+    getPendingSyncPhantoms,
+    countPendingSyncPhantoms,
+    deletePendingSyncPhantom,
+    recordPendingSyncPhantomFailure,
+    dropExpiredSyncPhantoms,
   };
 }

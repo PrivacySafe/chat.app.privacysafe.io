@@ -24,19 +24,61 @@ import type { ChatDbEntry, ChatSrvEmit, DB, GroupChatDbEntry } from '../../../ty
 import { includesAddress } from '../../../../shared-libs/address-utils.ts';
 import { generateChatMessageId } from '../../../../shared-libs/chat-ids.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
-import { sendChatInvitation, sendSystemMessage } from '../../../utils/send-chat-msg.ts';
+import {
+  sendChatInvitation,
+  sendSystemMessage,
+  makeSystemEventPhantom,
+  queueSyncPhantom,
+} from '../../mail-sending-service/index.ts';
 import { chatIdOfChat, excludeAddrsFrom } from './_chats-related-methods.ts';
 import { makeMsgDbEntry, msgDbEntryForIncomingSysMsg } from './_msgs-related-methods.ts';
+import { chatEntityId } from './sync-versions.ts';
+import type { SyncAspect } from '../../../types/index.ts';
 
 export async function chatMembersUpdating({
   data,
   emit,
   ownAddr,
+  getAppDeviceId,
+  nextSyncStamp,
 }: {
   data: DB;
   emit: ChatSrvEmit;
   ownAddr: string;
+  getAppDeviceId: () => string;
+  nextSyncStamp: () => Promise<number>;
 }) {
+  /**
+   * Stamps a locally made change of a chat's composition and syncs it to the
+   * user's own devices - see the matching comment in renameChat()
+   * (chat-renaming.ts) for why this doesn't ride on delivery progress.
+   */
+  async function stampAndSyncCompositionChange(
+    chatId: ChatIdObj,
+    aspect: SyncAspect,
+    chatSystemData: UpdateMembersSysMsgData | UpdateAdminsSysMsgData,
+  ): Promise<void> {
+    const syncStamp = await nextSyncStamp();
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeSystemEventPhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp: syncStamp,
+        chatSystemData,
+      }),
+      versions: [
+        {
+          entityType: 'chat',
+          entityId: chatEntityId(chatId),
+          aspect,
+          ts: syncStamp,
+          deviceId: getAppDeviceId(),
+        },
+      ],
+    });
+  }
   function getChatAndCheck(
     chatId: ChatIdObj,
     changes: UpdateMembersSysMsgData['value'] | UpdateAdminsSysMsgData['value'],
@@ -164,6 +206,8 @@ export async function chatMembersUpdating({
     emit.chat.updated(updatedChat);
     emit.message.added(msg);
 
+    await stampAndSyncCompositionChange(chatId, 'members', updateData);
+
     // send messages to peers that are not changed
     if (unchangedPeers.length > 1) {
       await sendSystemMessage({
@@ -221,6 +265,8 @@ export async function chatMembersUpdating({
     emit.message.added(msg);
     emit.chat.updated(updatedChat);
 
+    await stampAndSyncCompositionChange(chatId, 'admins', updateData);
+
     if (unchangedPeers.length > 1) {
       await sendSystemMessage({
         chatId,
@@ -242,10 +288,25 @@ export async function chatMembersUpdating({
       return;
     }
 
+    const chatId = chatIdOfChat(chat);
+    const existingMsg = await data.getMessage({ chatId, chatMessageId });
+    if (existingMsg) {
+      // Already processed - see the matching comment in handleRegularMsg()
+      // (msg-sending.ts).
+      return;
+    }
+
     const updatedChat = await updateChatMembersAndAdminsIfNeeded(chat, value);
-    const msg = msgDbEntryForIncomingSysMsg(sender, chatIdOfChat(chat), chatMessageId, timestamp, {
+    const msg = msgDbEntryForIncomingSysMsg(sender, chatId, chatMessageId, timestamp, {
       event: 'update:members',
       value,
+    });
+
+    // Peer-originated change - see the matching comment in
+    // handleUpdateChatName() (chat-renaming.ts) on the token used here.
+    await data.setSyncVersion('chat', chatEntityId(chatId), 'members', {
+      ts: timestamp,
+      deviceId: sender,
     });
 
     await data.addMessage(msg);
@@ -264,10 +325,25 @@ export async function chatMembersUpdating({
       return;
     }
 
+    const chatId = chatIdOfChat(chat);
+    const existingMsg = await data.getMessage({ chatId, chatMessageId });
+    if (existingMsg) {
+      // Already processed - see the matching comment in handleRegularMsg()
+      // (msg-sending.ts).
+      return;
+    }
+
     const updatedChat = await data.updateGroupChatRecord(chat.chatId, { admins: value.adminsAfterUpdate });
-    const msg = msgDbEntryForIncomingSysMsg(sender, chatIdOfChat(chat), chatMessageId, timestamp, {
+    const msg = msgDbEntryForIncomingSysMsg(sender, chatId, chatMessageId, timestamp, {
       event: 'update:admins',
       value,
+    });
+
+    // Peer-originated change - see the matching comment in
+    // handleUpdateChatName() (chat-renaming.ts) on the token used here.
+    await data.setSyncVersion('chat', chatEntityId(chatId), 'admins', {
+      ts: timestamp,
+      deviceId: sender,
     });
 
     await data.addMessage(msg);

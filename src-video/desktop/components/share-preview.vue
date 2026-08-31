@@ -16,12 +16,14 @@
 -->
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
 import { Ui3nSwitch } from '@v1nt1248/3nclient-lib';
 import type { ScreenShareOption, WindowShareOption } from '@video/common/types';
 
 const props = defineProps<{
   opts: ScreenShareOption | WindowShareOption;
+  /** Currently selected source id (single-select). Controls switch state. */
+  activeSrcId?: string | null;
 }>();
 const emit = defineEmits(['selected']);
 
@@ -31,17 +33,59 @@ const stream = computed(() => props.opts.stream);
 const appIconURL = computed(() => (props.opts as WindowShareOption)?.appIconURL);
 
 const videoTag = useTemplateRef<HTMLVideoElement>('video-tag');
-const selected = ref(props.opts.initiallySelected);
+// Fully controlled by parent activeSrcId so failed capture reverts the switch.
+const selected = computed({
+  get: () =>
+    props.activeSrcId !== undefined
+      ? props.activeSrcId === props.opts.srcId
+      : props.opts.initiallySelected,
+  set: (v: boolean) => {
+    emit('selected', v);
+  },
+});
 const streamIsAttached = ref(false);
 
+async function attachStream(): Promise<void> {
+  try {
+    const mediaStream = await props.opts.stream;
+    if (videoTag.value && mediaStream) {
+      videoTag.value.srcObject = mediaStream;
+      streamIsAttached.value = true;
+    }
+  } catch (err) {
+    console.error('[SharePreview] Failed to attach stream:', err);
+  }
+}
+
 onMounted(async () => {
-  videoTag.value!.srcObject = await stream.value;
-  streamIsAttached.value = true;
+  // Attach immediately only for initially shared / already active sources.
+  // Other options resolve their deferred stream only after selection.
+  if (props.opts.initiallySelected || props.activeSrcId === props.opts.srcId) {
+    await attachStream();
+  }
 });
 
+watch(
+  [() => props.activeSrcId, () => props.opts.stream],
+  async ([srcId]) => {
+    if (srcId !== props.opts.srcId) {
+      return;
+    }
+    await attachStream();
+  },
+);
+
 onBeforeUnmount(async () => {
-  if (!selected.value) {
-    (await stream.value).getTracks().forEach(track => track.stop());
+  try {
+    // Never stop initially-shared (live call) streams here — only preview captures.
+    if (!selected.value && !props.opts.initiallySelected) {
+      const mediaStream = await stream.value.catch(() => undefined);
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
+    }
+  } catch (err) {
+    console.error('[SharePreview] Failed to stop stream in onBeforeUnmount:', err);
   }
 });
 </script>
@@ -67,7 +111,6 @@ onBeforeUnmount(async () => {
       <ui3n-switch
         v-model="selected"
         size="24"
-        @change="(v: boolean) => emit('selected', v)"
       />
 
       <div :class="$style.text">

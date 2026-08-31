@@ -1,3 +1,4 @@
+import { ChatSrv } from './../../src-deno/types/chat-srv.types';
 /*
  Copyright (C) 2025 3NSoft Inc.
 
@@ -19,7 +20,7 @@
 
 import { chatService } from '@main/common/services/external-services.ts';
 import { AppViewInstance, useAppView } from '@main/common/composables/useAppView.ts';
-import { ChatServiceIPC, UpdateEvent } from '~/services.types';
+import { UpdateEvent } from '~/services.types';
 import { ChatStore, useChatStore } from '@main/common/store/chat.store.ts';
 import { addMsgToPage } from './test-page-utils';
 import { sleep } from './lib-common/processes/sleep';
@@ -38,7 +39,7 @@ export interface TestSetupContainer extends Window {
     thirdUserAddr: string;
     thirdUserName: string;
     appView: AppViewInstance;
-    chatService: ChatServiceIPC;
+    chatService: ChatSrv;
   };
 }
 

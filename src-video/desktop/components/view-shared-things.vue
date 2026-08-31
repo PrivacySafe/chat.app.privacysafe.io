@@ -15,11 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-  import { computed, nextTick, ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { storeToRefs } from 'pinia';
+  // TODO [Star]: storeToRefs will be used when isSharingOwnDeskSound is reimplemented
+  // import { storeToRefs } from 'pinia';
   import size from 'lodash/size';
   import {
+    // TODO [Star]: Ui3nButton will be used when desk sound controls are reimplemented
+    // Ui3nButton,
     Ui3nButton,
     Ui3nIcon,
     Ui3nRipple as vUi3nRipple,
@@ -27,7 +30,6 @@
     type Nullable,
   } from '@v1nt1248/3nclient-lib';
   import type { OwnScreen } from '@video/common/types';
-  import { useStreamsStore } from '@video/common/store/streams.store.ts';
   import VideoStream from '@video/common/components/video-stream.vue';
 
   interface PeerShared {
@@ -38,13 +40,31 @@
 
   const props = defineProps<{
     things: (OwnScreen | PeerShared)[];
+    /** Remove own screen share by source ID */
+    removeOwnScreen?: (srcId: string) => void;
+  }>();
+
+  const emit = defineEmits<{
+    (e: 'removeScreen', srcId: string): void;
   }>();
 
   const { t } = useI18n();
 
-  const streamsStore = useStreamsStore();
-  const { isSharingOwnDeskSound } = storeToRefs(streamsStore);
-  const { setOwnDeskSoundSharing, removeOwnScreen } = streamsStore;
+  // TODO [Star]: isSharingOwnDeskSound will be reimplemented for Star architecture screen sharing
+  // const { isSharingOwnDeskSound } = storeToRefs(streamsStore);
+  // TODO [Star]: setOwnDeskSoundSharing will be reimplemented for Star architecture
+  // const { setOwnDeskSoundSharing } = streamsStore;
+
+  function handleRemoveScreen(item: OwnScreen | PeerShared) {
+    const srcId = (item as OwnScreen).srcId;
+    if (srcId) {
+      if (props.removeOwnScreen) {
+        props.removeOwnScreen(srcId);
+      } else {
+        emit('removeScreen', srcId);
+      }
+    }
+  }
 
   const currentSharedItem = ref(0);
 
@@ -55,22 +75,29 @@
     })),
   );
 
-  const selectedSharedItem = ref<Nullable<OwnScreen | PeerShared>>(processedSharedItems.value[0]);
+  // A live computed into the store data, NOT a snapshot: the selected item
+  // used to be a `{...thing}` copy refreshed only when the LIST LENGTH
+  // changed, so a replaced MediaStream on the same participant (renegotiation
+  // re-delivers the screen under a new stream object) left <video> playing a
+  // stream whose track was already gone - correct title, black picture.
+  const selectedSharedItem = computed<Nullable<OwnScreen | PeerShared>>(() => {
+    const items = processedSharedItems.value;
+    if (items.length === 0) {
+      return null;
+    }
+    const index = Math.min(currentSharedItem.value, items.length - 1);
+    return items[index];
+  });
 
   function selectSharedItem(index: number) {
     currentSharedItem.value = index;
-    selectedSharedItem.value = null;
-
-    nextTick(() => {
-      selectedSharedItem.value = processedSharedItems.value[currentSharedItem.value];
-    });
   }
 
   watch(
     () => size(processedSharedItems.value),
     (val, oldVal) => {
-      if (val !== oldVal) {
-        size(processedSharedItems.value) > 0 && selectSharedItem(0);
+      if (val !== oldVal && val > 0) {
+        selectSharedItem(0);
       }
     },
   );
@@ -80,12 +107,20 @@
   <div
     :class="[
       $style.viewSharedThings,
-      isSharingOwnDeskSound && $style.withDeskSound,
+      // TODO [Star]: Re-enable when isSharingOwnDeskSound is reimplemented
+      // isSharingOwnDeskSound && $style.withDeskSound,
       size(things) > 1 && $style.withTabs,
     ]"
   >
+    <!-- TODO [Star]: Re-enable desk sound UI when reimplemented for Star architecture -->
+    <!--
     <div
       v-if="isSharingOwnDeskSound"
+      :class="$style.title"
+    >
+    -->
+    <div
+      v-if="false"
       :class="$style.title"
     >
       <div :class="$style.name">
@@ -98,6 +133,8 @@
         <span>{{ t('call.sharing.desktop_sound') }}</span>
       </div>
 
+      <!-- TODO [Star]: Re-enable when setOwnDeskSoundSharing is reimplemented -->
+      <!--
       <ui3n-button
         type="icon"
         size="small"
@@ -107,6 +144,7 @@
         icon-size="20"
         @click.stop.prevent="setOwnDeskSoundSharing(false)"
       />
+      -->
     </div>
 
     <div
@@ -122,7 +160,7 @@
       >
         <ui3n-tooltip
           :content="(item as OwnScreen).name || (item as PeerShared).peerAddr"
-          placement="top-start"
+          placement="right"
           position-strategy="fixed"
         >
           <div :class="$style.tabBody">
@@ -135,21 +173,27 @@
     <div :class="$style.body">
       <div :class="[$style.title, $style.withPadding, $style.selected]">
         <div :class="$style.name">
-          {{ (selectedSharedItem as OwnScreen)?.name || (selectedSharedItem as PeerShared)?.peerAddr }}
+          {{ (selectedSharedItem as OwnScreen)?.name || (selectedSharedItem as PeerShared)?.peerName }}
         </div>
 
         <ui3n-button
           v-if="(selectedSharedItem as OwnScreen)?.srcId"
           type="icon"
           size="small"
+          color="transparent"
           icon="round-close"
           icon-size="20"
-          @click.stop.prevent="removeOwnScreen((selectedSharedItem as OwnScreen).srcId)"
+          icon-color="var(--color-icon-table-primary-default)"
+          @click.stop.prevent="handleRemoveScreen(selectedSharedItem!)"
         />
       </div>
 
+      <!-- Keyed by the stream's id: a participant whose MediaStream object is
+           replaced (renegotiation) must remount the <video>, or it keeps
+           playing the dead stream. -->
       <video-stream
         v-if="selectedSharedItem"
+        :key="selectedSharedItem.stream.id"
         :stream="selectedSharedItem.stream"
       />
     </div>
@@ -229,6 +273,12 @@
 
     &:not(.selectedTab) {
       cursor: pointer;
+    }
+
+    & > div {
+      position: relative;
+      width: 100%;
+      height: 100%;
     }
   }
 

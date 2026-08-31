@@ -159,6 +159,66 @@
    */
   var currentWindowOnload = window.onload;
 
+  /**
+   * Setup of this window failed, so not a single spec can run here.
+   *
+   * Without this the failure is invisible from the outside: nothing is recorded,
+   * the stand never sees 'tests-start', and its verdict reads "the tests never
+   * began" as success - a run in which nothing at all executed exits with 0.
+   * That is how a broken run went unnoticed on 2026-08-14, three windows in a
+   * row, while the reports said the tests had passed.
+   */
+  async function reportSetupFailure(err) {
+    // Own property names, and a fallback to String(): a plain JSON.stringify of
+    // an RPC exception or of an Error gives '{}', which says nothing about what
+    // broke.
+    let reason;
+    if (typeof err === 'string') {
+      reason = err;
+    } else {
+      try {
+        reason = JSON.stringify(err, Object.getOwnPropertyNames(Object(err)), 2);
+      } catch (jsonErr) {
+        reason = undefined;
+      }
+      if (!reason || (reason === '{}')) {
+        reason = String(err);
+      }
+    }
+
+    // Both records are needed: 'tests-start' is what makes the stand consider
+    // the run to have happened at all, and only then does a failure count.
+    w3n.testStand.record('tests-start');
+    w3n.testStand.record(
+      'tests-fail',
+      `Setup of this window failed, so no spec could run here.\n${reason}`,
+    );
+
+    const out = document.getElementById('test-out');
+    if (out) {
+      const p = document.createElement('p');
+      p.style.color = 'red';
+      p.appendChild(document.createTextNode(
+        `Setup failed, no specs were run. ${reason}`,
+      ));
+      out.appendChild(p);
+    }
+
+    // Ending the run is the main window's business only. A secondary user is a
+    // bot the specs talk to: its failure is recorded above - which is already
+    // enough to make the run exit non-zero - but the specs must still run and
+    // show what breaks without it. When the main window is the one that failed,
+    // there is nothing left to wait for.
+    try {
+      const { userNum } = await w3n.testStand.staticTestInfo();
+      if (userNum === 1) {
+        setTimeout(() => w3n.testStand.exitAll(), 5000);
+      }
+    } catch (infoErr) {
+      w3n.testStand.log('error', `Failed to tell which test user this window is`, infoErr);
+    }
+  }
+
   window.onload = function() {
     if (currentWindowOnload) {
       currentWindowOnload();
@@ -166,7 +226,12 @@
     // wait to allow load that may require to skip tests
     setTimeout(async () => {
       if (window.preTestProc) {
-        await window.preTestProc;
+        try {
+          await window.preTestProc;
+        } catch (err) {
+          await reportSetupFailure(err);
+          return;
+        }
       }
       if (window.skipW3NTests) { return; }
       htmlReporter.initialize();

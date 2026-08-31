@@ -16,16 +16,20 @@
 -->
 
 <script lang="ts" setup>
-import VideoPlaceholder from '@video/common/components/video-placeholder.vue';
-import VideoStream from "@video/common/components/video-stream.vue";
+  import VideoPlaceholder from '@video/common/components/video-placeholder.vue';
+  import VideoStream from '@video/common/components/video-stream.vue';
 
-const { user, stream, isCamOn, size = 'normal' } = defineProps<{
-  user: string;
-  stream: MediaStream;
-  isCamOn: boolean;
-  size?: 'normal' | 'small';
-}>();
-
+  const {
+    user,
+    stream,
+    isCamOn,
+    size = 'normal',
+  } = defineProps<{
+    user: string;
+    stream: MediaStream;
+    isCamOn: boolean;
+    size?: 'normal' | 'small';
+  }>();
 </script>
 
 <template>
@@ -46,12 +50,12 @@ const { user, stream, isCamOn, size = 'normal' } = defineProps<{
 </template>
 
 <style lang="scss" module>
-.ownVideo {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
+  .ownVideo {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
 </style>

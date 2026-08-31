@@ -17,6 +17,8 @@
 
 <script lang="ts" setup>
 import { storeToRefs } from 'pinia';
+import { useI18n } from 'vue-i18n';
+import { Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
 import { useChatsStore } from '@main/common/store/chats.store';
 import type { ChatListItemView } from '~/chat.types';
 import ChatListItem from './chat-list-item.vue';
@@ -25,18 +27,42 @@ const emits = defineEmits<{
   (event: 'click', value: ChatListItemView): void;
 }>();
 
+const { t } = useI18n();
+
 const chatsStore = useChatsStore();
-const { chatListSortedByTime } = storeToRefs(chatsStore);
+const { chatListSortedByTime, chatListLoaded } = storeToRefs(chatsStore);
 </script>
 
 <template>
   <div :class="$style.chatList">
-    <chat-list-item
-      v-for="chat in chatListSortedByTime"
-      :key="chat.chatId"
-      :data="chat"
-      @click.stop.prevent="emits('click', chat)"
-    />
+    <!-- The first list load waits for the deno component to open its
+         databases, which on a cold start takes seconds: without an explicit
+         state the sidebar is a blank block indistinguishable from a hang. -->
+    <div
+      v-if="!chatListLoaded"
+      :class="$style.stateInfo"
+    >
+      <ui3n-progress-circular
+        indeterminate
+        size="32"
+      />
+    </div>
+
+    <div
+      v-else-if="chatListSortedByTime.length === 0"
+      :class="$style.stateInfo"
+    >
+      {{ t('chat.list.empty') }}
+    </div>
+
+    <template v-else>
+      <chat-list-item
+        v-for="chat in chatListSortedByTime"
+        :key="chat.chatId"
+        :data="chat"
+        @click.stop.prevent="emits('click', chat)"
+      />
+    </template>
   </div>
 </template>
 
@@ -49,5 +75,14 @@ const { chatListSortedByTime } = storeToRefs(chatsStore);
   padding: 0 var(--spacing-xs);
   background-color: var(--color-bg-block-primary-default);
   user-select: none;
+}
+
+.stateInfo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-l) var(--spacing-s);
+  font-size: var(--font-13);
+  color: var(--color-text-block-secondary-default);
 }
 </style>

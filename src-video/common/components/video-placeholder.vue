@@ -16,16 +16,16 @@
 -->
 
 <script setup lang="ts">
-import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
+  import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
 
-interface VideoPlaceholderProps {
-  userName: string;
-  width?: number | string;
-}
+  interface VideoPlaceholderProps {
+    userName: string;
+    width?: number | string;
+  }
 
-withDefaults(defineProps<VideoPlaceholderProps>(), {
-  width: 144,
-});
+  withDefaults(defineProps<VideoPlaceholderProps>(), {
+    width: 144,
+  });
 </script>
 
 <template>
@@ -40,27 +40,27 @@ withDefaults(defineProps<VideoPlaceholderProps>(), {
 </template>
 
 <style lang="scss" module>
-.videoPlaceholder {
-  width: 100%;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  row-gap: var(--spacing-s);
-  font-size: var(--font-13);
-  font-weight: 500;
-  color: var(--color-text-control-primary-default);
-  transform: none;
-
-  span {
-    display: block;
-    box-sizing: border-box;
-    position: relative;
+  .videoPlaceholder {
     width: 100%;
-    padding: 0 var(--spacing-s);
-    text-align: center;
-    word-break: break-all;
-  };
-}
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    row-gap: var(--spacing-s);
+    font-size: var(--font-13);
+    font-weight: 500;
+    color: var(--color-text-control-primary-default);
+    transform: none;
+
+    span {
+      display: block;
+      box-sizing: border-box;
+      position: relative;
+      width: 100%;
+      padding: 0 var(--spacing-s);
+      text-align: center;
+      word-break: break-all;
+    }
+  }
 </style>

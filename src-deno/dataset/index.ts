@@ -16,6 +16,7 @@
 */
 import { msgsDb } from './msgs-db.ts';
 import { chatsDb } from './chats-db.ts';
+import { setDbFlush } from './db-flush.ts';
 import type { DB } from '../types/index.ts';
 
 export async function dataset(): Promise<DB> {
@@ -25,11 +26,24 @@ export async function dataset(): Promise<DB> {
   const msgsBdSrv = await msgsDb({ fs, fsLocal });
   const chatsBdSrv = await chatsDb({ fs, fsLocal, msgsBdSrv });
 
+  /**
+   * Covers all three database files: the messages one, its auxiliary, and
+   * the chats one.
+   */
+  async function flush(): Promise<void> {
+    await Promise.all([msgsBdSrv.flush(), chatsBdSrv.flush()]);
+  }
+
+  // Lets the sending layer flush without holding a reference to the DB.
+  setDbFlush(flush);
+
   return {
+    flush,
     addMessage: msgsBdSrv.addMessage,
     getMessage: msgsBdSrv.getMessage,
     getExpiredMessages: msgsBdSrv.getExpiredMessages,
     getMessagesByChat: msgsBdSrv.getMessagesByChat,
+    getMessagesPageInChat: msgsBdSrv.getMessagesPageInChat,
     getNotRegularMessagesByChat: msgsBdSrv.getNotRegularMessagesByChat,
     getMessagesWithSyncingSelfStatus: msgsBdSrv.getMessagesWithSyncingSelfStatus,
     getLatestIncomingMsgTimestamp: msgsBdSrv.getLatestIncomingMsgTimestamp,
@@ -39,10 +53,27 @@ export async function dataset(): Promise<DB> {
     deleteMessage: msgsBdSrv.deleteMessage,
     deleteMessagesInChat: msgsBdSrv.deleteMessagesInChat,
     updateMessageRecord: msgsBdSrv.updateMessageRecord,
+    updateMessageStatus: msgsBdSrv.updateMessageStatus,
     addOrphanedMessage: msgsBdSrv.addOrphanedMessage,
-    getStuckMessageForTargetMessageId: msgsBdSrv.getStuckMessageForTargetMessageId,
+    getStuckMessagesForTargetMessageId: msgsBdSrv.getStuckMessagesForTargetMessageId,
+    getStuckMessagesWithoutTarget: msgsBdSrv.getStuckMessagesWithoutTarget,
+    getStuckOrphanTargets: msgsBdSrv.getStuckOrphanTargets,
+    countOrphanedSyncs: msgsBdSrv.countOrphanedSyncs,
     deleteOrphanedMessage: msgsBdSrv.deleteOrphanedMessage,
     collectGarbageInAuxiliaryDB: msgsBdSrv.collectGarbageInAuxiliaryDB,
+    scheduleInboxMsgRemoval: msgsBdSrv.scheduleInboxMsgRemoval,
+    getDueInboxMsgRemovals: msgsBdSrv.getDueInboxMsgRemovals,
+    clearInboxMsgRemovals: msgsBdSrv.clearInboxMsgRemovals,
+    getSyncVersion: msgsBdSrv.getSyncVersion,
+    setSyncVersion: msgsBdSrv.setSyncVersion,
+    deleteSyncVersionsOf: msgsBdSrv.deleteSyncVersionsOf,
+    collectGarbageInSyncVersions: msgsBdSrv.collectGarbageInSyncVersions,
+    queueSyncPhantom: msgsBdSrv.queueSyncPhantom,
+    getPendingSyncPhantoms: msgsBdSrv.getPendingSyncPhantoms,
+    countPendingSyncPhantoms: msgsBdSrv.countPendingSyncPhantoms,
+    deletePendingSyncPhantom: msgsBdSrv.deletePendingSyncPhantom,
+    recordPendingSyncPhantomFailure: msgsBdSrv.recordPendingSyncPhantomFailure,
+    dropExpiredSyncPhantoms: msgsBdSrv.dropExpiredSyncPhantoms,
     findChat: chatsBdSrv.findChat,
     addOneToOneChat: chatsBdSrv.addOneToOneChat,
     addGroupChat: chatsBdSrv.addGroupChat,

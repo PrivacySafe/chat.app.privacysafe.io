@@ -6251,32 +6251,40 @@ class IPCWrap {
   }
 
   async onMsg(connection, connectionState, msg) {
-    if (!connectionState.acceptsMsgs()) {
-      return;
-    }
-    if (msg.msgType === 'start') {
-      const { callNum, method, data: requestData } = msg;
-      if (connectionState.hasCall(callNum)) {
+    try {
+      if (!connectionState.acceptsMsgs()) {
         return;
       }
-      const m = this.methods.get(method);
-      if (!m) {
-        await connection.send({
-          callNum, callStatus: 'error', err: `Method ${method} not found`,
-        });
-        return;
+      if (msg.msgType === 'start') {
+        const { callNum, method, data: requestData } = msg;
+        if (connectionState.hasCall(callNum)) {
+          return;
+        }
+        const m = this.methods.get(method);
+        if (!m) {
+          try {
+            await connection.send({
+              callNum, callStatus: 'error', err: `Method ${method} not found`,
+            });
+          } catch (sendErr) {
+            console.error(`Failed to send 'Method not found' error for ${method} on ${this.srvName}:`, sendErr);
+          }
+          return;
+        }
+        const { obs, reqRep } = m;
+        if (reqRep) {
+          connectionState.registerReqReplyCall(callNum);
+          await this.callReqReplyHandler(connection, connectionState, reqRep, callNum, requestData, method);
+        } else if (obs) {
+          const cancelCall = this.callObsHandler(connection, connectionState, obs, callNum, requestData, method);
+          connectionState.registerObservableCall(callNum, cancelCall);
+        }
+      } else if (msg.msgType === 'cancel') {
+        const { callNum } = msg;
+        connectionState.cancelCall(callNum);
       }
-      const { obs, reqRep } = m;
-      if (reqRep) {
-        connectionState.registerReqReplyCall(callNum);
-        await this.callReqReplyHandler(connection, connectionState, reqRep, callNum, requestData, method);
-      } else if (obs) {
-        const cancelCall = this.callObsHandler(connection, connectionState, obs, callNum, requestData);
-        connectionState.registerObservableCall(callNum, cancelCall);
-      }
-    } else if (msg.msgType === 'cancel') {
-      const { callNum } = msg;
-      connectionState.cancelCall(callNum);
+    } catch (err) {
+      console.error(`Error in IPC onMsg for service ${this.srvName}:`, err);
     }
   }
 
@@ -6298,31 +6306,54 @@ class IPCWrap {
       return;
     }
     connectionState.completeCall(callNum);
-    await connection.send(reply);
+    try {
+      await connection.send(reply);
+    } catch (sendErr) {
+      console.error(`Failed to send reply for call ${callNum} in method ${method} on ${this.srvName}:`, sendErr);
+    }
   }
 
-  callObsHandler(connection, connectionState, obs, callNum, requestData) {
+  callObsHandler(connection, connectionState, obs, callNum, requestData, method) {
     return obs(requestData, {
-      next: data => connection.send({
-        callNum, callStatus: 'interim', data,
-      }),
+      next: data => {
+        try {
+          const res = connection.send({
+            callNum, callStatus: 'interim', data,
+          });
+          if (res && typeof res.catch === 'function') {
+            res.catch(err => {
+              console.error(`Failed to send interim data for call ${callNum} on ${this.srvName}:`, err);
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to send interim data for call ${callNum} on ${this.srvName}:`, err);
+        }
+      },
       complete: async () => {
         if (!connectionState.hasCall(callNum)) {
           return;
         }
         connectionState.completeCall(callNum);
-        await connection.send({
-          callNum, callStatus: 'end',
-        });
+        try {
+          await connection.send({
+            callNum, callStatus: 'end',
+          });
+        } catch (err) {
+          console.error(`Failed to send end status for call ${callNum} on ${this.srvName}:`, err);
+        }
       },
       error: async err => {
         if (!connectionState.hasCall(callNum)) {
           return;
         }
         connectionState.completeCall(callNum);
-        await connection.send({
-          callNum, callStatus: 'error', err,
-        });
+        try {
+          await connection.send({
+            callNum, callStatus: 'error', err,
+          });
+        } catch (sendErr) {
+          console.error(`Failed to send error status for call ${callNum} on ${this.srvName}:`, sendErr);
+        }
         console.error(`Exposed service ${this.srvName} throws exception into a remote observer from a method ${method}`, err);
       },
     });
@@ -6345,7 +6376,18 @@ class IPCWrap {
 
   async onConnection(connection) {
     const disconnect = connection.watch({
-      next: msg => this.onMsg(connection, connectionState, msg),
+      next: msg => {
+        try {
+          const res = this.onMsg(connection, connectionState, msg);
+          if (res && typeof res.catch === 'function') {
+            res.catch(err => {
+              console.error(`Error in IPC onMsg async for service ${this.srvName}:`, err);
+            });
+          }
+        } catch (err) {
+          console.error(`Error in IPC watch next for service ${this.srvName}:`, err);
+        }
+      },
       complete: () => this.onConnectionCompletion(connection, connectionState),
       error: err => this.onConnectionError(connection, connectionState, err),
     });

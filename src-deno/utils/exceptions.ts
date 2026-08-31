@@ -23,7 +23,6 @@ export interface DbRecordException extends web3n.RuntimeException {
   chatNotFound?: true;
   invitationNotFound?: true;
   chatAlreadyExists?: true;
-  duplicateChatName?: true;
   messageNotFound?: true;
   chatWithMembers?: true;
   notAdmin?: true;

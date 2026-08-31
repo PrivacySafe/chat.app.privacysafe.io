@@ -13,6 +13,7 @@ export default [
       '**/app/**/*.*',
       '**/ci/**/*.*',
       '**/doc/**/*.*',
+      '**/plans/**/*.*',
       '**/public/**/*.*',
       'shared-libs/ipc/**/*.*',
       'shared-libs/sqlite-on-3nstorage/**/*.*',

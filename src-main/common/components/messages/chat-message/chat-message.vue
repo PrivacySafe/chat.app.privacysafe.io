@@ -34,6 +34,7 @@ const props = defineProps<{
   relatedMessage?: RegularMsgView['relatedMessage'];
   prevMsgSender: string | undefined;
   prevMsgInfo: Nullable<{ isIncomingMsg?: boolean, status: MessageStatus | undefined }>;
+  isOriginDevice?: boolean;
 }>();
 const emits = defineEmits<{
   (event: 'click:right', value: MouseEvent): void;
@@ -127,6 +128,7 @@ onBeforeUnmount(() => {
       v-if="isSelectionMode && msg.chatMessageType === 'regular'"
       :class="$style.check"
     >
+      <!-- @vue-expect-error -->
       <ui3n-radio
         :model-value="selectedMessages.includes(msg.chatMessageId)"
         size="32"
@@ -178,7 +180,8 @@ onBeforeUnmount(() => {
       :related-message="relatedMessage"
       :prev-msg-sender="prevMsgSender"
       :is-processing="isProcessing"
-      @click.right="emits('click:right', $event)"
+      :is-origin-device="isOriginDevice"
+      @click.right.prevent="emits('click:right', $event)"
     />
   </div>
 </template>

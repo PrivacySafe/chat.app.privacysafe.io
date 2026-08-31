@@ -19,6 +19,7 @@ import type { ChatIdObj } from '../../types/asmail-msgs.types.ts';
 import type { ChatDbEntry, GroupChatDbEntry, OTOChatDbEntry, ChatsDb } from '../types/index.ts';
 import { CHATS_DB_FNAME, CHATS_DB_META_ATTR, DATASET_META_ATTR } from '../../shared-libs/constants/index.ts';
 import { SQLiteOn3NStorage } from '../../shared-libs/sqlite-on-3nstorage/index.js';
+import { makeDbWriter } from './db-writer.ts';
 import {
   otoChatTabFields,
   otoChatWhereParamsFor,
@@ -27,18 +28,11 @@ import {
   ensureAllAdminsAreInMembers,
   isUniqueViolation,
 } from './utils.ts';
-import {
-  fromQueryResult,
-  queryParamsFrom,
-  andEqualExprFor,
-  forTableInsert,
-  setExprFor,
-} from '../utils/for-sqlite.ts';
-import { makeDbRecordException } from '../utils/exceptions.ts';
+import { fromQueryResult, queryParamsFrom, forTableInsert, setExprFor, tableColumnNames } from '../utils/for-sqlite.ts';
 import { toCanonicalAddress } from '../../shared-libs/address-utils.ts';
 import { msgsDb } from './msgs-db.ts';
 
-const queryToCreateChatsDbV2 = [
+const queryToCreateChatsDbV3 = [
   `--sql
     CREATE TABLE group_chats (
       chatId TEXT NOT NULL PRIMARY KEY,
@@ -62,13 +56,73 @@ const queryToCreateChatsDbV2 = [
       settings TEXT
     ) STRICT
   `,
-  `--sql
-    CREATE UNIQUE INDEX group_chat_name ON group_chats (name)
-  `,
-  `--sql
-    CREATE UNIQUE INDEX oto_chat_name ON oto_chats (name)
-  `,
 ].join(';\n');
+
+/**
+ * Chat names are not unique. Two group chats with the same name - even with the
+ * same members - are a normal thing, and a one-to-one chat is identified by the
+ * peer's canonical address, not by the name it is displayed under. Schema V2
+ * had UNIQUE indexes on `name` in both tables, which made an invitation with an
+ * already taken name fail on the recipient's side, i.e. the chat was not
+ * created at all.
+ *
+ * Like the other on-open fix-ups (see doc/02-data-model.md §1.2), this runs on
+ * every start: dropping an index touches no rows and cannot fail on existing
+ * data, so it needs no version check - the presence of the index itself is the
+ * condition.
+ *
+ * @returns true if legacy indexes were found and dropped, i.e. the file has to
+ * be written back.
+ */
+function dropLegacyChatNameIndexes(sqlite: SQLiteOn3NStorage): boolean {
+  const [legacyIndexes] = sqlite.db.exec(
+    `--sql
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'index' AND name IN ('group_chat_name', 'oto_chat_name')`,
+  );
+  if (!legacyIndexes) {
+    return false;
+  }
+  sqlite.db.exec(
+    `--sql
+    DROP INDEX IF EXISTS group_chat_name;
+    DROP INDEX IF EXISTS oto_chat_name`,
+  );
+  return true;
+}
+
+/**
+ * Databases created by app versions <=0.10.x have no settings column in either
+ * chats table: it was added only by the 2.1 branch of the old version
+ * dispatcher, which ran its ALTERs only on the second 0.10.x start and was
+ * removed in 0.11.0 with no replacement. The ALTERs repeat that migrator
+ * verbatim, and the DEFAULT is functionally required, not cosmetic: a chat row
+ * with NULL settings makes message sending throw
+ * (AUTO_DELETE_MESSAGES_BY_ID[settings?.autoDeleteMessages].value in
+ * msg-sending.ts), so existing rows must read as autoDeleteMessages '0' (off).
+ *
+ * The decision goes by PRAGMA, not by the dataset version xattr: the
+ * synced-to-local move above copies bytes only, losing xattrs.
+ *
+ * @returns true if any column was added, i.e. the file has to be written back.
+ */
+function addLegacyChatSettingsColumns(sqlite: SQLiteOn3NStorage): boolean {
+  let migrated = false;
+  if (!tableColumnNames(sqlite.db, 'group_chats').includes('settings')) {
+    sqlite.db.exec(
+      `ALTER TABLE group_chats ADD COLUMN settings TEXT DEFAULT '{"autoDeleteMessages":"0"}'`,
+    );
+    migrated = true;
+  }
+  if (!tableColumnNames(sqlite.db, 'oto_chats').includes('settings')) {
+    sqlite.db.exec(
+      `ALTER TABLE oto_chats ADD COLUMN settings TEXT DEFAULT '{"autoDeleteMessages":"0"}'`,
+    );
+    migrated = true;
+  }
+  return migrated;
+}
 
 async function getSqliteDb({
   fs,
@@ -93,11 +147,22 @@ async function getSqliteDb({
 
   const res = sqlite.db.exec(`PRAGMA table_info(group_chats)`);
   if (res.length === 0) {
-    sqlite.db.exec(queryToCreateChatsDbV2);
+    sqlite.db.exec(queryToCreateChatsDbV3);
     await saveLocally(sqlite);
     await chatsDbFile.updateXAttrs({
-      set: { [DATASET_META_ATTR]: { datasetVersion: 2, db: CHATS_DB_META_ATTR } },
+      set: { [DATASET_META_ATTR]: { datasetVersion: 3, db: CHATS_DB_META_ATTR } },
     });
+  } else {
+    let dirty = dropLegacyChatNameIndexes(sqlite);
+    if (addLegacyChatSettingsColumns(sqlite)) {
+      dirty = true;
+    }
+    if (dirty) {
+      await saveLocally(sqlite);
+      await chatsDbFile.updateXAttrs({
+        set: { [DATASET_META_ATTR]: { datasetVersion: 3, db: CHATS_DB_META_ATTR } },
+      });
+    }
   }
 
   return sqlite;
@@ -112,10 +177,26 @@ export async function chatsDb({
   fsLocal: web3n.files.WritableFS;
   msgsBdSrv: Awaited<ReturnType<typeof msgsDb>>;
 }): Promise<ChatsDb> {
-  const sqlite = await getSqliteDb({ fs, fsLocal, saveLocally });
+  // Schema creation writes immediately - see the matching comment in msgsDb().
+  const sqlite = await getSqliteDb({
+    fs,
+    fsLocal,
+    saveLocally: sql => sql.saveToFile({ skipUpload: true }),
+  });
 
-  async function saveLocally(sql: SQLiteOn3NStorage) {
-    await sql.saveToFile({ skipUpload: true });
+  const writer = makeDbWriter(sqlite, 'chats');
+
+  /**
+   * Marks the database as needing a write; the write itself is batched, see
+   * db-writer.ts.
+   */
+  function saveLocally() {
+    writer.scheduleSave();
+    return Promise.resolve();
+  }
+
+  async function flush(): Promise<void> {
+    await writer.flush();
   }
 
   function getOTOChat(peerCAddr: string): OTOChatDbEntry | undefined {
@@ -152,43 +233,9 @@ export async function chatsDb({
     return chat;
   }
 
-  function chatNameExistsInOTOs(name: string): boolean {
-    const whereParams = queryParamsFrom({ name }, otoChatTabFields);
-    const whereClause = andEqualExprFor(whereParams);
-    const [sqlValue] = sqlite.db.exec(
-      `--sql
-      SELECT *
-      FROM oto_chats
-      WHERE ${whereClause}`,
-      whereParams,
-    );
-    return !!sqlValue;
-  }
-
-  function chatNameExistsInGroups(name: string): boolean {
-    const whereParams = queryParamsFrom({ name }, groupChatTabFields);
-    const whereClause = andEqualExprFor(whereParams);
-    const [sqlValue] = sqlite.db.exec(
-      `--sql
-      SELECT *
-      FROM group_chats
-      WHERE ${whereClause}`,
-      whereParams,
-    );
-    return !!sqlValue;
-  }
-
-  function chatNameExists(name: string): boolean {
-    return chatNameExistsInOTOs(name) || chatNameExistsInGroups(name);
-  }
-
   async function addOneToOneChat(
     params: Omit<OTOChatDbEntry, 'createdAt' | 'lastUpdatedAt' | 'peerCAddr'>,
   ): Promise<OTOChatDbEntry> {
-    if (chatNameExists(params.name)) {
-      throw makeDbRecordException({ duplicateChatName: true });
-    }
-
     const peerCAddr = toCanonicalAddress(params.peerAddr);
     const now = Date.now();
     const { insertParams, orderedColumns, orderedValues } = forTableInsert(
@@ -209,13 +256,16 @@ export async function chatsDb({
         VALUES (${orderedValues})`,
         insertParams,
       );
-      await saveLocally(sqlite);
+      await saveLocally();
     } catch (err) {
       if (isUniqueViolation(err as Error, 'peerCAddr')) {
-        throw makeDbRecordException({ chatAlreadyExists: true });
-      } else {
-        throw err;
+        // If chat with this peer already exists, return it (get-or-create semantics)
+        const existing = getOTOChat(peerCAddr);
+        if (existing) {
+          return existing;
+        }
       }
+      throw err;
     }
 
     const chat = getOTOChat(peerCAddr);
@@ -231,9 +281,6 @@ export async function chatsDb({
   ): Promise<GroupChatDbEntry> {
     ensureAllAdminsAreInMembers(chat.admins, chat.members);
 
-    if (chatNameExists(chat.name)) {
-      throw makeDbRecordException({ duplicateChatName: true });
-    }
     const now = Date.now();
     const { insertParams, orderedColumns, orderedValues } = forTableInsert(
       {
@@ -251,13 +298,16 @@ export async function chatsDb({
         VALUES (${orderedValues})`,
         insertParams,
       );
-      await saveLocally(sqlite);
+      await saveLocally();
     } catch (err) {
       if (isUniqueViolation(err as Error, 'chatId')) {
-        throw makeDbRecordException({ chatAlreadyExists: true });
-      } else {
-        throw err;
+        // If group chat with this chatId already exists, return it (get-or-create semantics)
+        const existing = getGroupChat(chat.chatId);
+        if (existing) {
+          return existing;
+        }
       }
+      throw err;
     }
     const res = getGroupChat(chat.chatId);
     if (res) {
@@ -288,7 +338,7 @@ export async function chatsDb({
       updateParams,
     );
     if (sqlite.db.getRowsModified() > 0) {
-      await saveLocally(sqlite);
+      await saveLocally();
       return getOTOChat(peerCAddr);
     }
   }
@@ -314,7 +364,7 @@ export async function chatsDb({
       updateParams,
     );
     if (sqlite.db.getRowsModified() > 0) {
-      await saveLocally(sqlite);
+      await saveLocally();
       return getGroupChat(chatId);
     }
   }
@@ -366,7 +416,7 @@ export async function chatsDb({
       whereParams,
     );
     if (sqlite.db.getRowsModified() > 0) {
-      await saveLocally(sqlite);
+      await saveLocally();
     }
   }
 
@@ -379,7 +429,7 @@ export async function chatsDb({
       whereParams,
     );
     if (sqlite.db.getRowsModified() > 0) {
-      await saveLocally(sqlite);
+      await saveLocally();
     }
   }
 
@@ -394,6 +444,7 @@ export async function chatsDb({
   }
 
   return {
+    flush,
     findChat,
     addOneToOneChat,
     addGroupChat,

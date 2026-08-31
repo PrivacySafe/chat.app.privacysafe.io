@@ -21,9 +21,16 @@
   import { useAppStore } from '@video/common/store/app.store';
   import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
   import type { PeerVideo } from '~/index';
+  import type { ConnectingPeer } from '@video/common/types';
 
   const props = defineProps<{
     peerVideos: PeerVideo[];
+    connectingPeers?: ConnectingPeer[];
+    /**
+     * Placement variant. 'panel' (default) is the desktop side panel;
+     * 'fullscreen' covers the whole viewport, for narrow phone windows.
+     */
+    layout?: 'panel' | 'fullscreen';
   }>();
   const emits = defineEmits<{
     (event: 'close'): void;
@@ -35,17 +42,17 @@
 
   const activePeerVideos = computed(() => props.peerVideos.filter(item => item.vaStream));
   const notActivePeerVideos = computed(() => props.peerVideos.filter(item => !item.vaStream));
+
+  function statusTextFor(peerAddr: string): string | undefined {
+    return props.connectingPeers?.find(p => p.peerAddr === peerAddr)?.statusText;
+  }
 </script>
 
 <template>
-  <div :class="$style.callParticipants">
+  <div :class="[$style.callParticipants, layout === 'fullscreen' && $style.callParticipantsFullscreen]">
     <div :class="$style.header">
       <div :class="$style.title">
-        <ui3n-icon
-          icon="sharp-people"
-          size="16"
-        />
-
+        <ui3n-icon icon="sharp-people" />
         {{ t('va.text.participants') }}
       </div>
 
@@ -56,7 +63,7 @@
         icon="round-close"
         icon-color="var(--color-icon-button-tritery-default)"
         icon-size="16"
-        @click.stop.prevent="emits('close')"
+        @click.stop.prevent="() => emits('close')"
       />
     </div>
 
@@ -92,12 +99,12 @@
         >
           <div :class="$style.participantBlock">
             <chat-avatar
-              :name="item.peerAddr"
+              :name="item.peerName"
               size="24"
             />
 
             <span :class="[$style.name, $style.active]">
-              {{ item.peerAddr }}
+              {{ item.peerName }}
             </span>
           </div>
 
@@ -115,13 +122,21 @@
         >
           <div :class="$style.participantBlock">
             <chat-avatar
-              :name="item.peerAddr"
+              :name="item.peerName"
               size="24"
             />
 
-            <span :class="[$style.name, $style.notActive]">
-              {{ item.peerAddr }}
-            </span>
+            <div :class="$style.notActiveInfo">
+              <span :class="[$style.name, $style.notActive]">
+                {{ item.peerName }}
+              </span>
+              <span
+                v-if="statusTextFor(item.peerAddr)"
+                :class="$style.statusText"
+              >
+                {{ statusTextFor(item.peerAddr) }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -134,8 +149,8 @@
 
   .callParticipants {
     --call-participants-block-width: 240px;
-    --call-participants-header: var(--spacing-xl);
-    --call-participants-item-height: var(--spacing-xl);
+    --call-participants-header: 40px;
+    --call-participants-item-height: 40px;
 
     position: fixed;
     top: var(--spacing-m);
@@ -145,6 +160,21 @@
     border-radius: var(--spacing-m);
     background-color: var(--color-bg-control-secondary-default);
     box-shadow: 0 0 2px 2px var(--shadow-key-1);
+
+    // Phone windows are too narrow for a side panel: cover the whole viewport,
+    // above the connecting banner (z-index 2) and the 1-1 own-video PiP tile.
+    &.callParticipantsFullscreen {
+      inset: 0;
+      width: auto;
+      border-radius: 0;
+      box-shadow: none;
+      z-index: 3;
+
+      .header {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+      }
+    }
   }
 
   .header {
@@ -197,6 +227,13 @@
     padding-right: var(--spacing-s);
   }
 
+  .block:nth-child(2) .participant {
+    height: auto;
+    min-height: var(--call-participants-item-height);
+    padding-top: var(--spacing-xs);
+    padding-bottom: var(--spacing-xs);
+  }
+
   .participantBlock {
     display: flex;
     justify-content: flex-start;
@@ -217,6 +254,20 @@
 
   .notActive {
     color: var(--color-text-control-primary-disabled);
+  }
+
+  .notActiveInfo {
+    display: flex;
+    flex-direction: column;
+    row-gap: 2px;
+    overflow: hidden;
+    flex-grow: 1;
+  }
+
+  .statusText {
+    font-size: var(--font-10);
+    color: var(--color-text-control-primary-disabled);
+    @include mixins.text-overflow-ellipsis();
   }
 
   .flag {

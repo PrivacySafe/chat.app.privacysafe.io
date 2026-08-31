@@ -56,7 +56,7 @@
         </div>
 
         <ui3n-checkbox
-          v-model="deleteForEveryone"
+          v-model="deleteForEveryone as boolean"
           :class="$style.messageDeleteDialogCheckbox"
           @change="onFlagChange"
         >

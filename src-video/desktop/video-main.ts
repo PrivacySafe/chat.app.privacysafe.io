@@ -25,10 +25,17 @@ import '@v1nt1248/3nclient-lib/style.css';
 import '@main/common/assets/styles/main.css';
 
 import i18n from '@main/common/data/i18';
+import { initDebugLogging } from '@shared/logger';
+import { startCallWindowLogRelay } from '@video/common/services/video-chat-service/video-chat-srv';
+import { installConsoleTimestamps } from '@shared/console-timestamps';
 
 import VideoApp from '@video/desktop/pages/video-app.vue';
 import VASetup from '@video/desktop/pages/va-setup.vue';
 import Call from '@video/desktop/pages/call/call.vue';
+
+// Before anything else logs: a call window's console lines are only useful with
+// a time on them (see shared-libs/console-timestamps.ts).
+installConsoleTimestamps();
 
 const app = createApp(VideoApp);
 const pinia = createPinia();
@@ -58,3 +65,12 @@ app.config.compilerOptions.isCustomElement = tag => {
 };
 
 app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#video-main');
+
+// Diagnostic logging of signalling and track handling, off unless the
+// launcher's app configuration turns it on (see shared-libs/logger.ts).
+initDebugLogging();
+
+// This window's lines also go to the background, which prints them into the
+// output the whole run is read from. Started here, before the background has
+// subscribed to this window: lines written meanwhile wait in the relay.
+startCallWindowLogRelay();

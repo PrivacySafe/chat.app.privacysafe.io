@@ -47,6 +47,9 @@ export interface ChatWithIncomingCall extends ChatRoute {
   query: {
     call: 'yes';
     peerAddress: string;
+    callSessionId?: string;
+    /** When the incoming-call command was issued (ms since epoch, as string). */
+    callSentAt?: string;
   };
 }
 

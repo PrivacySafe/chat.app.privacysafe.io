@@ -64,7 +64,7 @@ export default function useChatMessages(
   const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
 
-  const { user: ownAddr, isMobileMode } = storeToRefs(useAppStore());
+  const { user: ownAddr, isMobileMode, appDeviceId } = storeToRefs(useAppStore());
 
   const contactsStore = useContactsStore();
   const { contactList } = storeToRefs(contactsStore);
@@ -85,6 +85,7 @@ export default function useChatMessages(
     getMessageAttachments,
     selectMessage,
     addReactionInRecentList,
+    loadOlderUntilMessageIsLoaded,
   } = messagesStore;
 
   const uiOutgoingStore = useUiOutgoingStore();
@@ -126,11 +127,26 @@ export default function useChatMessages(
     }
   }
 
+  function checkIsOriginDevice(msg: ChatMessageView): boolean {
+    if (msg.isIncomingMsg) {
+      return true;
+    }
+
+    if (msg.chatMessageType !== 'regular') {
+      return true;
+    }
+    const msgOwnerDeviceId = msg.settings?.msgOwnersDeviceId;
+    if (!msgOwnerDeviceId) {
+      return true;
+    }
+    return msgOwnerDeviceId === appDeviceId.value;
+  }
+
   function openMessageMenu(msg: ChatMessageView | undefined) {
     if (msg && msg.chatMessageType !== 'system' && msg.chatMessageType !== 'invitation') {
       msgActionsMenuProps.value = {
         open: true,
-        actions: getMessageActions(msg, t, readonly.value),
+        actions: getMessageActions(msg, t, readonly.value, checkIsOriginDevice(msg)),
         msg,
       };
     }
@@ -249,7 +265,21 @@ export default function useChatMessages(
       msg.relatedMessage.replyTo &&
       msg.relatedMessage.replyTo.chatMessageId
     ) {
-      const initialMessageElement = document.getElementById(`msg-${msg.relatedMessage.replyTo.chatMessageId}`);
+      const { chatMessageId } = msg.relatedMessage.replyTo;
+
+      // The original may be older than the loaded page, in which case it has to
+      // be pulled in first - otherwise there is no element to scroll to
+      const isLoaded = await loadOlderUntilMessageIsLoaded(chatMessageId);
+      if (!isLoaded) {
+        notifications?.$createNotice({
+          type: 'info',
+          content: t('chat.message.action_message.error.original_not_reachable'),
+        });
+        return;
+      }
+
+      await nextTick();
+      const initialMessageElement = document.getElementById(`msg-${chatMessageId}`);
       initialMessageElement && initialMessageElement.scrollIntoView(false);
     }
   }
@@ -363,6 +393,17 @@ export default function useChatMessages(
   }
 
   async function forwardMsg(chatMessageId: string) {
+    const msg = currentChatMessages.value.find(m => m.chatMessageId === chatMessageId) as
+      | RegularMsgView
+      | undefined;
+
+    if (!msg) {
+      return;
+    }
+
+    const isOriginDevice = checkIsOriginDevice(msg);
+    const hasAttachmentsUnavailable = !isOriginDevice && !isEmpty(msg.attachments) && !msg.isIncomingMsg;
+
     const chatForForwarding = await dialog.$openDialog<{
       chatId?: ChatIdObj;
       contact?: { mail: string; name: string };
@@ -373,20 +414,17 @@ export default function useChatMessages(
         confirmButton: false,
         cancelButton: false,
       },
+      ...(hasAttachmentsUnavailable && {
+        warningText: t('chat.message.forward.warning.no_attachments'),
+      }),
     });
 
     const { event, data } = chatForForwarding;
     if (event === 'confirm') {
-      const msg = currentChatMessages.value.find(m => m.chatMessageId === chatMessageId) as
-        | RegularMsgView
-        | undefined;
-
-      if (!msg) {
-        return;
-      }
-
       const { chatId } = data!;
-      const entities: Record<string, web3n.files.ReadonlyFile | web3n.files.ReadonlyFS> = !isEmpty(msg.attachments)
+
+      const shouldLoadAttachments = !hasAttachmentsUnavailable && !isEmpty(msg.attachments);
+      const entities: Record<string, web3n.files.ReadonlyFile | web3n.files.ReadonlyFS> = shouldLoadAttachments
         ? await getMessageAttachments(msg.attachments!, msg.incomingMsgId)
         : {};
 
@@ -523,5 +561,6 @@ export default function useChatMessages(
     clearMessageMenu,
     handleAction,
     handleSelectionReaction,
+    checkIsOriginDevice,
   };
 }

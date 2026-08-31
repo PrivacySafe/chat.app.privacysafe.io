@@ -16,3 +16,5 @@
 */
 export * from './db.ts';
 export * from './delivery-srv.ts';
+export * from './chat-settings.ts';
+export * from './video-call.ts';

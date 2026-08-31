@@ -47,6 +47,7 @@
 
   const {
     data,
+    activeSrcId,
     isAudioCaptureAvailable,
     selectAudio,
     windowChoices,
@@ -87,6 +88,7 @@
               v-for="screen in screenChoices"
               :key="screen.srcId"
               :opts="screen"
+              :active-src-id="activeSrcId"
               @selected="v => onOptionSelectionChange(screen, v)"
             />
           </div>
@@ -100,6 +102,7 @@
               v-for="frame in windowChoices"
               :key="frame.srcId"
               :opts="frame"
+              :active-src-id="activeSrcId"
               @selected="v => onOptionSelectionChange(frame, v)"
             />
           </div>

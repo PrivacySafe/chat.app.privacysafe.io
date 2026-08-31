@@ -17,6 +17,7 @@
 
 <script lang="ts" setup>
   import { computed } from 'vue';
+  import size from 'lodash/size';
   import { Ui3nButton, Ui3nMenu, Ui3nIcon } from '@v1nt1248/3nclient-lib';
   import { useChatHeaderActions } from '@main/common/composables/useChatHeaderActions';
   import type { ChatListItemView } from '~/chat.types.ts';
@@ -41,6 +42,7 @@
     v-model="isMenuOpen"
     :offset-y="4"
     :close-on-click="false"
+    :content-border-radius="16"
     :disabled="disabled"
     :class="$style.menu"
   >
@@ -51,7 +53,7 @@
       icon="outline-arrow-drop-down"
       icon-size="16"
       icon-color="var(--color-icon-button-tertiary-default)"
-      icon-posizion="right"
+      icon-position="right"
       :disabled="disabled"
     >
       {{ t('chat.header.btn.actions') }}
@@ -60,7 +62,7 @@
     <template #menu>
       <div :class="$style.chatHeaderActionsMenu">
         <div
-          v-for="item in availableMenuItems"
+          v-for="(item, index) in availableMenuItems"
           :key="item.action"
           :class="[
             $style.chatHeaderActionsMenuItem,
@@ -68,12 +70,14 @@
             item.isAccent && $style.chatHeaderActionsMenuItemAccent,
             item.subMenu && $style.withSubMenu,
             isMenuItemDisabled(item) && $style.disabled,
+            index === 0 && $style.itemFirst,
+            index === size(availableMenuItems) - 1 && $style.itemLast,
           ]"
           v-on="isMenuItemDisabled(item) || item.subMenu ? {} : { click: () => selectAction(item) }"
         >
           <ui3n-icon
             :icon="item.icon"
-            size="14"
+            size="16"
             :color="item.isAccent ? 'var(--warning-content-default)' : 'var(--color-icon-control-primary-default)'"
             :class="$style.icon"
           />
@@ -83,7 +87,7 @@
           <ui3n-icon
             v-if="item.subMenu"
             icon="round-keyboard-arrow-right"
-            size="14"
+            size="16"
             color="var(--color-icon-control-primary-default)"
             :class="$style.icon"
           />
@@ -93,7 +97,7 @@
             :class="$style.subMenu"
           >
             <div
-              v-for="subItem in item.subMenu"
+              v-for="(subItem, ind) in item.subMenu"
               :key="subItem.action"
               :class="[
                 $style.chatHeaderActionsMenuItem,
@@ -101,6 +105,8 @@
                 subItem.isAccent && $style.chatHeaderActionsMenuItemAccent,
                 isSubItemSelected(subItem) && $style.isSelected,
                 isMenuItemDisabled(subItem) && $style.disabled,
+                ind === 0 && $style.itemFirst,
+                ind === size(item.subMenu) - 1 && $style.itemLast,
               ]"
               v-on="isMenuItemDisabled(subItem) || subItem.subMenu ? {} : { click: () => selectAction(subItem) }"
             >
@@ -136,12 +142,12 @@
 
   .chatHeaderActionsMenu {
     --chat-header-menu-width: max-content;
-    --chat-header-menu-item-height: var(--spacing-ml);
+    --chat-header-menu-item-height: var(--spacing-l);
 
     position: relative;
     width: var(--chat-header-menu-width);
     background-color: var(--color-bg-control-secondary-default);
-    border-radius: var(--spacing-xs);
+    border-radius: var(--spacing-m);
     padding: var(--spacing-xs);
   }
 
@@ -151,13 +157,22 @@
     justify-content: flex-start;
     align-items: center;
     column-gap: var(--spacing-s);
-    padding: 0 var(--spacing-xs);
+    padding: 0 var(--spacing-s);
     height: var(--chat-header-menu-item-height);
     font-size: 13px;
     font-weight: 400;
+    line-height: var(--font-16);
     color: var(--color-text-control-primary-default);
-    border-radius: 2px;
+    border-radius: var(--spacing-xs);
     cursor: pointer;
+
+    &.itemFirst {
+      border-radius: var(--spacing-m) var(--spacing-m) var(--spacing-xs) var(--spacing-xs);
+    }
+
+    &.itemLast {
+      border-radius: var(--spacing-xs) var(--spacing-xs) var(--spacing-m) var(--spacing-m);
+    }
 
     &:hover {
       background-color: var(--color-bg-control-primary-hover);
@@ -211,10 +226,10 @@
     position: absolute;
     padding: var(--spacing-xs);
     background-color: var(--color-bg-control-secondary-default);
-    border-radius: var(--spacing-xs);
-    width: 90px;
+    border-radius: var(--spacing-m);
+    width: 100px;
     top: 0;
-    left: -90px;
+    left: -100px;
     min-height: calc(var(--chat-header-menu-item-height) + var(--spacing-xs) * 2);
     box-shadow:
       0 0 2px 0 var(--shadow-key-1),

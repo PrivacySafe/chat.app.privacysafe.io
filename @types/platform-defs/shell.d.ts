@@ -66,6 +66,8 @@ declare namespace web3n.shell {
 		clipboard?: Partial<shell.clipboard.Clipboard>;
 	
 		mounts?: shell.mounts.MountsIntoOS;
+
+		scanUrlQR?: ScanUrlQR;
 	
 	}
 
@@ -99,5 +101,7 @@ declare namespace web3n.shell {
 		resourceNotFound?: true;
 		resourceNotInitialized?: true;
 	}
+
+	type ScanUrlQR = (prefixies: string[]) => Promise<string|undefined>;
 
 }

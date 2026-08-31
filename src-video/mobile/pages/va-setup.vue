@@ -22,13 +22,13 @@
   const {
     t,
     user,
-    isAnyOneConnected,
     haveCamerasToChoose,
     webcamMenuChoices,
     haveVideo,
     isMicOn,
     isCamOn,
     ownVA,
+    isIncomingCall,
     cancel,
     startChatCall,
     toggleMicStatus,
@@ -41,7 +41,7 @@
   <div :class="$style.vaSetup">
     <div :class="$style.header">
       <ui3n-button @click.stop.prevent="startChatCall">
-        {{ isAnyOneConnected ? t('va.presettings.btn.join') : t('va.presettings.btn.start') }}
+        {{ isIncomingCall ? t('va.presettings.btn.join') : t('va.presettings.btn.start') }}
       </ui3n-button>
 
       <span>{{ t('va.setup.title') }}</span>
@@ -64,6 +64,7 @@
           :class="$style.video"
           playsinline
           autoplay
+          muted
         />
 
         <video-placeholder

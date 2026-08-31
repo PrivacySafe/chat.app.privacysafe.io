@@ -50,8 +50,30 @@ import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
 import { areChatIdsEqual } from '@shared/chat-ids';
 import { toCanonicalAddress } from '@shared/address-utils';
-import { prepareAttachmentEntityInfo } from '@main/common/utils/chats.helper';
+import {
+  prepareAttachmentEntityInfo,
+  prepareMessageBody,
+  restoreRawMessage,
+} from '@main/common/utils/chats.helper';
 import MessageDeleteDialog from '@main/common/components/dialogs/message-delete-dialog.vue';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('ChatView');
+
+/**
+ * How close to an edge of the message list counts as being at it: for the bottom
+ * it decides whether the "scroll down" button is shown, for the top it triggers
+ * loading of the previous page.
+ */
+const LIST_EDGE_THRESHOLD_PX = 64;
+
+/**
+ * How old an incoming-call command may be and still arm the incoming-call UI.
+ * Well under the background service's RINGING_NO_ANSWER_TIMEOUT_MILLIS: a
+ * command older than this is a re-delivery (window re-creation), not a call
+ * that is still ringing.
+ */
+const INCOMING_CALL_CMD_MAX_AGE_MILLIS = 60_000;
 
 function packRelatedMessageToSend(msg: ChatMessageView, relationType: 'reply' | 'forward'): RelatedMessage {
   switch (relationType) {
@@ -79,6 +101,8 @@ interface NavigationUtils {
     | {
         chatId: ChatIdObj;
         peerAddress: string;
+        callSessionId?: string;
+        callSentAt?: number;
       }
     | undefined;
 }
@@ -103,8 +127,8 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   const { setChatAndFetchMessages, sendMessageInChat, updateEarlySentMessage } = chatStore;
 
   const messagesStore = useMessagesStore();
-  const { currentChatMessages, selectedMessages } = storeToRefs(messagesStore);
-  const { getChatMessage, clearSelectedMessages, deleteMessagesInChat } = messagesStore;
+  const { currentChatMessages, selectedMessages, hasMoreOlder, isFetchingOlder } = storeToRefs(messagesStore);
+  const { getChatMessage, clearSelectedMessages, deleteMessagesInChat, fetchOlderMessages } = messagesStore;
 
   const files = ref<(web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[]>([]);
 
@@ -292,8 +316,29 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
 
   function onMessageListScroll() {
     whetherShowButtonDown.value =
-      messageListElement.value!.scrollHeight - 64 >
+      messageListElement.value!.scrollHeight - LIST_EDGE_THRESHOLD_PX >
       messageListElementRect.value!.height + messageListElement.value!.scrollTop;
+
+    if (messageListElement.value!.scrollTop <= LIST_EDGE_THRESHOLD_PX) {
+      void loadOlderMessagesKeepingPosition();
+    }
+  }
+
+  /**
+   * Adds the previous page at the top of the list without moving what the user
+   * is looking at: prepending pushes the content down by exactly the height it
+   * adds, so the same amount goes back into the scroll position.
+   */
+  async function loadOlderMessagesKeepingPosition(): Promise<void> {
+    const el = messageListElement.value;
+    if (!el || !hasMoreOlder.value || isFetchingOlder.value) {
+      return;
+    }
+
+    const heightBefore = el.scrollHeight;
+    await fetchOlderMessages();
+    await nextTick();
+    el.scrollTop += el.scrollHeight - heightBefore;
   }
 
   function scrollMessageListToEnd() {
@@ -416,7 +461,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
         if (e.type === 'file' && e.isInMemoryFile) {
           entity = await fileTo3nFile(f);
         } else {
-          w3n.log('error', 'Error reading file. ', e);
+          log.error('Error reading file. ', e);
         }
       }
 
@@ -473,7 +518,9 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
 
   function startEditMsgMode(msg: RegularMsgView) {
     editableMessage.value = msg;
-    msgText.value = msg.body;
+    editableMessage.value.body = restoreRawMessage(msg.body);
+
+    msgText.value = restoreRawMessage(msg.body);
     inputEl.value!.focus();
   }
 
@@ -519,7 +566,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
         updateEarlySentMessage({
           chatId: currentChatId.value!,
           chatMessageId: editableMessage.value!.chatMessageId,
-          updatedBody: msgText.value,
+          updatedBody: msgText.value ? prepareMessageBody(msgText.value) : '',
         });
 
         setTimeout(() => {
@@ -539,22 +586,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
         : undefined;
       disabled.value = true;
 
-      if (msgText.value) {
-        const mentions = msgText.value.match(/@.*?]/g);
-        for (const item of mentions || []) {
-          msgText.value = msgText.value.replace(item, `<a class="mention" data-mention="${item}">${item}</a>`);
-        }
-
-        const msgTextWithoutTagsA = msgText.value.replace(/<a[^>]*>(.*?)<\/a>/gi, '');
-
-        const urls = msgTextWithoutTagsA.match(
-          // eslint-disable-next-line no-useless-escape
-          /((http|https):\/\/)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/[\w\-\.\?\#=&\/\+\%]+)*\/?/g,
-        );
-        for (const url of urls || []) {
-          msgText.value = msgText.value.replace(url, `<a class="url" data-href="${url}">${url}</a>`);
-        }
-      }
+      msgText.value = msgText.value ? prepareMessageBody(msgText.value) : '';
 
       sendMessageInChat({
         chatId: toRaw(currentChatId.value!),
@@ -585,10 +617,41 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     () => route.query.call,
     async value => {
       if (value === 'yes') {
-        const { chatId, peerAddress } = getIncomingCallParamsFromRoute(route as unknown as ChatWithIncomingCall)!;
-        await updateChatItemInList(chatId, {
-          incomingCall: { chatId, peerAddress },
+        const { chatId, peerAddress, callSessionId, callSentAt } = getIncomingCallParamsFromRoute(
+          route as unknown as ChatWithIncomingCall,
+        )!;
+        // An incoming-call command can reach this window long after it was
+        // issued: getStartedCmd() re-delivers the starting command when the
+        // window is re-created. Arming the UI from a stale one puts up a Join
+        // button for a call that is over, so age gates it here - the command
+        // now says when it was sent.
+        if (callSentAt && Date.now() - callSentAt > INCOMING_CALL_CMD_MAX_AGE_MILLIS) {
+          log.info(
+            `Ignoring stale incoming-call command for chat ${chatId.chatId} from ` +
+              `${peerAddress} (age: ${Date.now() - callSentAt}ms)`,
+          );
+          nextTick(() => {
+            router.replace({ query: {} });
+          });
+          return;
+        }
+        const armed = await updateChatItemInList(chatId, {
+          incomingCall: { chatId, peerAddress, callSessionId },
         });
+        // The last link of the incoming-call chain: the background service asked
+        // the shell for the incoming-call UI, the command routed here, and
+        // `incomingCall` is what drives both the Join/Decline buttons and the
+        // ringtone. Logged at `info` (this window never turns diagnostics on), so
+        // that "it only rang on one device" can be pinned on either the signal
+        // or the UI, and not left between them. The outcome is reported, not
+        // assumed: the chat may not be in this window's list at all, and a line
+        // claiming success there would send the next diagnosis the wrong way.
+        log.info(
+          armed
+            ? `Incoming-call UI armed for chat ${chatId.chatId} from ${peerAddress}`
+            : `Incoming-call UI NOT armed for chat ${chatId.chatId} from ${peerAddress}: ` +
+                `the chat is not in this window's list`,
+        );
         nextTick(() => {
           router.replace({ query: {} });
         });

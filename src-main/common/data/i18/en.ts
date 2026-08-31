@@ -25,6 +25,25 @@ export const en = {
         offline: 'offline',
       },
     },
+    sync: {
+      label: 'Synchronizing…',
+      labelWithCount: 'Synchronizing… ({count})',
+      stalled: 'Changes are waiting to be sent',
+      stalledTooltip: 'Changes made here have not reached your other devices yet; '
+        + 'they are kept and will be sent again',
+      tooltip: {
+        idle: '',
+        'catch-up': 'Catching up on messages received while the app was closed',
+        incoming: 'Applying changes made on your other devices',
+        outgoing: 'Sending changes to your other devices',
+      },
+      duplicateInstance: 'Another copy of the app uses the same data folder, '
+        + 'so both act as the same device and cannot synchronize with each other. '
+        + 'Start the second copy with its own data folder.',
+    },
+    orientation: {
+      rotateBack: 'Please rotate your phone back to portrait orientation',
+    },
     exit: 'Exit',
     ok: 'Ok',
     text: {
@@ -105,8 +124,23 @@ export const en = {
         },
       },
     },
+    contact: {
+      add: {
+        error: {
+          exists: 'Contact {addr} already exists',
+          check_failed: '{addr} is unknown address or is not present at the domain',
+          unknown: 'Failed to add contact {addr}',
+        },
+      },
+    },
     content: {
       empty: 'Select a Chat to Start Messaging',
+    },
+    list: {
+      empty: 'No chats yet',
+      item: {
+        created_at: 'created {date}',
+      },
     },
     header: {
       info: 'Last post on {date}',
@@ -172,6 +206,19 @@ export const en = {
         load_file: 'The file you are downloading may have been deleted or moved.',
       },
     },
+    notification: {
+      callActive: {
+        title: 'Active Call',
+        message: 'A call is in progress in {chatName}. Tap to join.',
+      },
+      callEndedByHost: {
+        title: 'Call Ended',
+        message: 'The call initiator ended the call in {chatName}.',
+      },
+      callAnsweredElsewhere: {
+        message: 'You answered this call on another of your devices.',
+      },
+    },
     message: {
       dialog: {
         delete: {
@@ -227,6 +274,16 @@ export const en = {
         edit: 'Edit message:',
         unread: 'Unread messages - {messages}',
         changed: 'changed',
+        sending_from_other_device: 'Sending from another device...',
+      },
+      forward: {
+        warning: {
+          no_attachments: 'Attachments will not be forwarded: the original message is on another device',
+        },
+      },
+      attachment: {
+        not_available_on_this_device: 'Attachment is only available on the sending device',
+        only_on_sending_device: 'Files are only on the sending device',
       },
       action_message: {
         success: {
@@ -237,6 +294,7 @@ export const en = {
           delete: 'An error occurred while deleting the selected message',
           file_notfound: 'The file may have been deleted or moved',
           file_download: 'The downloaded files/folders may have been deleted or moved',
+          original_not_reachable: 'The original message is too far back in the history or was deleted',
         },
       },
       btn: {
@@ -390,8 +448,10 @@ export const en = {
   va: {
     btn: {
       end_call: 'End Call',
+      rejoin_call: 'Join Call',
     },
     text: {
+      call_is_active: 'A call is active. Tap to rejoin',
       call_in_progress: 'The call is on since',
       call_started: 'The call has started',
       incoming_call: 'The incoming call from {sender}',
@@ -404,11 +464,25 @@ export const en = {
       outgoing_call_cancelled_by: 'The outgoing call was cancelled by {user}',
       user_left_call: '{user} left the call',
       participants: 'Participants',
+      call_full: 'The call is full ({current}/{max} participants). Please try again later.',
+      user_stopped_sharing: '[{user}] stopped sharing "{screen}"',
+      connection_lost: 'Connection lost. Please close the call window to continue.',
+      peer_app_closed:
+        '{user} closed the application. The call will end in a few seconds.',
+      host_unreachable:
+        'Cannot reach {user} anymore — the call appears to have ended. The call window will close.',
+      call_setup_timeout:
+        'Could not connect with {user}. The call window will close.',
+      invite_not_delivered:
+        'The invitation could not be delivered to {user}. They have not been called.',
+      group_call_unanswered:
+        'Nobody joined the call. The call window will close.',
     },
     setup: {
       title: 'Call Setup',
       notification: {
         no_cameras: 'No video cameras available',
+        media_access_failed: 'Could not access the camera or microphone',
       },
       tooltip: {
         mute: 'Mute',
@@ -420,15 +494,36 @@ export const en = {
     },
     presettings: {
       incoming_call: 'Incoming Call from {address}',
+      call_already_over: 'The call has already ended',
       btn: {
         start: 'Start Call',
         join: 'Join',
         decline: 'Decline',
       },
     },
+    connection: {
+      process: 'Connecting to participants',
+      result: '{count} out of {total} participants are connected',
+      fail: 'Unable to connect to participants',
+    },
   },
 
   call: {
+    text: {
+      participant_invited: 'Calling {user}…',
+      participant_connecting: '{user} is connecting to the call…',
+      participant_securing: 'Securing the connection with {user}…',
+      participant_establishing: 'Establishing the connection with {user}…',
+      participant_reconnecting: 'Reconnecting to {user}…',
+      participant_no_response: '{user} is not responding',
+      participant_not_reached: 'Could not deliver the invitation to {user}',
+      participant_declined: '{user} declined the call',
+      participant_failed: 'Could not connect to {user}',
+      participant_disconnected: '{user} is disconnected',
+      waiting_for_participants: 'Waiting for {count} more participant(s) to join…',
+      stream_about_to_start: "{user}'s camera stream is about to start…",
+      tap_to_unmute: 'Tap to enable sound',
+    },
     tooltip: {
       fullscreen_mode_enable: 'Enable full-screen mode',
       fullscreen_mode_disable: 'Disable full-screen mode',

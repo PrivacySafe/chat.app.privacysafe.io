@@ -6,17 +6,14 @@ import { resolve } from 'path';
 // @ts-ignore
 export default defineConfig(conf => {
   const appConf = originalConfigMaker(conf);
-  appConf.build.rollupOptions = {
+  appConf.build!.outDir = 'build/app';
+  appConf.build!.rolldownOptions = {
     input: {
-      "testApp": resolve(__dirname, './index.html')
+       testApp: resolve(__dirname, './index.html'),
     },
-    output: [
-      {
-        name: 'testApp',
-        dir: 'build/app'
-      }
-    ]
   };
-  appConf.resolve.alias['@tests'] = resolve(__dirname, './src');
+
+  // @ts-ignore
+  appConf.resolve!.alias!['@tests'] = resolve(__dirname, './src');
   return appConf;
 });

@@ -1,3 +1,13 @@
+import type { ConnectionStatus } from './peer.types';
+
+export interface ConnectingPeer {
+  peerAddr: string;
+  peerName: string;
+  status: ConnectionStatus;
+  /** Already-resolved i18n text for this peer's status. */
+  statusText: string;
+}
+
 export interface DeviceOption {
   videoDevLabel: string;
   opt: MediaStreamConstraints;

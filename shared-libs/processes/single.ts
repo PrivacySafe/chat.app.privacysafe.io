@@ -64,7 +64,7 @@ export class SingleProc {
     if (this.promise) {
       throw new Error('Process is already in progress.');
     }
-    return this.insertPromise(action());
+    return this.insertPromise(Promise.resolve().then(() => action()));
   }
 
   startOrChain<T>(action: Action<T>): Promise<T> {
@@ -72,7 +72,7 @@ export class SingleProc {
       const next = this.promise.then(() => action());
       return this.insertPromise(next);
     } else {
-      return this.insertPromise(action());
+      return this.insertPromise(Promise.resolve().then(() => action()));
     }
   }
 }

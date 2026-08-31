@@ -31,26 +31,30 @@
     isFullscreen,
     screenShareMode,
     isParticipantListOpen,
+    ownScreens,
     peerSharedStreams,
     peerVideos,
     activePeerVideos,
+    connectingPeers,
+    activeConnectingPeers,
+    waitingPeersCount,
     streams,
+    canShareScreen,
     openScreenShareChoice,
     toggleCamStatus,
     toggleMicStatus,
     toggleFullscreen,
     toggleScreenShareMode,
     endCall,
+    removeOwnScreen,
     doBeforeUnmount,
     doOnMounted,
   } = useInCalls();
 
   const participantListWidth = ref(192);
   const participantListWidthRange = [80, 600];
-  const participantListWidthCss = computed(() => `${participantListWidth.value}px`);
   const participantListHeight = ref(148);
   const participantListHeightRange = [64, 440];
-  const participantListHeightCss = computed(() => `${participantListHeight.value}px`);
 
   const bodyEl = useTemplateRef<HTMLDivElement>('screenShareBody');
   const resizerEl = useTemplateRef<HTMLDivElement>('resizer');
@@ -58,9 +62,11 @@
 
   const activePeersNumber = computed(() => size(activePeerVideos.value) + 1);
   const peersShare = computed(() => peerSharedStreams.value.length > 0);
-  const sharingOwnScreen = computed(() => !!streams.ownScreens);
+  const sharingOwnScreen = computed(() => (ownScreens.value?.length ?? 0) > 0);
   const screenShare = computed(() => peersShare.value || sharingOwnScreen.value);
-  const sharedThings = computed(() => [...(streams.ownScreens || []), ...peerSharedStreams.value]);
+  const sharedThings = computed(() => [...(ownScreens.value || []), ...peerSharedStreams.value]);
+
+  const gapInUiBetweenParticipants = 16;
 
   const participantColumnsNumber = computed(() => {
     if (activePeersNumber.value <= 4) {
@@ -73,21 +79,18 @@
 
     return 4;
   });
+
   const participantRowsNumber = computed(() =>
     Math.ceil(activePeersNumber.value / participantColumnsNumber.value),
   );
 
-  const gapInUiBetweenParticipants = 16;
-  const cssGapInUiBetweenParticipants = computed(() => `${gapInUiBetweenParticipants}px`);
-
-  const participantBlockWidth = computed(
-    () =>
-      `calc((100% - ${participantColumnsNumber.value - 1} * ${gapInUiBetweenParticipants}px) / ${participantColumnsNumber.value})`,
-  );
-  const participantBlockHeight = computed(
-    () =>
-      `calc((100% - ${participantRowsNumber.value - 1} * ${gapInUiBetweenParticipants}px) / ${participantRowsNumber.value})`,
-  );
+  const mainStyle = computed(() => ({
+    '--gap-in-ui-between-participants': `${gapInUiBetweenParticipants}px`,
+    '--participant-block-width': `calc((100% - ${participantColumnsNumber.value - 1} * ${gapInUiBetweenParticipants}px) / ${participantColumnsNumber.value})`,
+    '--participant-block-height': `calc((100% - ${participantRowsNumber.value - 1} * ${gapInUiBetweenParticipants}px) / ${participantRowsNumber.value})`,
+    '--participant-list-width': `${participantListWidth.value}px`,
+    '--participant-list-height': `${participantListHeight.value}px`,
+  }));
 
   function onDragstart() {
     return false;
@@ -138,7 +141,29 @@
 </script>
 
 <template>
-  <section :class="$style.call">
+  <section
+    :class="$style.call"
+    :style="mainStyle"
+  >
+    <div
+      v-if="activeConnectingPeers.length > 0 || waitingPeersCount > 0"
+      :class="$style.connectingBanner"
+    >
+      <div
+        v-for="peer in activeConnectingPeers"
+        :key="peer.peerAddr"
+        :class="[$style.connectingBannerItem, peer.status === 'timeout' && $style.connectingBannerItemMuted]"
+      >
+        {{ peer.statusText }}
+      </div>
+      <div
+        v-if="waitingPeersCount > 0"
+        :class="[$style.connectingBannerItem, $style.connectingBannerItemMuted]"
+      >
+        {{ t('call.text.waiting_for_participants', { count: waitingPeersCount }) }}
+      </div>
+    </div>
+
     <template v-if="!screenShare">
       <div :class="$style.participant">
         <own-video
@@ -156,6 +181,7 @@
         <peer-video
           :is-video-on="!peer.videoMuted"
           :is-audio-on="!peer.audioMuted"
+          :is-reconnecting="peer.isReconnecting"
           :stream="peer.vaStream"
           :peer-name="peer.peerName"
           :peer-addr="peer.peerAddr"
@@ -169,7 +195,10 @@
       :class="[$style.body, screenShareMode === 'column' && $style.bodyColumn]"
     >
       <div :class="$style.sharedScreens">
-        <view-shared-things :things="sharedThings" />
+        <view-shared-things
+          :things="sharedThings"
+          :remove-own-screen="removeOwnScreen"
+        />
       </div>
 
       <div :class="$style.list">
@@ -191,6 +220,7 @@
             <peer-video
               :is-video-on="!peer.videoMuted"
               :is-audio-on="!peer.audioMuted"
+              :is-reconnecting="peer.isReconnecting"
               :stream="peer.vaStream"
               :peer-name="peer.peerName"
               :peer-addr="peer.peerAddr"
@@ -250,6 +280,7 @@
           icon="outline-screen-share"
           :tooltip="t('call.tooltip.sharing_on')"
           tooltip-placement="top"
+          :disabled="!canShareScreen"
           @click.stop.prevent="openScreenShareChoice"
         />
 
@@ -270,7 +301,7 @@
           icon="round-phone-disabled"
           icon-color="var(--error-fill-default)"
           icon-position="left"
-          @click.stop.prevent="() => endCall(false)"
+          @click.stop.prevent="() => endCall()"
         >
           {{ t('va.btn.end_call') }}
         </ui3n-button>
@@ -280,6 +311,7 @@
     <call-participants
       v-if="isParticipantListOpen"
       :peer-videos="peerVideos"
+      :connecting-peers="connectingPeers"
       @close="isParticipantListOpen = false"
     />
   </section>
@@ -288,11 +320,6 @@
 <style lang="scss" module>
   .call {
     --call-actions-height: 64px;
-    --gap-in-ui-between-participants: v-bind(cssGapInUiBetweenParticipants);
-    --participant-block-width: v-bind(participantBlockWidth);
-    --participant-block-height: v-bind(participantBlockHeight);
-    --participant-list-width: v-bind(participantListWidthCss);
-    --participant-list-height: v-bind(participantListHeightCss);
 
     position: relative;
     width: 100%;
@@ -419,5 +446,41 @@
     justify-content: center;
     align-items: center;
     column-gap: var(--spacing-l);
+  }
+
+  .connectingBanner {
+    position: absolute;
+    left: 50%;
+    top: var(--spacing-m);
+    transform: translateX(-50%);
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    row-gap: var(--spacing-xs);
+    max-width: 80%;
+    pointer-events: none;
+  }
+
+  .connectingBannerItem {
+    padding: var(--spacing-s) var(--spacing-m);
+    border-radius: var(--spacing-s);
+    background-color: var(--info-fill-default);
+    color: var(--info-content-default);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow:
+      0 0 16px 0 var(--shadow-key-1),
+      0 0 4px 0 var(--shadow-key-2);
+  }
+
+  .connectingBannerItemMuted {
+    background-color: var(--warning-fill-default);
+    color: var(--warning-content-default);
   }
 </style>

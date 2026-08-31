@@ -21,6 +21,7 @@ import { setupMainApp } from '@tests/app-setup';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { initializeServices } from '@main/common/services/external-services';
 import { defer } from '@tests/lib-common/processes/deferred';
+import { stringifyErr } from '@tests/lib-common/exceptions/error';
 import { logErr } from './test-page-utils';
 
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
@@ -48,6 +49,10 @@ initializeServices()
   app.mount(`#test-app-vue`);
 })
 .catch(err => {
-  logErr(`Failed to initialize test app`, err);
+  // The reason goes into the message itself: the stand's log serializes the
+  // error argument with JSON.stringify, and an RPC exception comes out of that
+  // as `{}` - which is exactly what the run of 2026-08-14 printed instead of
+  // naming the service that timed out.
+  logErr(`Failed to initialize test app: ${stringifyErr(err)}`, err);
   reject(err);
 });

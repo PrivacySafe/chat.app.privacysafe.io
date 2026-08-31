@@ -18,6 +18,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-function-type */
 
 import { chatService } from "@main/common/services/external-services.ts";
+import { EVENTS_WAIT_BEFORE_PROBE_MILLIS, skipSpecIfServerSilentDuring } from "../libs-for-tests/jasmine-utils.js";
 import { ChatStore } from "@main/common/store/chat.store.ts";
 import { ChatsStore } from "@main/common/store/chats.store.ts";
 import { includesAddress, toCanonicalAddress } from "@shared/address-utils";
@@ -97,7 +98,7 @@ export function waitForEventsFromChatService(
     throw new Error(`Event count must be an integer equal or greater than one`);
   }
   const events: UpdateEvent[] = [];
-  return (new Promise((resolve, reject) => {
+  const wait = new Promise<UpdateEvent[]>((resolve, reject) => {
     const stop = chatService.watch({
       next: ev => {
         if ((ev.updatedEntityType === entity) && (ev.event === event)) {
@@ -114,7 +115,18 @@ export function waitForEventsFromChatService(
       error: reject,
       complete: () => reject(new Error(`Early completion of watching`))
     });
-  }));
+  });
+  // Events that hinge on message delivery never come when the ASMail server
+  // is unreachable, and the spec then dies on jasmine's timeout that names no
+  // cause. A wait that outlives this timer triggers a server probe, and a
+  // confirmed outage marks the spec pending instead. Purely local events
+  // (sync phantoms, DB updates) arrive in milliseconds, so the timer is moot
+  // for them.
+  return skipSpecIfServerSilentDuring(
+    `waiting for ${count} '${entity}/${event}' event(s) from chat service`,
+    EVENTS_WAIT_BEFORE_PROBE_MILLIS,
+    wait,
+  );
 }
 
 export async function removeAllChats(
@@ -156,4 +168,25 @@ export async function createGroupChatWith(
   await sleep(5000);
 
   return chatId!;
+}
+
+/**
+ * Polls a condition until it holds or the deadline passes, telling which happened.
+ *
+ * For outcomes that arrive from the platform rather than from a call this spec
+ * makes - a delivery reporting its result, say. A fixed sleep would have to be as
+ * long as the worst case observed on a bad server (tens of seconds), which every
+ * good run would then also pay.
+ */
+export async function pollUntil(
+  isDone: () => Promise<boolean>, timeoutMillis: number, stepMillis = 500,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMillis;
+  while (Date.now() < deadline) {
+    if (await isDone()) {
+      return true;
+    }
+    await sleep(stepMillis);
+  }
+  return await isDone();
 }

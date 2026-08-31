@@ -42,7 +42,6 @@ export const useUiOutgoingStore = defineStore('ui-outgoing', () => {
 
     if (allDone) {
       removeRecordFromSendingProgressesList(chatMsgInfo);
-
       return;
     }
 

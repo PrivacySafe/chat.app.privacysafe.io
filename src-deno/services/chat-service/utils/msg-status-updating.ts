@@ -15,23 +15,66 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type { ChatMessageId, UpdatedMsgStatusSysMsgData } from '../../../../types/asmail-msgs.types.ts';
+import type { ChatIdObj, ChatMessageId, UpdatedMsgStatusSysMsgData } from '../../../../types/asmail-msgs.types.ts';
 import type { MessageStatus } from '../../../../types/chat.types.ts';
 import type { ChatDbEntry, ChatSrvEmit, DB, MsgDbEntry } from '../../../types/index.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
-import { sendSystemMessage } from '../../../utils/send-chat-msg.ts';
+import { serializeDeliveryError } from '../../../utils/delivery-errors.ts';
+import { sendSystemMessage, makeMsgStatusPhantom, queueSyncPhantom } from '../../mail-sending-service/index.ts';
 import { chatIdOfChat, recipientsInChat } from './_chats-related-methods.ts';
+import { msgEntityId } from './sync-versions.ts';
+import { LIFETIME_DAYS_IN_AUXILIARY_DB } from '../../../../shared-libs/constants/db.ts';
 
 export async function msgStatusUpdating({
   data,
   emit,
   ownAddr,
+  getAppDeviceId,
+  nextSyncStamp,
 }: {
   data: DB;
   emit: ChatSrvEmit;
   ownAddr: string;
+  getAppDeviceId: () => string;
+  nextSyncStamp: () => Promise<number>;
 }) {
-  async function updateMessageStatus(chatMsgId: ChatMessageId, msgStatus: MessageStatus): Promise<ChatDbEntry> {
+  /**
+   * Stamps a locally made status change and syncs it to the user's own devices.
+   *
+   * The stamp and the phantom are written in one step, so that a spent
+   * ordering token cannot be left without the phantom meant to spend it - see
+   * sync-phantoms.ts.
+   */
+  async function stampAndSyncStatus(
+    chatId: ChatIdObj,
+    value: UpdatedMsgStatusSysMsgData['value'],
+  ): Promise<void> {
+    const syncStamp = await nextSyncStamp();
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeMsgStatusPhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp: syncStamp,
+        value,
+      }),
+      versions: [
+        {
+          entityType: 'msg',
+          entityId: msgEntityId(chatId, value.chatMessageId),
+          aspect: 'status',
+          ts: syncStamp,
+          deviceId: getAppDeviceId(),
+        },
+      ],
+    });
+  }
+
+  async function updateMessageStatus(
+    chatMsgId: ChatMessageId,
+    msgStatus: MessageStatus,
+  ): Promise<{ chat: ChatDbEntry; updatedMsg: MsgDbEntry }> {
     const chat = data.findChat(chatMsgId.chatId);
     if (!chat) {
       throw makeDbRecordException({ chatNotFound: true });
@@ -46,11 +89,11 @@ export async function msgStatusUpdating({
     }
     emit.message.updated(updatedMsg);
 
-    return chat;
+    return { chat, updatedMsg };
   }
 
   async function markMessageAsReadNotifyingSender({ chatId, chatMessageId }: ChatMessageId): Promise<void> {
-    const chat = await updateMessageStatus({ chatId, chatMessageId }, 'read');
+    const { chat } = await updateMessageStatus({ chatId, chatMessageId }, 'read');
 
     // notify peers
     const recipients = recipientsInChat(chat, ownAddr);
@@ -62,6 +105,9 @@ export async function msgStatusUpdating({
         value: { chatMessageId, status: 'read' },
       },
     });
+
+    // notify own devices - unread counters and read status must match everywhere
+    await stampAndSyncStatus(chatId, { chatMessageId, status: 'read' });
   }
 
   async function handleUpdateMessageStatus(
@@ -80,39 +126,75 @@ export async function msgStatusUpdating({
       return;
     }
 
-    // update local data, if needed
+    // Already applied (also covers redelivery of the same status) - skip to
+    // avoid a redundant own-device sync phantom below.
+    // XXX this should still add to history, without changing status
+    if (msg.status === 'read' || msg.status === status) {
+      return;
+    }
+
+    // update local data
     let updatedMsg: MsgDbEntry | undefined;
     if (chat.isGroupChat) {
       // XXX current code is simplistic.
       // XXX may want/need to update history
-
-      if (msg.status === 'read') {
-        // XXX this should still add to history, without changing status
-        return;
-      }
-
       updatedMsg = await data.updateMessageRecord(id, {
         status,
       });
     } else {
       // XXX may want to update history
-
-      if (msg.status === 'read') {
-        // XXX this should still add to history, without changing status
-        return;
-      }
-
       updatedMsg = await data.updateMessageRecord(id, {
         status,
       });
     }
 
     emit.message.updated(updatedMsg);
+
+    // Own other devices only learn about this if this device explicitly tells
+    // them - the peer's 'update:status' message was received by this one device.
+    if (updatedMsg) {
+      await stampAndSyncStatus(chatId, { chatMessageId, status });
+    }
+  }
+
+  async function resolveStuckSyncingSelfMessages(): Promise<void> {
+    const cutoff = Date.now() - LIFETIME_DAYS_IN_AUXILIARY_DB;
+    const stuckMsgs = data.getMessagesWithSyncingSelfStatus().filter(msg => msg.timestamp < cutoff);
+
+    for (const msg of stuckMsgs) {
+      const chatId: ChatIdObj = {
+        isGroupChat: !!msg.groupChatId,
+        chatId: (msg.groupChatId || msg.otoPeerCAddr)!,
+      };
+      const history = msg.history || { changes: [] };
+      if (!history.changes) {
+        history.changes = [];
+      }
+      history.changes.push({
+        user: ownAddr,
+        timestamp: Date.now(),
+        type: 'error',
+        value: {
+          [ownAddr]: serializeDeliveryError(
+            new Error('Originating device never confirmed delivery of this message'),
+          ),
+        },
+      });
+
+      const updatedMsg = await data.updateMessageRecord(
+        { chatId, chatMessageId: msg.chatMessageId },
+        { status: 'error', history },
+      );
+      if (updatedMsg) {
+        emit.message.updated(updatedMsg);
+      }
+    }
   }
 
   return {
     updateMessageStatus,
     markMessageAsReadNotifyingSender,
     handleUpdateMessageStatus,
+    resolveStuckSyncingSelfMessages,
   };
 }

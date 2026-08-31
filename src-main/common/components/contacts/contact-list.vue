@@ -17,7 +17,7 @@
 
 <script lang="ts" setup>
 import { computed, VNode } from 'vue';
-import { Ui3nButton } from '@v1nt1248/3nclient-lib';
+import { Ui3nButton, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
 import { mailReg } from '@v1nt1248/3nclient-lib/utils';
 import type { PersonView } from '~/index';
 import ContactListItem from './contact-list-item.vue';
@@ -29,6 +29,8 @@ interface ContactListProps {
   nonSelectableContacts?: (PersonView & { displayName: string })[];
   withoutAnchor?: boolean;
   readonly?: boolean;
+  /** The parent's "add contact" action is in flight: disable the add button and show a spinner. */
+  adding?: boolean;
 }
 
 const props = withDefaults(defineProps<ContactListProps>(), {
@@ -38,6 +40,7 @@ const props = withDefaults(defineProps<ContactListProps>(), {
   nonSelectableContacts: () => [],
   withoutAnchor: false,
   readonly: false,
+  adding: false,
 });
 const emits = defineEmits<{
   (event: 'select', value: PersonView & { displayName: string }): void,
@@ -82,7 +85,7 @@ function selectContact(contact: PersonView & { displayName: string }) {
 function addNewContact(ev: Event) {
   ev.stopPropagation();
   ev.preventDefault();
-  if (isMailValid.value) {
+  if (isMailValid.value && !props.adding) {
     emits('add:new', props.searchText);
   }
 }
@@ -134,8 +137,15 @@ function addNewContact(ev: Event) {
       <ui3n-button
         type="secondary"
         :size="'small'"
-        v-on="!isMailValid ? {} : { click: (ev: Event) => addNewContact(ev) }"
+        :disabled="!isMailValid || adding"
+        @click="addNewContact"
       >
+        <ui3n-progress-circular
+          v-if="adding"
+          indeterminate
+          size="16"
+          :class="$style.addSpinner"
+        />
         Add {{ searchText }}
       </ui3n-button>
     </div>
@@ -168,5 +178,9 @@ function addNewContact(ev: Event) {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.addSpinner {
+  margin-right: var(--spacing-xs);
 }
 </style>

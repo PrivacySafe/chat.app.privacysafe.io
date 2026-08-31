@@ -21,9 +21,48 @@ import { includesAddress } from '../../../../shared-libs/address-utils.ts';
 import { generateChatMessageId } from '../../../../shared-libs/chat-ids.ts';
 import { makeMsgDbEntry, msgDbEntryForIncomingSysMsg } from './_msgs-related-methods.ts';
 import { excludeAddrFrom, chatIdOfChat } from './_chats-related-methods.ts';
-import { sendSystemMessage } from '../../../utils/send-chat-msg.ts';
+import { sendSystemMessage, makeSystemEventPhantom, queueSyncPhantom } from '../../mail-sending-service/index.ts';
+import { chatEntityId } from './sync-versions.ts';
 
-export async function chatSettingUp({ data, emit, ownAddr }: { data: DB; emit: ChatSrvEmit; ownAddr: string }) {
+export async function chatSettingUp({
+  data,
+  emit,
+  ownAddr,
+  getAppDeviceId,
+  nextSyncStamp,
+}: {
+  data: DB;
+  emit: ChatSrvEmit;
+  ownAddr: string;
+  getAppDeviceId: () => string;
+  nextSyncStamp: () => Promise<number>;
+}) {
+  async function stampAndSyncSettings(
+    chatId: ChatIdObj,
+    timestamp: number,
+    chatSystemData: UpdatedChatSettingsSysMsgData,
+  ): Promise<void> {
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeSystemEventPhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp,
+        chatSystemData,
+      }),
+      versions: [
+        {
+          entityType: 'chat',
+          entityId: chatEntityId(chatId),
+          aspect: 'settings',
+          ts: timestamp,
+          deviceId: getAppDeviceId(),
+        },
+      ],
+    });
+  }
+
   async function setUp(chatId: ChatIdObj, updatedData: Partial<ChatSettings>): Promise<void> {
     const chat = data.findChat(chatId);
     if (!chat) {
@@ -48,11 +87,17 @@ export async function chatSettingUp({ data, emit, ownAddr }: { data: DB; emit: C
 
     emit.chat.updated(updatedChat);
 
-    const { chatMessageId, timestamp } = generateChatMessageId();
     const chatSystemData: UpdatedChatSettingsSysMsgData = {
       event: 'update:settings',
       value: { settings },
     };
+
+    // Stamped and synced right where the change is applied - see the matching
+    // comment in renameChat() (chat-renaming.ts).
+    const syncStamp = await nextSyncStamp();
+    await stampAndSyncSettings(chatId, syncStamp, chatSystemData);
+
+    const { chatMessageId, timestamp } = generateChatMessageId();
     const msg = makeMsgDbEntry('system', chatMessageId, {
       ...(chat.isGroupChat && { groupChatId: chat.chatId }),
       ...(!chat.isGroupChat && { otoPeerCAddr: chat.peerCAddr }),
@@ -82,6 +127,16 @@ export async function chatSettingUp({ data, emit, ownAddr }: { data: DB; emit: C
       return;
     }
 
+    const chatId = chatIdOfChat(chat);
+    const existingMsg = await data.getMessage({ chatId, chatMessageId });
+    if (existingMsg) {
+      // Already processed - see the matching comment in handleRegularMsg()
+      // (msg-sending.ts). Note updateGroupChatRecord()/updateOTOChatRecord()
+      // always bump lastUpdatedAt, so `if (!updatedChat) return` below never
+      // actually catches a redelivery on its own.
+      return;
+    }
+
     const { settings } = chatSystemData.value;
     const updatedChat = chat.isGroupChat
       ? await data.updateGroupChatRecord(chat.chatId, { settings })
@@ -91,7 +146,14 @@ export async function chatSettingUp({ data, emit, ownAddr }: { data: DB; emit: C
     }
     emit.chat.updated(updatedChat);
 
-    const chatId = chatIdOfChat(chat);
+    // Peer-originated change: stamped with the server's deliveryTS and the
+    // sender, so every own device derives the same token - see the matching
+    // comment in handleUpdateChatName() (chat-renaming.ts).
+    await data.setSyncVersion('chat', chatEntityId(chatId), 'settings', {
+      ts: timestamp,
+      deviceId: sender,
+    });
+
     const sysMsg = msgDbEntryForIncomingSysMsg(sender, chatId, chatMessageId, timestamp, chatSystemData);
     await data.addMessage(sysMsg);
     emit.message.added(sysMsg);

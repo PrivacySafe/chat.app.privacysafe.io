@@ -14,8 +14,16 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import type { ChatMessageReaction, OutgoingMessageStatus } from './chat.types.ts';
-import type { ChatSettings } from '../src-deno/types/index.ts';
+import type {
+  ChatMessageAttachmentsInfo,
+  ChatMessageHistory,
+  ChatMessageReaction,
+  GroupChatStatus,
+  MessageStatus,
+  OutgoingMessageStatus,
+  SingleChatStatus,
+} from './chat.types.ts';
+import type { ChatSettings, MsgDbEntry } from '../src-deno/types/index.ts';
 
 export type ASMailSendException = web3n.asmail.ASMailSendException;
 export type ServLocException = web3n.ServLocException;
@@ -42,8 +50,12 @@ export interface ChatMessageJsonBodyV1Base {
   v: 1;
 
   /**
-   * groupChatId of a group chat. Missing id implies one-to-one chat.
-   * Invitations don't have this field.
+   * groupChatId of a group chat. Missing id implies one-to-one chat, whose id
+   * is then the sender's address, taken from the envelope. Invitations and
+   * synchronizations don't have this field: they state their chat outright in
+   * `chatId` (ChatSyncMsgV1), because a message addressed to one's own address
+   * has no peer address to derive it from. Signals of a call do both - see
+   * ChatWebRTCMsgV1.chatId.
    */
   groupChatId?: string;
 }
@@ -94,14 +106,50 @@ export interface ChatInvitationMsgV1 extends ChatMessageJsonBodyV1Base {
 
 export interface PhantomSyncMsgDataBasedOnRegularMsgV1 extends ChatRegularMsgV1 {
   text: string;
-  attachments: ChatOutgoingMessage['attachments'];
+
+  /**
+   * Absent when the message has no files. An empty array would be truthy on the
+   * receiving device and read there as "there are files, but only on the device
+   * that sent this" - phantoms of earlier builds do send [], so the receiving
+   * side normalizes it away.
+   */
+  attachments?: ChatMessageAttachmentsInfo[];
+
+  /**
+   * Status of the message on the device that has originated it, at the moment
+   * of sending this phantom. Phantom is sent optimistically, right after the
+   * message is placed into a database of the originating device, i.e. before
+   * the delivery to peers is done. Therefore, at this point status is usually
+   * a non-terminal one ('sending'), and it is followed later by
+   * 'update:msg-record' phantom with a terminal status ('sent' / 'error').
+   * Field is optional for compatibility with phantoms of previous builds.
+   */
+  status?: MessageStatus;
+
+  history?: ChatMessageHistory;
+
+  /**
+   * Set when the record being carried is of an *incoming* message. Fresh
+   * records of incoming messages are not phantomed - every device reads the
+   * peer's original from the shared inbox - but a resync answer (see
+   * ResyncMsgRecordSysMsgData) repeats whatever record was asked for, and
+   * without these fields an incoming message would be restored as the user's
+   * own, with its sender lost.
+   */
+  isIncomingMsg?: boolean;
+
+  /** Sender of an incoming message in a group chat, see isIncomingMsg. */
+  groupSender?: string;
 }
 
-export interface ChatSyncMsgV1 extends ChatMessageJsonBodyV1Base {
+export interface ChatSyncMsgV1<
+  T extends PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1,
+> extends ChatMessageJsonBodyV1Base {
   chatMessageType: 'synchronization';
+  chatMessageId?: string;
   sourceDeviceId: string;
   chatId: ChatIdObj;
-  value: PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1;
+  value: T;
   timestamp: number;
 }
 
@@ -118,6 +166,15 @@ export interface GroupChatParameters {
   addr?: string;
   members?: Record<string, { hasAccepted: boolean }>;
   admins?: string[];
+
+  /**
+   * status and settings are only populated for the own-devices sync channel
+   * (never sent to a peer as part of the actual invitation) - they let a
+   * chat created from a sync phantom mirror the real local chat state
+   * instead of guessing it.
+   */
+  status?: GroupChatStatus;
+  settings?: ChatSettings;
 }
 
 /**
@@ -127,6 +184,13 @@ export interface GroupChatParameters {
 export interface OneToOneChatParameters {
   type: 'oto-chat-invite';
   name: string;
+
+  /**
+   * status and settings are only populated for the own-devices sync channel,
+   * see the matching comment on GroupChatParameters.
+   */
+  status?: SingleChatStatus;
+  settings?: ChatSettings;
 }
 
 export type StoredInvitationParams =
@@ -139,7 +203,10 @@ export interface AcceptedInvitationReference {
   type: 'invite-acceptance';
 
   /**
-   * initiator is an address that has sent the original invitation.
+   * initiator is an address that has sent the original invitation: in a group
+   * chat it is the sender of that invitation, in a one-to-one chat it is the
+   * chat's peer. Not optional: it is always known to the accepting side, which
+   * sends the acceptance to that very address.
    */
   initiator: string;
 
@@ -167,6 +234,22 @@ export interface UpdatedMembersInvitationData {
 
 export interface ChatWebRTCMsgV1 extends ChatMessageJsonBodyV1Base {
   chatMessageType: 'webrtc-call';
+  chatMessageId?: string;
+
+  /**
+   * Chat this signal belongs to, stated outright rather than left to be derived
+   * from the envelope. Same reason ChatSyncMsgV1 carries the field: a signal
+   * addressed to the user's *own* address (see sendCallHandledElsewhere) would
+   * otherwise be read as belonging to a one-to-one chat with oneself, which
+   * does not exist - and the message would be discarded as "no known chat".
+   *
+   * Optional for compatibility with builds that predate it, which is also why
+   * `groupChatId` keeps being sent alongside. Trusted only when the sender is
+   * this very user: letting a peer name the chat would let it inject
+   * signalling into a one-to-one chat it is not part of.
+   */
+  chatId?: ChatIdObj;
+
   webrtcMsg: WebRTCMsg;
 }
 
@@ -175,7 +258,7 @@ export type ChatMessageJsonBody =
   | ChatRegularMsgV1
   | ChatInvitationMsgV1
   | ChatWebRTCMsgV1
-  | ChatSyncMsgV1;
+  | ChatSyncMsgV1<PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1>;
 
 export type ChatMessageType = 'regular' | 'system' | 'invitation' | 'webrtc-call' | 'synchronization';
 
@@ -258,7 +341,15 @@ export interface UpdatedMsgStatusSysMsgData {
   event: 'update:status';
   value: {
     chatMessageId: string;
-    status: 'sent' | 'read';
+    status: MessageStatus;
+  };
+}
+
+export interface UpdatedMsgRecordSysMsgData {
+  event: 'update:msg-record';
+  value: {
+    chatMessageId: string;
+    data: Partial<MsgDbEntry> | null;
   };
 }
 
@@ -278,10 +369,31 @@ export interface UpdatedMsgBodySysMsgData {
   };
 }
 
+/**
+ * Request to the user's own other devices to re-send the record of a message
+ * this device doesn't have. Sent when an update phantom arrives for a record
+ * that never did (its carrier lost in delivery), instead of waiting for a
+ * record that can never come: the update sits in the orphan buffer, and this
+ * is what refills the buffer's missing target.
+ *
+ * Travels only the own-devices sync channel (a phantom), never goes to peers.
+ * Any device that has the record answers with a repeated record phantom; a
+ * device that doesn't stays silent. Repeated answers and answers racing the
+ * record's late arrival are safe: record creation is idempotent on the
+ * receiving side (existing-record check, tombstones, ordering tokens).
+ */
+export interface ResyncMsgRecordSysMsgData {
+  event: 'resync:msg-record';
+  value: {
+    chatMessageId: string;
+  };
+}
+
 export interface AcceptedMsgBodySysMsgData {
   event: 'accept:invitation';
   value: {
     sender: string;
+    status: GroupChatStatus | SingleChatStatus;
   };
 }
 
@@ -300,6 +412,23 @@ export interface WebRTCMsgBodySysMsgData {
     sender: string;
     subType: 'outgoing-call-cancelled' | 'incoming-call-cancelled';
     chatId: ChatIdObj;
+    /**
+     * Which call this is about - the same id as `WebRTCMsg.callSessionId`, so
+     * that the two ways of hearing that a call was cancelled can be told apart
+     * by the receiver.
+     *
+     * Needed because this message travels the ordinary delivery queue and stays
+     * in the inbox long after it was first handled (a start-up catch-up scan
+     * replays it), while the signal it backs up carries a session id and is
+     * refused when it names a call the receiver is not in. Without the id, an
+     * old cancellation was indistinguishable from a fresh one and ended the call
+     * that had just started.
+     *
+     * Optional: builds that predate the field send none, and a cancellation with
+     * no id is not acted upon beyond the chat history (see
+     * admitsCallCancelSysMsg in video-chat-service/utils/call-state.ts).
+     */
+    callSessionId?: string;
   };
 }
 
@@ -312,11 +441,13 @@ export type ChatSystemMessageData =
   | UpdatedChatNameSysMsgData
   | UpdatedChatSettingsSysMsgData
   | UpdatedMsgStatusSysMsgData
+  | UpdatedMsgRecordSysMsgData
   | UpdatedMsgReactionSysMsgData
   | UpdatedMsgBodySysMsgData
   | AcceptedMsgBodySysMsgData
   | CallMsgBodySysMsgData
-  | WebRTCMsgBodySysMsgData;
+  | WebRTCMsgBodySysMsgData
+  | ResyncMsgRecordSysMsgData;
 
 export interface WebRTCMsg {
   // XXX should we have more explicit stages here?
@@ -329,9 +460,23 @@ export interface WebRTCMsg {
 
   /**
    * stage
+   * - start: initial call setup
+   * - signalling: WebRTC negotiation
+   * - disconnect: call termination
+   * - heartbeat: periodic keepalive for active calls (re-join feature)
    */
-  stage: 'start' | 'signalling' | 'disconnect';
+  stage: 'start' | 'signalling' | 'disconnect' | 'heartbeat';
   id: number;
+  /**
+   * Identifies the call this signal belongs to: `<hostAddr>#<host counter>`.
+   * Generated by the host when it creates the call and echoed by clients in
+   * every signal of that call, so a signal of a finished call can be told
+   * apart from a signal of the current one without guessing from its age.
+   *
+   * Optional for compatibility with builds that predate it: a signal without
+   * the field falls back on the age-based rules (see call-state.ts).
+   */
+  callSessionId?: string;
   data: WebRTCOffBandMessage | WebRTCOffBandMessage[];
 }
 
@@ -339,6 +484,123 @@ export interface WebRTCOffBandMessage {
   description?: RTCSessionDescription;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   candidate?: any;
+  /**
+   * Host address of an active call. Used in 'heartbeat' messages so that
+   * participants who left can re-join as CLIENT connecting to this host.
+   */
+  hostAddr?: string;
+  /**
+   * Used in 'call-full' rejection: host sends this when the call has reached
+   * its maximum capacity (MAX_CALL_PARTICIPANTS). The client receiving this
+   * should show a notification and close the call UI.
+   */
+  callFull?: {
+    maxParticipants: number;
+    currentParticipants: number;
+  };
+  /**
+   * Used when declining an incoming call: the invited participant tells
+   * the host that they declined the call (as opposed to simply being
+   * unreachable).
+   */
+  callDeclined?: {
+    by: string;
+  };
+  /**
+   * Sent by a client that is re-joining a group call it left earlier, at the
+   * moment the user presses "Join Call" - ahead of its SDP offer, which is by
+   * far the largest message in the protocol (13-21 KB against this one's
+   * ~250 B) and therefore the slowest to arrive. It buys the other
+   * participants ~40s of knowing that someone is on the way; nothing else
+   * tells them until the offer lands.
+   */
+  rejoining?: {
+    by: string;
+  };
+  /**
+   * Sent inside a 'heartbeat' stage message by a peer that received WebRTC
+   * signals without the preceding 'start' (lost in ASMail delivery): it asks
+   * the host to re-send 'start' so the incoming-call UI can be shown.
+   * `requester` is the address asking for the re-send, and `callSessionId`
+   * is the session those orphaned signals belong to, so the host can refuse
+   * a request about a call that is already over.
+   *
+   * Earlier builds sent this as a bare `true` with `requester` in the field
+   * below; both forms are accepted on receipt, only the object one is sent.
+   */
+  requestStart?:
+    | true
+    | {
+        requester: string;
+        callSessionId?: string;
+      };
+  /** Only present with the legacy flat form of `requestStart`. */
+  requester?: string;
+  /**
+   * Sent by a device to the *own* address of its user, when the user answered
+   * or declined an incoming call on it. An ASMail inbox is shared by all of a
+   * user's devices, so every one of them rings; without this the others keep
+   * ringing until the call itself ends.
+   *
+   * `deviceId` is the device that handled the call, so its own copy of this
+   * message (delivery to own address reaches the sender too) can be skipped.
+   * A device seeing someone else's `deviceId` ends its ringing call *silently*:
+   * peers are keyed by address, so anything it sent to the host would be taken
+   * as coming from the device that actually joined.
+   */
+  callHandledElsewhere?: {
+    deviceId: string;
+    joined: boolean;
+    /**
+     * Set when the sender is already *in* the call, rather than answering it.
+     *
+     * Sent only in reply to another device's notice, i.e. only when two devices
+     * did answer within the delivery delay of the first notice. It settles that
+     * contention where the tie-break on device ids cannot: a device with media
+     * running has passed a point the one still on the setup screen has not.
+     * Optional, so a build that predates it simply falls back to the tie-break.
+     */
+    inCall?: true;
+    /**
+     * Set when the sender is *leaving* a group call that goes on without it,
+     * rather than taking one: the hold its earlier notice put on the user's
+     * other devices is over, and any of them may join now.
+     *
+     * A device that yielded a call keeps its "Join Call" button down for as
+     * long as the call is held elsewhere (see admitsHeartbeat) - otherwise two
+     * devices of one address end up in one call, which the host cannot even
+     * tell apart. Nothing else would lift that hold in time: the host's
+     * heartbeats say a call is on, not who of this user's devices is in it, and
+     * waiting for the record to expire takes minutes.
+     *
+     * `joined` stays true on such a notice, so a build that predates this field
+     * reads it as the ordinary "answered elsewhere" it has always read - the
+     * call was indeed answered there - and behaves exactly as before.
+     */
+    left?: true;
+  };
+  /**
+   * Marks a 'heartbeat' that one device of this user re-sent to the user's own
+   * address, on behalf of the host whose beat it had just accepted.
+   *
+   * It exists because of a platform defect: an inbox subscription can go blind
+   * to one correspondent while staying live for others. In the run of
+   * 2026-08-16 the second device of a user received NOTHING from the host - not
+   * one of the four copies of 'start', not one heartbeat - while messages from
+   * its own address kept arriving normally, and a scan of the inbox found every
+   * one of the missing messages sitting there. So the "Join Call" button never
+   * appeared on it. Sending to one's own address is the one path that demonstrably
+   * still works in that state, and it is the same path callHandledElsewhere
+   * already uses.
+   *
+   * `byDeviceId` is the relaying device: its own copy of the message (delivery
+   * to one's own address comes back to the sender) is recognized by it and
+   * ignored, and a relayed beat is NEVER relayed on - that pair is the whole
+   * loop protection.
+   */
+  relayedRejoin?: {
+    byDeviceId: string;
+  };
 }
 
 export interface ChatIncomingMessage extends web3n.asmail.IncomingMessage {

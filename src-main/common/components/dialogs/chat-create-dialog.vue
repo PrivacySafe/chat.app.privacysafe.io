@@ -16,11 +16,12 @@
 -->
 
 <script lang="ts" setup>
-  import { ref, computed, onBeforeMount } from 'vue';
+  import { ref, computed, inject, onBeforeMount } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import keyBy from 'lodash/keyBy';
   import { capitalize } from '@v1nt1248/3nclient-lib/utils';
+  import { NOTIFICATIONS_KEY, type NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import {
     Ui3nButton,
     Ui3nChip,
@@ -28,10 +29,11 @@
     type Ui3nDialogComponentProps,
     type Ui3nDialogEvent,
     Ui3nInput,
+    Ui3nIcon,
     Ui3nProgressCircular,
     Ui3nTooltip,
   } from '@v1nt1248/3nclient-lib';
-  import type { ChatIdObj, PersonView } from '~/index';
+  import type { ChatIdObj, ContactsException, PersonView } from '~/index';
   import { useChatsStore } from '@main/common/store/chats.store';
   import { useAppStore } from '@main/common/store/app.store';
   import { useContactsStore } from '@main/common/store/contacts.store';
@@ -46,6 +48,7 @@
   }>();
 
   const { t } = useI18n();
+  const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const { user } = storeToRefs(useAppStore());
 
@@ -56,6 +59,7 @@
   const { createNewOneToOneChat, createNewGroupChat } = useChatsStore();
 
   const isProcessing = ref(false);
+  const isAddingContact = ref(false);
   const searchText = ref<string>('');
   const selectedContacts = ref<(PersonView & { displayName: string })[]>([]);
   const groupChatModeStep = ref(1);
@@ -138,7 +142,29 @@
   }
 
   async function addNewContact(mail: string) {
-    await addContact(mail);
+    if (isAddingContact.value) {
+      return;
+    }
+    isAddingContact.value = true;
+    try {
+      await addContact(mail);
+    } catch (err) {
+      // Called from an emit listener, so a rejection here used to end up as
+      // an Uncaught (in promise) with nothing shown to the user.
+      const contactsErr = err as Partial<ContactsException>;
+      const key = contactsErr?.contactAlreadyExists
+        ? 'chat.contact.add.error.exists'
+        : (contactsErr?.failASMailCheck
+          ? 'chat.contact.add.error.check_failed'
+          : 'chat.contact.add.error.unknown');
+      console.error(`Failed to add contact ${mail}:`, err);
+      notification.$createNotice({
+        type: 'error',
+        content: t(key, { addr: mail }),
+      });
+    } finally {
+      isAddingContact.value = false;
+    }
   }
 
   onBeforeMount(async () => {
@@ -157,10 +183,14 @@
         <template v-if="!isGroupChatMode || (isGroupChatMode && groupChatModeStep === 1)">
           <ui3n-input
             v-model="searchText"
-            icon="round-search"
             clearable
+            :disabled="isAddingContact"
             :class="$style.chatCreateDialogInput"
-          />
+          >
+            <template #prepend-icon>
+              <ui3n-icon icon="round-search" />
+            </template>
+          </ui3n-input>
 
           <div :class="$style.chatCreateDialogContent">
             <template v-if="selectedContacts.length > 1">
@@ -204,6 +234,7 @@
               :search-text="searchText"
               :selected-contacts="selectedContacts"
               :non-selectable-contacts="nonSelectableContacts"
+              :adding="isAddingContact"
               @select="selectContacts"
               @add:new="addNewContact"
             />

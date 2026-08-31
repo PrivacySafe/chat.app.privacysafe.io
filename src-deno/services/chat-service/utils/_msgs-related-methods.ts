@@ -15,16 +15,25 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import type {
+import {
   ChatIdObj,
   ChatIncomingMessage,
+  ChatInvitationMsgV1,
   ChatMessageJsonBody,
+  ChatSyncMsgV1,
   ChatSystemMessageData,
+  ChatSystemMsgV1,
   InvitationProcessMsgData,
+  PhantomSyncMsgDataBasedOnRegularMsgV1,
   StoredInvitationParams,
   UpdatedMembersInvitationData,
 } from '../../../../types/asmail-msgs.types.ts';
-import type { ChatMessageAttachmentsInfo, ChatMessageView, RegularMsgView } from '../../../../types/chat.types.ts';
+import type {
+  ChatMessageAttachmentsInfo,
+  ChatMessageView,
+  MessageStatus,
+  RegularMsgView,
+} from '../../../../types/chat.types.ts';
 import type {
   ChatDbEntry,
   FileStoreService,
@@ -34,6 +43,9 @@ import type {
 } from '../../../types/index.ts';
 import { toCanonicalAddress } from '../../../../shared-libs/address-utils.ts';
 import { inviteChatId, isString } from './_common.ts';
+import { removeMessageFromInbox, removeMsgFromDelivery } from '../../../utils/inbox-utils.ts';
+
+export { removeMessageFromInbox, removeMsgFromDelivery };
 
 export function msgDbEntryToChatMessageView(data: MsgDbEntry): ChatMessageView {
   const {
@@ -52,6 +64,23 @@ export function msgDbEntryToChatMessageView(data: MsgDbEntry): ChatMessageView {
 
   const isGroupChat = !!groupChatId;
 
+  let systemData: ChatSystemMessageData | undefined;
+  let inviteData: StoredInvitationParams | undefined;
+
+  if (chatMessageType === 'system' && body) {
+    try {
+      systemData = JSON.parse(body) as ChatSystemMessageData;
+    } catch {
+      systemData = undefined;
+    }
+  } else if (chatMessageType === 'invitation' && body) {
+    try {
+      inviteData = JSON.parse(body) as StoredInvitationParams;
+    } catch {
+      inviteData = undefined;
+    }
+  }
+
   return {
     chatId: { isGroupChat, chatId: isGroupChat ? groupChatId! : otoPeerCAddr! },
     chatMessageId,
@@ -63,8 +92,8 @@ export function msgDbEntryToChatMessageView(data: MsgDbEntry): ChatMessageView {
     status: status || undefined,
     attachments: attachments || undefined,
     ...(chatMessageType === 'regular' && { body }),
-    ...(chatMessageType === 'system' && body && { systemData: JSON.parse(body!) as ChatSystemMessageData }),
-    ...(chatMessageType === 'invitation' && body && { inviteData: JSON.parse(body) as StoredInvitationParams }),
+    ...(systemData && { systemData }),
+    ...(inviteData && { inviteData }),
   } as ChatMessageView;
 }
 
@@ -122,7 +151,9 @@ export function msgViewFromDbEntry(
     isGroupChat: !!groupChatId,
     chatId: groupChatId ? groupChatId : otoPeerCAddr!,
   };
-  const sender = chatId.isGroupChat ? groupSender! : isIncomingMsg ? otoPeerCAddr! : ownAddr;
+  const sender = chatId.isGroupChat
+    ? (groupSender || ownAddr)
+    : (isIncomingMsg ? otoPeerCAddr! : ownAddr);
 
   switch (chatMessageType) {
     case 'regular':
@@ -223,23 +254,6 @@ export async function removeAttachmentsOfOutgoingMsg(
   }
 }
 
-export async function removeMessageFromInbox(msgId: string, logInfo?: string): Promise<void> {
-  if (logInfo) {
-    await w3n.log('info', logInfo);
-  }
-
-  await w3n.mail!.inbox.removeMsg(msgId).catch(async (e: web3n.asmail.InboxException) => {
-    if (!e.msgNotFound) {
-      await w3n.log('error', `Error deleting message ${msgId} from INBOX. `, e);
-    }
-  });
-}
-
-export async function removeMsgFromDelivery(id: string): Promise<void> {
-  await w3n.mail!.delivery.rmMsg(id).catch(async err => {
-    await w3n.log('error', `Error deleting message ${id} from delivery. `, err);
-  });
-}
 
 export async function removeMsgDataNotInDB(
   refs: RefsToMsgsDataNoInDB,
@@ -285,6 +299,14 @@ export function checkV1(jbV1: ChatMessageJsonBody, sender: string): ChatIdObj | 
       break;
     }
 
+    case 'synchronization': {
+      const { value } = jbV1;
+      if (!value || typeof value !== 'object') {
+        return;
+      }
+      break;
+    }
+
     case 'regular': {
       const { chatMessageId } = jbV1;
       if (!isString(chatMessageId)) {
@@ -323,4 +345,139 @@ export async function getIncomingMessage(msgId: string): Promise<ChatIncomingMes
   } catch (e) {
     await w3n.log('error', `Error getting the message ${msgId}.`, e);
   }
+}
+
+export function createSyncMsgBasedOnRegularMsg({
+  msg,
+  sourceDeviceId,
+  timestamp,
+}: {
+  msg: MsgDbEntry;
+  sourceDeviceId: string;
+  timestamp: number;
+}): ChatSyncMsgV1<PhantomSyncMsgDataBasedOnRegularMsgV1> {
+  const {
+    groupChatId, otoPeerCAddr, chatMessageId, body, relatedMessage, attachments,
+    status, history, isIncomingMsg, groupSender,
+  } = msg;
+
+  const isGroupChat = !!groupChatId;
+  const chatId = (isGroupChat ? groupChatId : otoPeerCAddr)!;
+
+  // id is a reference into this device's own file-store-service and is
+  // meaningless on other devices - drop it, and mark the attachment as such,
+  // instead of letting a foreign id leak into the receiving device's record.
+  // A message without files must carry no field at all rather than an empty
+  // list: [] is truthy, and on the receiving device it reads as "there are
+  // files, they are just elsewhere".
+  const syncedAttachments = attachments?.length
+    ? attachments.map(({ id: _id, ...rest }) => ({
+        ...rest,
+        hasNoLocalSource: true,
+        originDeviceId: sourceDeviceId,
+      }))
+    : undefined;
+
+  return {
+    v: 1,
+    chatMessageType: 'synchronization',
+    sourceDeviceId,
+    timestamp,
+    chatId: { isGroupChat, chatId },
+    value: {
+      v: 1,
+      chatMessageType: 'regular',
+      groupChatId: groupChatId || undefined,
+      chatMessageId,
+      text: body || '',
+      relatedMessage: relatedMessage || undefined,
+      attachments: syncedAttachments as ChatMessageAttachmentsInfo[] | undefined,
+      status: status || undefined,
+      history: history || undefined,
+      // Only a resync answer carries an incoming record (see the field's doc);
+      // fresh outgoing records leave these fields out.
+      ...(isIncomingMsg && {
+        isIncomingMsg: true,
+        groupSender: groupSender || undefined,
+      }),
+    },
+  };
+}
+
+/**
+ * Maps status of an outgoing message on its originating device into a status
+ * for a record on other devices of the same user.
+ * Terminal statuses are taken as is, while non-terminal ones become
+ * 'syncing_self': other devices don't take part in sending and can't influence
+ * it, so they display such a message as awaiting synchronization.
+ */
+export function statusForSyncedOutgoingMsg(originStatus: MessageStatus | null | undefined): MessageStatus {
+  return isTerminalStatus(originStatus) ? originStatus! : 'syncing_self';
+}
+
+/**
+ * Tells if a message status is a final one, i.e. sending of the message is over.
+ */
+export function isTerminalStatus(status: MessageStatus | null | undefined): boolean {
+  return !!status && TERMINAL_STATUSES.includes(status);
+}
+
+const TERMINAL_STATUSES: MessageStatus[] = ['sent', 'error', 'canceled', 'read', 'unread'];
+
+export function createSyncMsgBasedOnSystemMsg({
+  chatId,
+  msg,
+  sourceDeviceId,
+  timestamp,
+}: {
+  chatId: ChatIdObj;
+  msg: ChatSystemMsgV1;
+  sourceDeviceId: string;
+  timestamp: number;
+}): ChatSyncMsgV1<ChatSystemMsgV1> {
+  const { chatMessageId, groupChatId, chatSystemData } = msg;
+
+  return {
+    v: 1,
+    chatMessageType: 'synchronization',
+    sourceDeviceId,
+    timestamp,
+    chatId,
+    value: {
+      v: 1,
+      chatMessageType: 'system',
+      groupChatId,
+      chatMessageId,
+      chatSystemData,
+    },
+  };
+}
+
+export function createSyncMsgBasedOnInvitationMsg({
+  chatId,
+  msg,
+  sourceDeviceId,
+  timestamp,
+}: {
+  chatId: ChatIdObj;
+  msg: Pick<ChatInvitationMsgV1, 'chatMessageId' | 'inviteData'>;
+  sourceDeviceId: string;
+  timestamp: number;
+}): ChatSyncMsgV1<ChatInvitationMsgV1> {
+  const { chatMessageId, inviteData } = msg;
+
+  return {
+    v: 1,
+    chatMessageType: 'synchronization',
+    sourceDeviceId,
+    timestamp,
+    chatId,
+    chatMessageId,
+    value: {
+      v: 1,
+      chatMessageType: 'invitation',
+      chatMessageId,
+      inviteData,
+    },
+  };
 }

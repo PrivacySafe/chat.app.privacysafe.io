@@ -17,8 +17,22 @@
 import type { ChatIdObj } from '../../../../types/asmail-msgs.types.ts';
 import type { ChatMessageHistory, ChatMessageReaction } from '../../../../types/chat.types.ts';
 import type { ChatSrvEmit, DB } from '../../../types/index.ts';
+import { makeSystemEventPhantom, queueSyncPhantom } from '../../mail-sending-service/index.ts';
+import { msgEntityId } from './sync-versions.ts';
 
-export async function msgReactions({ data, emit, ownAddr }: { data: DB; emit: ChatSrvEmit; ownAddr: string }) {
+export async function msgReactions({
+  data,
+  emit,
+  ownAddr,
+  getAppDeviceId,
+  nextSyncStamp,
+}: {
+  data: DB;
+  emit: ChatSrvEmit;
+  ownAddr: string;
+  getAppDeviceId: () => string;
+  nextSyncStamp: () => Promise<number>;
+}) {
   async function getNecessaryMsgData({
     chatId,
     chatMessageId,
@@ -66,7 +80,39 @@ export async function msgReactions({ data, emit, ownAddr }: { data: DB; emit: Ch
       value: reactions,
     });
 
-    return data.updateMessageRecord({ chatId, chatMessageId }, { history, reactions: updatedReactions });
+    const updatedMsg = await data.updateMessageRecord(
+      { chatId, chatMessageId },
+      { history, reactions: updatedReactions },
+    );
+
+    // Stamped and synced right where the change is applied - see the matching
+    // comment in renameChat() (chat-renaming.ts).
+    const syncStamp = await nextSyncStamp();
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeSystemEventPhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp: syncStamp,
+        chatMessageId,
+        chatSystemData: {
+          event: 'update:reactions',
+          value: { chatMessageId, reactions: updatedReactions },
+        },
+      }),
+      versions: [
+        {
+          entityType: 'msg',
+          entityId: msgEntityId(chatId, chatMessageId),
+          aspect: 'reactions',
+          ts: syncStamp,
+          deviceId: getAppDeviceId(),
+        },
+      ],
+    });
+
+    return updatedMsg;
   }
 
   async function handleChangeOfReactions({
@@ -83,6 +129,12 @@ export async function msgReactions({ data, emit, ownAddr }: { data: DB; emit: Ch
     reactions: Record<string, ChatMessageReaction>;
   }): Promise<void> {
     const { reactions: oldReactions, history } = await getNecessaryMsgData({ chatId, chatMessageId });
+    if (JSON.stringify(oldReactions) === JSON.stringify(reactions)) {
+      // Already applied - see the matching comment in handleUpdateOfMessageBody()
+      // (msg-editing.ts).
+      return;
+    }
+
     history.changes!.push({
       timestamp,
       user,
@@ -91,6 +143,13 @@ export async function msgReactions({ data, emit, ownAddr }: { data: DB; emit: Ch
     });
 
     const updatedMsg = await data.updateMessageRecord({ chatId, chatMessageId }, { history, reactions });
+
+    // Peer-originated change - see the matching comment in
+    // handleUpdateChatName() (chat-renaming.ts) on the token used here.
+    await data.setSyncVersion('msg', msgEntityId(chatId, chatMessageId), 'reactions', {
+      ts: timestamp,
+      deviceId: user,
+    });
 
     emit.message.updated(updatedMsg);
   }

@@ -22,25 +22,29 @@
   import dayjs from 'dayjs';
   import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
   import { Ui3nBadge, Ui3nButton, Ui3nIcon, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-  import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from '@main/common/utils/chat-ui.helper';
+  import {
+    getChatNameHint,
+    getTextForChatInvitationMessage,
+    getTextForChatSystemMessage,
+  } from '@main/common/utils/chat-ui.helper';
   import { useAppStore } from '@main/common/store/app.store';
   import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
   import { useChatStore } from '@main/common/store/chat.store';
-  import type { ChatListItemView, OutgoingMessageStatus } from '~/index';
+  import type { ChatListItemUiView, OutgoingMessageStatus } from '~/index';
   import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
   import ChatMessageStatus from '@main/common/components/messages/chat-message/chat-message-status.vue';
 
   const vUi3nHtml = Ui3nHtml;
 
   const props = defineProps<{
-    data: ChatListItemView & { displayName: string };
+    data: ChatListItemUiView;
   }>();
   const emit = defineEmits(['click']);
 
   const { t } = useI18n();
   const { user: ownAddr } = storeToRefs(useAppStore());
   const { currentChatId } = storeToRefs(useChatStore());
-  const { toggleRinging, joinIncomingCall, dismissIncomingCall, endCall } = useUiIncomingStore();
+  const { toggleRinging, joinIncomingCall, dismissIncomingCall, endCall, rejoinCall } = useUiIncomingStore();
 
   const selectedChatId = computed<string>(() => (currentChatId.value ? currentChatId.value.chatId : ''));
 
@@ -50,6 +54,9 @@
     () => props.data.incomingCall && props.data.incomingCall.chatId && props.data.incomingCall.peerAddress,
   );
   const chatWithCall = computed(() => !!props.data.callStart);
+  const isCallActive = computed(() => !!props.data.isCallActive);
+
+  const nameHint = computed<string>(() => getChatNameHint(props.data));
 
   const isLastMsgIncoming = computed(() => {
     if (!props.data.lastMsg) return true;
@@ -120,9 +127,14 @@
 
     <div :class="$style.chatListItemBody">
       <div :class="$style.chatListItemContent">
-        <div :class="[$style.chatListItemName, (chatWithCall || isIncomingCall) && $style.callInProgress]">
+        <div
+          :class="[
+            $style.chatListItemName,
+            (chatWithCall || isIncomingCall || isCallActive) && $style.callInProgress,
+          ]"
+        >
           <ui3n-icon
-            v-if="chatWithCall || isIncomingCall"
+            v-if="chatWithCall || isIncomingCall || isCallActive"
             icon="round-phone-in-talk"
             :width="16"
             :height="16"
@@ -130,14 +142,23 @@
           />
 
           <span>{{ data.displayName }}</span>
+
+          <span
+            v-if="nameHint"
+            :class="$style.chatListItemNameHint"
+            :title="nameHint"
+          >
+            {{ nameHint }}
+          </span>
         </div>
 
         <div
-          v-if="chatWithCall || isIncomingCall"
+          v-if="chatWithCall || isIncomingCall || isCallActive"
           :class="$style.chatListItemMessage"
         >
           <i v-if="chatWithCall">{{ t('va.text.call_in_progress') }} {{ callInOnSince }}</i>
-          <i v-else>{{ t('va.presettings.incoming_call', { address: data.incomingCall!.peerAddress }) }}</i>
+          <i v-else-if="isIncomingCall">{{ t('va.presettings.incoming_call', { address: data.incomingCall!.peerAddress }) }}</i>
+          <i v-else>{{ t('va.text.call_is_active') }}</i>
         </div>
 
         <div
@@ -194,6 +215,20 @@
               {{ t('va.presettings.btn.decline') }}
             </ui3n-button>
           </template>
+
+          <ui3n-button
+            v-else-if="isCallActive"
+            type="custom"
+            size="small"
+            color="var(--success-content-default)"
+            text-color="var(--success-fill-default)"
+            icon="round-phone"
+            icon-color="var(--success-fill-default)"
+            icon-position="left"
+            @click.stop.prevent="() => rejoinCall(currentChatObjId)"
+          >
+            {{ t('va.btn.rejoin_call') }}
+          </ui3n-button>
 
           <template v-else>
             <ui3n-badge
@@ -259,6 +294,10 @@
     position: relative;
     height: 22px;
     width: 100%;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-xs);
 
     span {
       display: block;
@@ -270,14 +309,17 @@
     }
 
     &.callInProgress {
-      display: flex;
-      justify-content: flex-start;
-      align-items: center;
-      column-gap: var(--spacing-xs);
-
       span {
         @include mixins.text-overflow-ellipsis(calc(100% - 20px));
       }
+    }
+
+    span.chatListItemNameHint {
+      flex-shrink: 0;
+      font-size: var(--font-12);
+      font-weight: 400;
+      color: var(--color-text-chat-bubble-other-sub);
+      @include mixins.text-overflow-ellipsis(45%);
     }
   }
 

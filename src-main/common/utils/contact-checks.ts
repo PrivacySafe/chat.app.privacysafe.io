@@ -17,6 +17,9 @@
 
 import { toCanonicalAddress } from '@shared/address-utils.ts';
 import { ContactsException } from '~/contact.types.ts';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('ContactChecks');
 
 type ASMailSendException = web3n.asmail.ASMailSendException;
 type ServLocException = web3n.ServLocException;
@@ -29,8 +32,8 @@ export type AddressCheckResult =
   | 'no-service-for-domain';
 
 export async function checkAddressExistenceForASMail(addr: string): Promise<AddressCheckResult> {
+  toCanonicalAddress(addr);
   try {
-    toCanonicalAddress(addr);
     await w3n.mail!.delivery.preFlight(addr);
     return 'found';
   } catch (err) {
@@ -43,13 +46,16 @@ export async function checkAddressExistenceForASMail(addr: string): Promise<Addr
       } else if (exc.senderNotAllowed) {
         return 'found-but-access-restricted';
       } else {
+        log.error(`w3n.mail.delivery.preFlight('${addr}') threw an asmail-delivery exception with no flag that address check recognizes`, exc);
         throw exc;
       }
     } else if ((err as ConnectException).type === 'connect') {
+      log.error(`w3n.mail.delivery.preFlight('${addr}') failed to connect`, err);
       throw err;
     } else if ((err as ServLocException).type === 'service-locating') {
       return 'no-service-for-domain';
     } else {
+      log.error(`w3n.mail.delivery.preFlight('${addr}') threw an exception that address check does not recognize`, err);
       throw err;
     }
   }

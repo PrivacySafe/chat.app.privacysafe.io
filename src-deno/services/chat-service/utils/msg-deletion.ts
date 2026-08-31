@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import type { ChatIdObj, ChatMessageId, DeleteMessageSysMsgData } from '../../../../types/asmail-msgs.types.ts';
-import { ChatMessageAttachmentsInfo } from '../../../../types/chat.types.ts';
+import type { ChatMessageAttachmentsInfo, MsgsDeletionResult } from '../../../../types/chat.types.ts';
 import type { ChatDbEntry, ChatSrvEmit, DB, FileStoreService } from '../../../types/index.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
 import { includesAddress } from '../../../../shared-libs/address-utils.ts';
@@ -24,30 +24,99 @@ import {
   removeMsgDataNotInDB,
   removeMessageFromInbox,
 } from './_msgs-related-methods.ts';
+import { removeMessagesFromInboxBatch } from '../../../utils/inbox-utils.ts';
 import { chatIdOfChat, recipientsInChat } from './_chats-related-methods.ts';
-import { sendSystemMessage } from '../../../utils/send-chat-msg.ts';
+import { sendSystemMessage, makeDeleteMessagePhantom, queueSyncPhantom } from '../../mail-sending-service/index.ts';
+import { chatEntityId, msgEntityId } from './sync-versions.ts';
 
 export async function msgDeletion({
   data,
   filesStore,
   emit,
   ownAddr,
+  getAppDeviceId,
+  nextSyncStamp,
 }: {
   data: DB;
   emit: ChatSrvEmit;
   filesStore: FileStoreService;
   ownAddr: string;
+  getAppDeviceId: () => string;
+  nextSyncStamp: () => Promise<number>;
 }) {
+  /**
+   * Records tombstones of the deleted messages and queues the phantom telling
+   * the user's other devices about the deletion - in one step, so that a spent
+   * ordering token cannot be left without its phantom (see sync-phantoms.ts).
+   *
+   * A tombstone is what keeps a phantom arriving after the deletion (a status
+   * update, an edit, or the message record itself) from bringing the message
+   * back.
+   */
+  async function recordAndSyncMsgDeletions(
+    chatId: ChatIdObj,
+    chatMessageIds: string[],
+    timestamp: number,
+    value: DeleteMessageSysMsgData['value'],
+  ): Promise<void> {
+    const deviceId = getAppDeviceId();
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeDeleteMessagePhantom({ chatId, sourceDeviceId: deviceId, timestamp, value }),
+      versions: chatMessageIds.map(chatMessageId => ({
+        entityType: 'msg' as const,
+        entityId: msgEntityId(chatId, chatMessageId),
+        aspect: 'deleted' as const,
+        ts: timestamp,
+        deviceId,
+        tombstonedAt: Date.now(),
+        dropOtherAspects: true,
+      })),
+    });
+  }
+
+  /**
+   * Splits attempted deletions into the ones that went through and the ones
+   * that did not, logging every failure. Results of allSettled() come back in
+   * the order the promises were given, which is what lets them be matched back
+   * to their ids.
+   */
+  async function partitionDeletionOutcomes(
+    attempted: ChatMessageId[],
+    removals: Promise<void>[],
+  ): Promise<MsgsDeletionResult> {
+    const outcomes = await Promise.allSettled(removals);
+    const deleted: ChatMessageId[] = [];
+    const failed: ChatMessageId[] = [];
+
+    for (let i = 0; i < outcomes.length; i += 1) {
+      const outcome = outcomes[i];
+      if (outcome.status === 'fulfilled') {
+        deleted.push(attempted[i]);
+      } else {
+        failed.push(attempted[i]);
+        await w3n.log('error', `Failed to delete message ${attempted[i].chatMessageId}`, outcome.reason);
+      }
+    }
+
+    return { deleted, failed };
+  }
+
   async function removeMsgBytes(
     id: ChatMessageId,
     isIncomingMsg: boolean,
     incomingMsgId: string | null,
     attachments: ChatMessageAttachmentsInfo[] | null,
+    msgOwnersDeviceId: string | undefined,
   ): Promise<void> {
     await data.deleteMessage(id);
     if (isIncomingMsg && incomingMsgId) {
       await removeMessageFromInbox(incomingMsgId);
-    } else if (!isIncomingMsg && attachments) {
+    } else if (!isIncomingMsg && attachments && !msgOwnersDeviceId) {
+      // A record synced from another device (settings.msgOwnersDeviceId set)
+      // is not incoming, but its attachment ids are that other device's
+      // file-store-service references - meaningless (and not owned) here.
       await removeAttachmentsOfOutgoingMsg(attachments, filesStore);
     }
   }
@@ -63,8 +132,14 @@ export async function msgDeletion({
     }
 
     // change local data
-    await removeMsgBytes(id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments);
+    await removeMsgBytes(id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments, msg.settings?.msgOwnersDeviceId);
     emit.message.removed(id);
+
+    // Sync this deletion to the user's other devices regardless of
+    // deleteForEveryone - it's a local DB change and must be replicated even
+    // when not notifying peers ("delete for myself").
+    const syncStamp = await nextSyncStamp();
+    await recordAndSyncMsgDeletions(id.chatId, [id.chatMessageId], syncStamp, { oneMessage: id });
 
     if (deleteForEveryone) {
       const { chatId } = id;
@@ -80,7 +155,21 @@ export async function msgDeletion({
     }
   }
 
-  async function deleteMessages(chatMsgIds: ChatMessageId[] = [], deleteForEveryone?: boolean): Promise<void> {
+  /**
+   * Deletes messages, and tells the caller which of them are actually gone.
+   *
+   * Removal of a message is several steps (DB row, inbox message, attachment
+   * files), and any of them can fail for one message while succeeding for
+   * another. Only the ones that went through are announced to the GUI and
+   * synchronized to the user's other devices - announcing all of them would
+   * leave the interface showing a chat the database does not have, until the
+   * next full reload.
+   */
+  async function deleteMessages(
+    chatMsgIds: ChatMessageId[] = [],
+    deleteForEveryone?: boolean,
+    syncOwnDevices = true,
+  ): Promise<MsgsDeletionResult> {
     const chatId = chatMsgIds.length > 0 ? chatMsgIds[0].chatId : null;
     if (!chatId) {
       throw makeDbRecordException({ chatNotFound: true });
@@ -91,6 +180,7 @@ export async function msgDeletion({
       throw makeDbRecordException({ chatNotFound: true });
     }
 
+    const attempted: ChatMessageId[] = [];
     const removeMsgsPr: Promise<void>[] = [];
     for (const chatMessageId of chatMsgIds) {
       const msg = await data.getMessage(chatMessageId);
@@ -98,12 +188,28 @@ export async function msgDeletion({
         throw makeDbRecordException({ messageNotFound: true });
       }
 
-      removeMsgsPr.push(removeMsgBytes(chatMessageId, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments));
+      attempted.push(chatMessageId);
+      removeMsgsPr.push(
+        removeMsgBytes(chatMessageId, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments, msg.settings?.msgOwnersDeviceId),
+      );
     }
-    await Promise.allSettled(removeMsgsPr);
-    emit.message.removedMultiple(chatMsgIds);
+    const { deleted, failed } = await partitionDeletionOutcomes(attempted, removeMsgsPr);
 
-    if (deleteForEveryone) {
+    if (deleted.length > 0) {
+      emit.message.removedMultiple(deleted);
+    }
+
+    if (syncOwnDevices && deleted.length > 0) {
+      const syncStamp = await nextSyncStamp();
+      await recordAndSyncMsgDeletions(
+        chatId,
+        deleted.map(id => id.chatMessageId),
+        syncStamp,
+        { multipleMessages: { chatMsgIds: deleted } },
+      );
+    }
+
+    if (deleteForEveryone && deleted.length > 0) {
       const recipients = recipientsInChat(chat, ownAddr);
       await sendSystemMessage({
         chatId,
@@ -112,12 +218,14 @@ export async function msgDeletion({
           event: 'delete:message',
           value: {
             multipleMessages: {
-              chatMsgIds,
+              chatMsgIds: deleted,
             },
           },
         },
       });
     }
+
+    return { deleted, failed };
   }
 
   async function deleteExpiredMessages(now: number): Promise<void> {
@@ -134,7 +242,20 @@ export async function msgDeletion({
       };
     });
 
-    messagesToDelete.length > 0 && (await deleteMessages(messagesToDelete));
+    // Each device expires the same message independently based on its own
+    // removeAfter timestamp, so there is nothing useful to sync here - doing
+    // so would just add redundant sync traffic from every device.
+    messagesToDelete.length > 0 && (await deleteMessages(messagesToDelete, undefined, false));
+  }
+
+  async function removeExpiredInboxMessages(now: number): Promise<void> {
+    const dueMsgIds = data.getDueInboxMsgRemovals(now);
+    if (dueMsgIds.length === 0) {
+      return;
+    }
+
+    await removeMessagesFromInboxBatch(dueMsgIds, `Removing ${dueMsgIds.length} expired inbox message(s)`);
+    await data.clearInboxMsgRemovals(dueMsgIds);
   }
 
   async function deleteMessagesInChat(chatId: ChatIdObj, deleteForEveryone: boolean): Promise<void> {
@@ -152,6 +273,32 @@ export async function msgDeletion({
       await removeMsgDataNotInDB(msgsDataToRm, filesStore);
     }
     emit.chat.allMsgsRemoved(chatId);
+
+    // No per-message tombstones here: history clearing wipes an open-ended set
+    // of messages, so a single chat-wide marker covers a phantom of any message
+    // that predates the clearing. The chat itself lives on, so its other
+    // aspects keep their versions (no dropOtherAspects).
+    const syncStamp = await nextSyncStamp();
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeDeleteMessagePhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp: syncStamp,
+        value: { allInChat: chatId },
+      }),
+      versions: [
+        {
+          entityType: 'chat',
+          entityId: chatEntityId(chatId),
+          aspect: 'historyCleared',
+          ts: syncStamp,
+          deviceId: getAppDeviceId(),
+          tombstonedAt: Date.now(),
+        },
+      ],
+    });
 
     // send notifications, if we need
     if (deleteForEveryone) {
@@ -183,7 +330,7 @@ export async function msgDeletion({
         return;
       }
 
-      await removeMsgBytes(id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments);
+      await removeMsgBytes(id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments, msg.settings?.msgOwnersDeviceId);
       emit.message.removed(id);
       return;
     }
@@ -192,24 +339,32 @@ export async function msgDeletion({
       const { chatMsgIds } = multipleMessages;
 
       const chatId = chatIdOfChat(chat);
+      const attempted: ChatMessageId[] = [];
       const removeMsgsPr: Promise<void>[] = [];
       for (const id of chatMsgIds) {
         const { chatMessageId } = id;
         const msg = await data.getMessage({ chatId, chatMessageId });
 
         if (msg) {
+          attempted.push({ chatId, chatMessageId });
           removeMsgsPr.push(
-            removeMsgBytes({ chatId, chatMessageId }, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments),
+            removeMsgBytes(
+              { chatId, chatMessageId },
+              msg.isIncomingMsg,
+              msg.incomingMsgId,
+              msg.attachments,
+              msg.settings?.msgOwnersDeviceId,
+            ),
           );
         }
       }
-      await Promise.allSettled(removeMsgsPr);
-      const deletedMsgs = chatMsgIds.map(id => ({
-        chatId,
-        chatMessageId: id.chatMessageId,
-      }));
-
-      emit.message.removedMultiple(deletedMsgs);
+      // Messages absent from the database are left out of the event as well:
+      // announcing a removal of what was never there makes the GUI drop a
+      // message it may have just added.
+      const { deleted } = await partitionDeletionOutcomes(attempted, removeMsgsPr);
+      if (deleted.length > 0) {
+        emit.message.removedMultiple(deleted);
+      }
       return;
     }
   }
@@ -218,6 +373,7 @@ export async function msgDeletion({
     deleteMessage,
     deleteMessages,
     deleteExpiredMessages,
+    removeExpiredInboxMessages,
     deleteMessagesInChat,
     handleDeleteChatMessage,
   };

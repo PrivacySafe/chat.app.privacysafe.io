@@ -33,3 +33,55 @@ export const CHATS_DB_META_ATTR = 'chats';
 
 export const LIFETIME_DAYS_IN_AUXILIARY_DB = 15 * 24 * 60 * 60 * 1000;
 
+/**
+ * How long a mutation may sit in memory before the database file is written.
+ * Every write serializes the whole database, so mutations of one logical
+ * operation must coalesce into a single write; this is the window in which
+ * they do.
+ */
+export const DB_FLUSH_DELAY_MS = 250;
+
+/**
+ * Upper bound on mutations buffered before a write is forced, so that a bulk
+ * synchronization doesn't defer writing indefinitely.
+ */
+export const DB_FLUSH_MAX_PENDING = 64;
+
+/**
+ * How many inbox messages are processed before their changes are flushed and
+ * the inbox watermark is advanced.
+ */
+export const INBOX_COMMIT_BATCH = 32;
+
+/**
+ * How far behind the newest processed message the inbox watermark may be held
+ * by a message that failed to fetch or process (see makeFailureFloor in
+ * inbox-dispatcher.ts). Within the window the failed message is retried by
+ * every start-up's catch-up scan; past it the watermark moves on - an
+ * ever-failing message must not turn every start-up into a re-fetch of an
+ * unbounded stretch of the inbox.
+ */
+export const MAX_WATERMARK_LAG = 24 * 60 * 60 * 1000;
+
+/**
+ * Upper bound on record-resync asks sent in one session (see msg-resync.ts).
+ * Asks travel the same ASMail delivery as everything else, including call
+ * signalling; a device with a long backlog of missing records asks for the
+ * rest on its next start instead of bursting them all at once.
+ */
+export const MAX_RESYNC_ASKS_PER_SESSION = 16;
+
+/**
+ * How many messages of a chat's history are read at a time. Opening a chat takes
+ * the newest page, and scrolling up takes the preceding ones: the whole history
+ * would otherwise cross IPC as one JSON blob on every open.
+ */
+export const MSGS_PAGE_SIZE = 100;
+
+/**
+ * Upper bound on pages pulled while looking for a particular message (a jump to
+ * a quoted original). Bounded on purpose - a quote of a very old message must
+ * not drag in the whole history, which is what paging is here to avoid.
+ */
+export const MAX_PAGES_PER_MSG_LOOKUP = 10;
+

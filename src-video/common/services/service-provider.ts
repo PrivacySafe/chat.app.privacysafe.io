@@ -20,16 +20,33 @@ import { MultiConnectionIPCWrap } from '@shared/ipc/ipc-service';
 
 export let videoChatSrv: VideoChatComponent;
 
+/**
+ * What this window answers to over IPC.
+ *
+ * Must hold every method the background calls on it - see the matching list in
+ * src-deno/services/video-chat-service/video-component-instance.ts, and the
+ * spec that compares the two. It is one list too easy to forget:
+ * `notifyOfUndeliveredSignal` and `notifyOfRejoiningPeer` were implemented here,
+ * named there, and left out of this one, so both were dead from the day they
+ * were written - the background's calls came back as "Method … not found", and
+ * the live run of 2026-08-16 was the first thing to notice.
+ *
+ * `notifyBkgrndInstanceOnCallStart` is deliberately absent: it is this window
+ * calling the background, not the other way round.
+ */
+export const VIDEO_WINDOW_IPC_METHODS: (keyof VideoChatComponent)[] = [
+  'startVideoCallComponentForChat',
+  'focusWindow',
+  'endCall',
+  'handleWebRTCSignal',
+  'notifyOfUndeliveredSignal',
+  'notifyOfRejoiningPeer',
+];
+
 export async function initializationServices() {
   videoChatSrv = useVideoChatSrv();
   const srvWrap = new MultiConnectionIPCWrap('VideoChatComponent');
-  srvWrap.exposeReqReplyMethods(videoChatSrv, [
-    'startVideoCallComponentForChat',
-    'focusWindow',
-    'endCall',
-    'handleWebRTCSignal',
-    'sendSystemWebRTCMsg',
-  ]);
+  srvWrap.exposeReqReplyMethods(videoChatSrv, VIDEO_WINDOW_IPC_METHODS);
   srvWrap.exposeObservableMethods(videoChatSrv, [
     'watchRequests'
   ]);

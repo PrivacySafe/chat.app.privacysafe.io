@@ -116,7 +116,7 @@ export function getPrincipalAddress(signedCert: SignedLoad): string {
 	return getKeyCert(signedCert).cert.principal.address;
 }
 
-export module use {
+export namespace use {
 	
 	export const MID_PKLOGIN = 'login-pub-key';
 	

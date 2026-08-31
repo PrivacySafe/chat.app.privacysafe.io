@@ -30,6 +30,9 @@
   import ChatAttachmentType from './chat-attachment-type.vue';
   import { createImageThumbnail } from '@main/common/utils/create-thumbnail/create-image-thumbnail.ts';
   import { createVideoThumbnail } from '@main/common/utils/create-thumbnail/create-video-thumbnail.ts';
+  import { makeLogger } from '@shared/logger';
+
+  const log = makeLogger('ChatAttachmentItem');
   import { createPdfThumbnail } from '@main/common/utils/create-thumbnail/create-pdf-thumbnail.ts';
 
   const props = defineProps<{
@@ -131,7 +134,7 @@
         });
       }
     } catch (e) {
-      w3n.log('error', `Error making thumbnail for ${props.info.name} file.`, e);
+      log.error(`Error making thumbnail for ${props.info.name} file.`, e);
     } finally {
       isThumbnailCreationProcessGoingOn.value = false;
     }

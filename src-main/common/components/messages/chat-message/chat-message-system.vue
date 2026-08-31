@@ -20,6 +20,7 @@ import { storeToRefs } from 'pinia';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
 import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from '@main/common/utils/chat-ui.helper';
+import { callCancelWording } from '@shared/call-record-wording';
 import { useAppStore } from '@main/common/store/app.store';
 import {
   CallMsgBodySysMsgData,
@@ -44,11 +45,22 @@ const data = computed(() => {
 
 const isSystemMsgByCall = computed(() => ['call', 'webrtc-call'].includes((data.value as ChatSysMsgView['systemData']).event));
 const isSystemMsgByMissedCall = computed(() => (data.value as ChatSysMsgView['systemData']).event === 'webrtc-call');
-const isSystemMsgByIncomingCall = computed(() => isSystemMsgByCall.value
-  && (
-    ((data.value as ChatSysMsgView['systemData']) as CallMsgBodySysMsgData).value.direction === 'incoming'
-  || ((data.value as ChatSysMsgView['systemData']) as WebRTCMsgBodySysMsgData).value.subType === 'outgoing-call-cancelled'
-));
+const isSystemMsgByIncomingCall = computed(() => {
+  if (!isSystemMsgByCall.value) {
+    return false;
+  }
+  const systemData = data.value as ChatSysMsgView['systemData'];
+  if (systemData.event === 'webrtc-call') {
+    // The same rule that picks the wording, so the arrow cannot contradict the
+    // line next to it: the subtype alone says nothing about which way the call
+    // went - a decline is written the same way on both sides of it.
+    const { subType, callSessionId } = (systemData as WebRTCMsgBodySysMsgData).value;
+    return callCancelWording(
+      subType, callSessionId, ownAddr.value, props.msg.chatId.isGroupChat,
+    ).wasIncomingCall;
+  }
+  return (systemData as CallMsgBodySysMsgData).value.direction === 'incoming';
+});
 const callDuration = computed(() => {
   if (!isSystemMsgByCall.value) {
     return null;

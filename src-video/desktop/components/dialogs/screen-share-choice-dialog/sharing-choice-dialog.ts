@@ -15,10 +15,13 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { onBeforeMount, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeMount, onBeforeUnmount, ref } from 'vue';
 import { type Deferred, defer } from '@v1nt1248/3nclient-lib/utils';
 import type { ScreenShareOption, SharedStream, WindowShareOption } from '@video/common/types';
 import type { ScreenShareChoicesProps } from './screen-share-choice-dialog.vue';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('ScreenShareDialog');
 
 type DisplaySourceInfo = web3n.media.DisplaySourceInfo;
 
@@ -29,13 +32,17 @@ export function useScreenShareChoiceDialog(props: ScreenShareChoicesProps) {
   const windowChoices = ref<WindowShareOption[]>();
   const deferredStreams = new Map<string, Deferred<MediaStream>>();
 
+  // Single-select: at most one source in selected[].
+  const initialSingle = props.initiallyShared[0];
   const data = ref<{
     selected: SharedStream[];
     selectedDeskSound: boolean;
   }>({
-    selected: props.initiallyShared.concat(),
+    selected: initialSingle ? [initialSingle] : [],
     selectedDeskSound: props.initialDeskSoundShared,
   });
+
+  const activeSrcId = computed(() => data.value.selected[0]?.srcId ?? null);
 
   let mediaIdToGet: string | undefined = undefined;
 
@@ -53,47 +60,40 @@ export function useScreenShareChoiceDialog(props: ScreenShareChoicesProps) {
     await w3n.mediaDevices!.setSelectDisplayMediaForCaptureHandler!(displayChoicesCollectionCB);
 
     mediaIdToGet = undefined;
-    await navigator.mediaDevices
+    const stream = await navigator.mediaDevices
       .getDisplayMedia({ video: true, audio: true })
-      .catch(err => w3n.log('error', 'Error on the start of collection. ', err));
+      .catch(err => {
+        log.warn('getDisplayMedia for collecting sources failed (expected on 3N platform). ', err);
+        return undefined;
+      });
 
-    async function setStreamIn({
-      srcId,
-      initiallySelected,
-    }: ScreenShareOption | WindowShareOption): Promise<void> {
-      if (initiallySelected) {
-        const { stream } = props.initiallyShared.find(s => s.srcId === srcId)!;
-        deferredStreams.get(srcId)?.resolve(stream);
-      } else {
-        mediaIdToGet = srcId;
-        const deferred = deferredStreams.get(mediaIdToGet);
-        if (deferred) {
-          deferredStreams.delete(mediaIdToGet);
-          await navigator.mediaDevices
-            .getDisplayMedia({
-              video: true,
-              // audio: true,
-            })
-            .then(
-              stream => {
-                deferred.resolve(stream);
-              },
-              err => deferred.reject(err),
-            );
+    // Immediately stop the initial getDisplayMedia stream — it's only used to
+    // trigger displayChoicesCollectionCB and populate screenChoices/windowChoices.
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+
+    // Resolve deferred streams only for initiallySelected items (already shared).
+    // For unselected items, capture happens in onOptionSelectionChange when the
+    // user actually toggles the switch.
+    function resolveInitial(opt: ScreenShareOption | WindowShareOption): void {
+      if (opt.initiallySelected) {
+        const shared = props.initiallyShared.find(s => s.srcId === opt.srcId);
+        if (shared) {
+          deferredStreams.get(opt.srcId)?.resolve(shared.stream);
         }
-        mediaIdToGet = undefined;
       }
     }
 
     if (screenChoices.value) {
       for (const screen of screenChoices.value) {
-        await setStreamIn(screen);
+        resolveInitial(screen);
       }
     }
 
     if (windowChoices.value) {
       for (const frame of windowChoices.value) {
-        await setStreamIn(frame);
+        resolveInitial(frame);
       }
     }
   }
@@ -145,19 +145,103 @@ export function useScreenShareChoiceDialog(props: ScreenShareChoicesProps) {
     data.value.selectedDeskSound = v;
   }
 
-  async function onOptionSelectionChange(opt: ScreenShareOption | WindowShareOption, v: boolean): Promise<void> {
-    if (v) {
-      const stream = await opt.stream;
-      data.value.selected.push({
-        srcId: opt.srcId,
-        stream,
-        type: (opt as ScreenShareOption).display_id ? 'screen' : 'window',
-        name: opt.name,
+  /**
+   * Drop every selected source except optional keepSrcId.
+   * Stops capture tracks for sources that were not initially shared
+   * (live call streams stay intact until confirm/removeOwnScreen).
+   */
+  async function clearSelectedExcept(keepSrcId?: string): Promise<void> {
+    const kept: SharedStream[] = [];
+    for (const item of data.value.selected) {
+      if (keepSrcId && item.srcId === keepSrcId) {
+        kept.push(item);
+        continue;
+      }
+      if (!isAlreadyShared(item.srcId)) {
+        try {
+          item.stream.getTracks().forEach(track => track.stop());
+        } catch {
+          // ignore stop errors on already-ended tracks
+        }
+      }
+    }
+    data.value.selected = kept;
+  }
+
+  async function captureStreamForOption(
+    opt: ScreenShareOption | WindowShareOption,
+  ): Promise<MediaStream | undefined> {
+    const deferred = deferredStreams.get(opt.srcId);
+    if (deferred) {
+      mediaIdToGet = opt.srcId;
+      const captured = await navigator.mediaDevices
+        .getDisplayMedia({ video: true })
+        .catch(err => {
+          log.error(`Failed to capture stream for ${opt.srcId}`, err);
+          return undefined;
+        });
+      mediaIdToGet = undefined;
+      if (captured) {
+        deferredStreams.delete(opt.srcId);
+        deferred.resolve(captured);
+        return captured;
+      }
+      return undefined;
+    }
+
+    const existing = await opt.stream.catch(() => undefined);
+    if (!existing) {
+      return undefined;
+    }
+    const live = existing.getVideoTracks().some(t => t.readyState === 'live');
+    if (live || isAlreadyShared(opt.srcId)) {
+      return existing;
+    }
+
+    // Previous capture ended (e.g. user switched away) — recapture.
+    mediaIdToGet = opt.srcId;
+    const recaptured = await navigator.mediaDevices
+      .getDisplayMedia({ video: true })
+      .catch(err => {
+        log.error(`Failed to recapture stream for ${opt.srcId}`, err);
+        return undefined;
       });
+    mediaIdToGet = undefined;
+    if (recaptured) {
+      (opt as { stream: Promise<MediaStream> }).stream = Promise.resolve(recaptured);
+      return recaptured;
+    }
+    return undefined;
+  }
+
+  async function onOptionSelectionChange(
+    opt: ScreenShareOption | WindowShareOption,
+    v: boolean,
+  ): Promise<void> {
+    if (v) {
+      // Capture first so a failed pick does not clear the previous selection.
+      const stream = await captureStreamForOption(opt);
+      if (!stream) {
+        return;
+      }
+
+      // Exclusive single-select: drop any other source (replace).
+      await clearSelectedExcept(opt.srcId);
+
+      if (!data.value.selected.some(s => s.srcId === opt.srcId)) {
+        data.value.selected = [
+          {
+            srcId: opt.srcId,
+            stream,
+            type: (opt as ScreenShareOption).display_id ? 'screen' : 'window',
+            name: opt.name,
+          },
+        ];
+      }
     } else {
-      const streamId = (await opt.stream).id;
-      const ind = data.value.selected.findIndex(({ stream: { id } }) => id === streamId);
-      data.value.selected.splice(ind, 1);
+      if (data.value.selected.some(s => s.srcId === opt.srcId)) {
+        await clearSelectedExcept(); // clear all including this one
+      }
     }
   }
 
@@ -173,6 +257,7 @@ export function useScreenShareChoiceDialog(props: ScreenShareChoicesProps) {
 
   return {
     data,
+    activeSrcId,
     isAudioCaptureAvailable,
     selectAudio,
     screenChoices,

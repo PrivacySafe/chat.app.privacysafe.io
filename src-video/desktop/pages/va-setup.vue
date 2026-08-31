@@ -22,19 +22,27 @@
   const {
     t,
     user,
-    isAnyOneConnected,
     isMicOn,
     isCamOn,
     haveVideo,
     haveCamerasToChoose,
     webcamMenuChoices,
     ownVA,
+    isIncomingCall,
     startChatCall,
     cancel,
     changeVideoDeviceTo,
     toggleMicStatus,
     toggleCamStatus,
   } = useVaSetup();
+
+  function handleStartCall() {
+    console.log('[va-setup.vue] Start Call button clicked!');
+    startChatCall();
+  }
+
+  // TODO [Star]: Connection status indicators will be reimplemented for Star architecture.
+  // Show connection status text in participant video blocks before stream starts.
 </script>
 
 <template>
@@ -58,6 +66,7 @@
         :class="$style.video"
         playsinline
         autoplay
+        muted
       />
 
       <video-placeholder
@@ -136,8 +145,10 @@
           {{ t('dialog.button.default.cancel') }}
         </ui3n-button>
 
-        <ui3n-button @click.stop.prevent="startChatCall">
-          {{ isAnyOneConnected ? t('va.presettings.btn.join') : t('va.presettings.btn.start') }}
+        <ui3n-button 
+          @click="handleStartCall"
+        >
+          {{ isIncomingCall ? t('va.presettings.btn.join') : t('va.presettings.btn.start') }}
         </ui3n-button>
       </div>
     </div>
@@ -244,6 +255,47 @@
 
     &:hover {
       background-color: var(--color-bg-control-primary-hover);
+    }
+  }
+
+  .connectionStatus {
+    position: absolute;
+    left: var(--spacing-m);
+    right: var(--spacing-m);
+    bottom: calc(var(--va-setup-actions-height) + var(--spacing-xs));
+    background-color: var(--color-bg-control-secondary-default);
+    border-radius: var(--spacing-s);
+    padding: var(--spacing-s) var(--spacing-m);
+    border: 1px solid var(--color-border-control-secondary-default);
+  }
+
+  .connectionProgress {
+    width: 100%;
+    height: 4px;
+    background-color: var(--color-bg-control-tertiary-default);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .progressBar {
+    height: 100%;
+    background-color: var(--color-bg-button-primary-default);
+    transition: width 0.3s ease;
+    border-radius: 2px;
+  }
+
+  .statusText {
+    font-size: var(--font-12);
+    color: var(--color-text-block-primary-default);
+    text-align: center;
+
+    .warning {
+      color: var(--color-text-warning-default);
+    }
+
+    .error {
+      color: var(--color-text-danger-default);
     }
   }
 </style>

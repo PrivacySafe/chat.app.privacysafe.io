@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 - 2025 3NSoft Inc.
+ Copyright (C) 2021 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -24,15 +24,30 @@
 declare namespace web3n.system.platform {
 
 	interface Platform {
+
+		/**
+		 * This returns information about platform version and bundled apps with it.
+		 */
 		getCurrentVersion(): Promise<BundleVersions>;
+
+		/**
+		 * This wipes data folder from device and quits.
+		 */
+		wipeFromThisDevice(): Promise<void>;
+
+		/**
+		 * Downloader of platform's updates exists in os pack that allows native app to update itself directly.
+		 * When platform app is distributed via external package managers, or stores, downloader is not present.
+		 */
+		downloader?: PlatformDownloader;
+	}
+
+	interface PlatformDownloader {
 		getChannels(): Promise<apps.DistChannels>;
 		getLatestVersion(channel: string): Promise<BundleVersions>;
-		setupUpdater(
-			newBundleVersion: string, observer: Observer<PlatformUpdateEvents>
-		): () => void;
+		setupUpdater(newBundleVersion: string, observer: Observer<PlatformUpdateEvents>): () => void;
 		downloadUpdate(): Promise<string[]|undefined>;
 		quitAndInstall(): Promise<void>;
-		wipeFromThisDevice(): Promise<void>;
 	}
 
   interface BundleVersions {

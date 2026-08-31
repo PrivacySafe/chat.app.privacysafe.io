@@ -19,8 +19,7 @@
   import { useI18n } from 'vue-i18n';
   import isEmpty from 'lodash/isEmpty';
   import size from 'lodash/size';
-  import hasIn from 'lodash/hasIn';
-  import type { ChatMessageHistoryChange, MessageStatus } from '~/index';
+  import type { ChatMessageHistoryChange, MessageStatus, SerializedDeliveryError } from '~/index';
 
   const props = defineProps<{
     msgStatus: MessageStatus;
@@ -48,63 +47,71 @@
     return errorsChanges.value.slice(1);
   });
 
-  function getErrorFlag(err: web3n.asmail.DeliveryException | web3n.RuntimeException | Error): string {
-    if (hasIn(err, 'domainNotFound')) {
+  function getErrorFlag(err: SerializedDeliveryError): string {
+    if (err.domainNotFound) {
       return 'domainNotFound';
     }
 
-    if (hasIn(err, 'unknownRecipient')) {
+    if (err.unknownRecipient) {
       return 'unknownRecipient';
     }
 
-    if (hasIn(err, 'senderNotAllowed')) {
+    if (err.senderNotAllowed) {
       return 'senderNotAllowed';
     }
 
-    if (hasIn(err, 'inboxIsFull')) {
+    if (err.inboxIsFull) {
       return 'inboxIsFull';
     }
 
-    if (hasIn(err, 'badRedirect')) {
+    if (err.badRedirect) {
       return 'badRedirect';
     }
 
-    if (hasIn(err, 'authFailedOnDelivery')) {
+    if (err.authFailedOnDelivery) {
       return 'authFailedOnDelivery';
     }
 
-    if (hasIn(err, 'msgTooBig')) {
+    if (err.msgTooBig) {
       return 'msgTooBig';
     }
 
-    if (hasIn(err, 'allowedSize')) {
+    if (err.allowedSize) {
       return 'allowedSize';
     }
 
-    if (hasIn(err, 'recipientHasNoPubKey')) {
+    if (err.recipientHasNoPubKey) {
       return 'recipientHasNoPubKey';
     }
 
-    if (hasIn(err, 'recipientPubKeyFailsValidation')) {
+    if (err.recipientPubKeyFailsValidation) {
       return 'recipientPubKeyFailsValidation';
     }
 
-    if (hasIn(err, 'msgNotFound')) {
+    if (err.msgNotFound) {
       return 'msgNotFound';
     }
 
-    if (hasIn(err, 'msgCancelled')) {
+    if (err.msgCancelled) {
       return 'msgCancelled';
     }
 
-    if ((err as web3n.RuntimeException).type === 'connect') {
+    if (err.type === 'connect') {
       return 'connectError';
     }
 
     return '';
   }
 
-  function prepareErrorText({ address, errorFlag }: { address: string; errorFlag: string }): string {
+  function prepareErrorText({
+    address,
+    errorFlag,
+    message,
+  }: {
+    address: string;
+    errorFlag: string;
+    message: string;
+  }): string {
     const domain = address.includes('@') ? address.split('@')[1] : '';
 
     if (errorFlag === 'unknownRecipient') {
@@ -135,15 +142,12 @@
       return `[${address}] ${t('chat.message.info.error.connectError')}`;
     }
 
-    return `[${address}] ${t('chat.message.info.error.noDescription')}`;
+    return `[${address}] ${message || t('chat.message.info.error.noDescription')}`;
   }
 
-  function getErrorText(
-    address: string,
-    err: web3n.asmail.DeliveryException | web3n.RuntimeException | Error,
-  ): string {
+  function getErrorText(address: string, err: SerializedDeliveryError): string {
     const errorFlag = getErrorFlag(err);
-    return prepareErrorText({ address, errorFlag });
+    return prepareErrorText({ address, errorFlag, message: err.message });
   }
 </script>
 
@@ -165,7 +169,7 @@
               {{
                 getErrorText(
                   addr as string,
-                  error as web3n.asmail.DeliveryException | web3n.RuntimeException | Error,
+                  error as SerializedDeliveryError,
                 )
               }}
             </div>
@@ -213,7 +217,7 @@
               {{
                 getErrorText(
                   addr as string,
-                  error as web3n.asmail.DeliveryException | web3n.RuntimeException | Error,
+                  error as SerializedDeliveryError,
                 )
               }}
             </div>

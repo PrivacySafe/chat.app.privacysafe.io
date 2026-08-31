@@ -18,21 +18,59 @@ import type { ChatIdObj } from '../../../../types/asmail-msgs.types.ts';
 import type { ChatSrvEmit, DB, FileStoreService } from '../../../types/index.ts';
 import { includesAddress } from '../../../../shared-libs/address-utils.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
-import { sendSysMsgsAboutRemovalFromChat } from '../../../utils/send-chat-msg.ts';
+import {
+  sendSysMsgsAboutRemovalFromChat,
+  makeMemberRemovedPhantom,
+  queueSyncPhantom,
+} from '../../mail-sending-service/index.ts';
 import { removeMsgDataNotInDB } from './_msgs-related-methods.ts';
 import { recipientsInChat } from './_chats-related-methods.ts';
+import { chatEntityId } from './sync-versions.ts';
 
 export async function chatDeletion({
   data,
   filesStore,
   emit,
   ownAddr,
+  getAppDeviceId,
+  nextSyncStamp,
 }: {
   data: DB;
   emit: ChatSrvEmit;
   filesStore: FileStoreService;
   ownAddr: string;
+  getAppDeviceId: () => string;
+  nextSyncStamp: () => Promise<number>;
 }) {
+  /**
+   * Buries the chat and tells the user's own devices about it, in one step -
+   * a tombstone without its phantom would leave the other devices with a chat
+   * this one no longer has, and with no way to ever learn otherwise.
+   */
+  async function buryAndSyncChat(chatId: ChatIdObj, timestamp: number): Promise<void> {
+    await queueSyncPhantom({
+      db: data,
+      ownAddr,
+      phantom: makeMemberRemovedPhantom({
+        chatId,
+        sourceDeviceId: getAppDeviceId(),
+        timestamp,
+        chatDeleted: true,
+      }),
+      versions: [
+        {
+          entityType: 'chat',
+          entityId: chatEntityId(chatId),
+          aspect: 'deleted',
+          ts: timestamp,
+          deviceId: getAppDeviceId(),
+          tombstonedAt: Date.now(),
+          dropOtherAspects: true,
+        },
+      ],
+    });
+  }
+
   // Note that for everyone deletion of chat is effectively the same as removal
   // from chat. Hence, there is no handling of anything here.
   async function deleteChat(chatId: ChatIdObj): Promise<void> {
@@ -57,6 +95,13 @@ export async function chatDeletion({
       await removeMsgDataNotInDB(msgsDataToRm, filesStore);
     }
     emit.chat.removed(chatId);
+
+    // A tombstone keeps a phantom that arrives after this deletion (e.g. of a
+    // rename made on another device before it went offline) from recreating the
+    // chat. Own other devices must learn the chat is gone, regardless of
+    // whether peers can be notified.
+    const syncStamp = await nextSyncStamp();
+    await buryAndSyncChat(chatId, syncStamp);
 
     // notify peers
     const peersToNotify = recipientsInChat(chat, ownAddr);

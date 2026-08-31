@@ -296,9 +296,12 @@ declare namespace web3n.asmail {
 		type: "inbox";
 		msgId: string;
 		msgNotFound?: true;
+		incompleteDelivery?: true;
+		deliveryStart?: number;
 		objNotFound?: true;
 		objId?: string;
 		msgIsBroken?: true;
+		failToDecrypt?: true;
 	}
 
 	interface ASMailSendException extends RuntimeException {

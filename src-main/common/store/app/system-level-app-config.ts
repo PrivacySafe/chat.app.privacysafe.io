@@ -18,8 +18,11 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 import { toRO } from "@main/common/utils/readonly.ts";
 import { SystemSettings } from "@main/common/utils/ui-settings.ts";
 import { ref } from "vue";
-import { AppConfig, AvailableColorTheme, AvailableLanguage } from '~/app.types.ts';
+import { AppConfig, AvailableColorTheme, AvailableLanguage, SettingsJSON } from '~/app.types.ts';
 import { blobFromDataURL } from '@main/common/utils/image-files.ts';
+import { makeLogger, setDebugLogging } from '@shared/logger';
+
+const log = makeLogger('AppConfig');
 
 export function useSystemLevelAppConfig() {
 
@@ -51,7 +54,7 @@ export function useSystemLevelAppConfig() {
         const imgBlob = blobFromDataURL(dataURL);
         customLogoSrc.value = URL.createObjectURL(imgBlob);
       } catch (err) {
-        w3n.log('error', 'Parsing dataURL with customLogo throws error.' , err);
+        log.error('Parsing dataURL with customLogo throws error.' , err);
       }
     } else {
       customLogoSrc.value = undefined;
@@ -60,23 +63,35 @@ export function useSystemLevelAppConfig() {
 
   let unsubFromConfigWatch: (() => void)|undefined = undefined;
 
+  /**
+   * The app's "developer mode" flag doubles as the switch for diagnostic
+   * logging (see shared-libs/logger.ts) - it is watched here, so that turning
+   * it on in the launcher takes effect without restarting anything.
+   */
+  function applyDebugLoggingFlag(config: Partial<SettingsJSON>): void {
+    setDebugLogging(!!config.allowShowingDevtool);
+  }
+
   async function readAndStartWatchingAppConfig() {
     try {
       const config = await SystemSettings.makeResourceReader();
-      const { lang, colorTheme, customLogo } = await config.getAll();
+      const settings = await config.getAll();
+      const { lang, colorTheme, customLogo } = settings;
       setLang(lang);
       setColorTheme(colorTheme);
       setCustomLogo(customLogo);
+      applyDebugLoggingFlag(settings);
       unsubFromConfigWatch = config.watchConfig({
         next: appConfig => {
           const { lang, colorTheme, customLogo } = appConfig;
           setLang(lang);
           setColorTheme(colorTheme);
           setCustomLogo(customLogo);
+          applyDebugLoggingFlag(appConfig as Partial<SettingsJSON>);
         },
       });
     } catch (e) {
-      w3n.log('error', 'Load the app config error. ', e);
+      log.error('Load the app config error. ', e);
     }
   }
 

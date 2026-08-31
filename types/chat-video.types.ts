@@ -4,4 +4,5 @@ export interface PeerVideo {
   videoMuted: boolean;
   audioMuted: boolean;
   vaStream?: MediaStream;
+  isReconnecting: boolean;
 }

@@ -92,6 +92,7 @@
       v-if="currentChat"
       :chat="currentChat!"
       :messages="currentChatMessages"
+      :readonly="readonly"
     />
 
     <div :class="$style.bodyWrapper">
@@ -101,7 +102,7 @@
             v-if="currentChatMessages && currentChat"
             :chat="currentChat!"
             :messages="currentChatMessages"
-            :mobile-mode="true"
+            :readonly="readonly"
             @init="onMessageListElementInit"
             @reply="prepareReplyMessage"
             @edit="startEditMsgMode"
@@ -193,7 +194,7 @@
                   icon="outline-reply"
                   width="24"
                   height="24"
-                  :h-flip="initialMessageType === 'forward'"
+                  :horizontal-flip="initialMessageType === 'forward'"
                   color="var(--color-icon-block-accent-default)"
                 />
               </div>
@@ -359,7 +360,7 @@
   @use '@main/common/assets/styles/_mixins.scss' as mixins;
 
   .chat {
-    --chat-toolbar-height: 48px;
+    --chat-toolbar-height: 64px;
     --chat-input-max-height: 88px;
 
     position: fixed;

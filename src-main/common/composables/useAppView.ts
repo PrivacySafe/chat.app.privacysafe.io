@@ -22,6 +22,9 @@ import { useAppStore } from '@main/common/store/app.store';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { useInitialize } from '@main/common/composables/useInitialize';
 import { chatService } from '@main/common/services/external-services.ts';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('AppView');
 
 export type AppViewInstance = ReturnType<typeof useAppView>;
 
@@ -33,7 +36,10 @@ export function useAppView() {
   const appStore = useAppStore();
   const contactsStore = useContactsStore();
 
-  const { commonLoading, appVersion, user: me, connectivityStatus, customLogoSrc } = storeToRefs(appStore);
+  const {
+    commonLoading, appVersion, user: me, connectivityStatus, customLogoSrc,
+    isSyncing, syncPending, syncPhase, syncStalled, syncStatusText, showSyncStatus,
+  } = storeToRefs(appStore);
 
   const { initialize, stopMessagesProcessing, stopVideoCallsWatching } = useInitialize();
 
@@ -53,18 +59,35 @@ export function useAppView() {
     return chatService.deleteExpiredMessages(Date.now());
   }
 
-  let deleteExpiredMessagesTimerId: ReturnType<typeof setInterval> | null = null;
+  async function collectOrphanedMessagesGarbage() {
+    return chatService.collectGarbageInAuxiliaryDB();
+  }
+
+  async function removeExpiredInboxMessages() {
+    return chatService.removeExpiredInboxMessages(Date.now());
+  }
+
+  let periodicCleanupTimerId: ReturnType<typeof setInterval> | null = null;
 
   onBeforeMount(async () => {
     try {
       await appStore.initialize();
-      await contactsStore.initialize();
+      // Contacts must not gate the chat list: connecting to the contacts app
+      // retries for up to 13 seconds (external-services.ts), while chat names
+      // are reactive and re-render once contacts arrive. Awaited before
+      // startHandlingCommands, which may need contacts resolved.
+      const contactsInit = contactsStore.initialize();
       await initialize();
+      await contactsInit;
       await startHandlingCommands();
 
-      deleteExpiredMessagesTimerId = setInterval(() => deleteExpiredMessages(), 60000);
+      periodicCleanupTimerId = setInterval(() => {
+        deleteExpiredMessages();
+        collectOrphanedMessagesGarbage();
+        removeExpiredInboxMessages();
+      }, 60000);
     } catch (e) {
-      w3n.log('error', 'Error while the app component mounting.', e);
+      log.error('Error while the app component mounting.', e);
       throw e;
     }
   });
@@ -73,7 +96,7 @@ export function useAppView() {
     stopMessagesProcessing.value && stopMessagesProcessing.value();
     stopVideoCallsWatching.value && stopVideoCallsWatching.value();
     appStore.stopWatching();
-    deleteExpiredMessagesTimerId && clearInterval(deleteExpiredMessagesTimerId);
+    periodicCleanupTimerId && clearInterval(periodicCleanupTimerId);
   });
 
   return {
@@ -83,6 +106,12 @@ export function useAppView() {
     customLogoSrc,
     appVersion,
     connectivityStatusText,
+    isSyncing,
+    syncPending,
+    syncPhase,
+    syncStalled,
+    syncStatusText,
+    showSyncStatus,
     openDashboard,
     appExit,
   };

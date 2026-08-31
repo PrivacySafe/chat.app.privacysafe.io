@@ -5,7 +5,7 @@ import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
 
 function _resolve(dir: string) {
-  return resolve(__dirname, dir);
+  return resolve(import.meta.dirname, dir);
 }
 
 export const makeConfig = ({ mode }: ConfigEnv): UserConfig => {
@@ -52,6 +52,14 @@ export const makeConfig = ({ mode }: ConfigEnv): UserConfig => {
         'main-mobile': _resolve('./index-mobile.html'),
         videoChat: _resolve('./video-chat.html'),
         'videoChat-mobile': _resolve('./video-chat-mobile.html'),
+      },
+      output: {
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
+      },
+      treeshake: {
+        manualPureFunctions: ['console.log'],
       },
     },
   };

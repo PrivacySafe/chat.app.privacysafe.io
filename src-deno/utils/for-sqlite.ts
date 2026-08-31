@@ -18,26 +18,38 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // @deno-types="../../shared-libs/sqlite-on-3nstorage/index.d.ts"
-// @deno-types="../../shared-libs/sqlite-on-3nstorage/sqljs.d.ts"
 import { QueryExecResult, objectFromQueryExecResult } from '../../shared-libs/sqlite-on-3nstorage/index.js';
-import { ParamsObject, SqlValue } from '../../shared-libs/sqlite-on-3nstorage/sqljs.js';
+import type { Database } from '../../shared-libs/sqlite-on-3nstorage/index.d.ts';
+import type { ParamsObject, SqlValue } from '../../shared-libs/sqlite-on-3nstorage/sqljs.d.ts';
+
+/**
+ * Column names of an existing table, empty when the table does not exist.
+ * The check must go by the `name` field of PRAGMA table_info rows: matching a
+ * whole row against a substring also matches type or default-value cells.
+ */
+export function tableColumnNames(db: Database, table: string): string[] {
+  const [res] = db.exec(`PRAGMA table_info(${table})`);
+  return res ? objectFromQueryExecResult<{ name: string }>(res).map(c => c.name) : [];
+}
 
 export type TransformDefinition<T> = {
-  [field in keyof T]: {
-    toSQLValue: (v: any) => SqlValue;
-    fromSQLValue: (sv: SqlValue) => any;
-  } | 'as-is';
-}
+  [field in keyof T]:
+    | {
+        toSQLValue: (v: any) => SqlValue;
+        fromSQLValue: (sv: SqlValue) => any;
+      }
+    | 'as-is';
+};
 
 export function queryParamsFrom<T>(
   record: Partial<T>,
   transforms: TransformDefinition<T>,
-  omit?: (keyof T)[]
+  omit?: (keyof T)[],
 ): ParamsObject {
   const params = {} as ParamsObject;
   for (const field of Object.keys(record)) {
     if (omit?.includes(field as keyof T)) {
-     continue;
+      continue;
     }
     const value = record[field as keyof T];
     const transform = transforms[field as keyof T];
@@ -55,7 +67,7 @@ export function queryParamsFrom<T>(
 
 export function fromQueryResult<T extends object>(
   queryResult: QueryExecResult,
-  transforms: TransformDefinition<T>
+  transforms: TransformDefinition<T>,
 ): T[] {
   const records = objectFromQueryExecResult<{
     [field in keyof T]: SqlValue;
@@ -65,7 +77,7 @@ export function fromQueryResult<T extends object>(
     const obj = {} as T;
     for (const field of Object.keys(record)) {
       const transform = transforms[field as keyof T];
-      if (!transform || (transform === 'as-is')) {
+      if (!transform || transform === 'as-is') {
         obj[field as keyof T] = record[field as keyof T] as any;
       } else {
         const { fromSQLValue } = transform;
@@ -77,10 +89,7 @@ export function fromQueryResult<T extends object>(
   return objs;
 }
 
-export function queryParamsFromComplete<T>(
-  record: T,
-  transforms: TransformDefinition<T>
-): ParamsObject {
+export function queryParamsFromComplete<T>(record: T, transforms: TransformDefinition<T>): ParamsObject {
   const params = queryParamsFrom(record, transforms);
   if (Object.keys(params).length < Object.keys(transforms).length) {
     throw new Error(`Not all fields are present in the record`);
@@ -90,7 +99,7 @@ export function queryParamsFromComplete<T>(
 
 export function forTableInsert<T extends object>(
   record: T,
-  transforms: TransformDefinition<T>
+  transforms: TransformDefinition<T>,
 ): {
   orderedColumns: string;
   orderedValues: string;
@@ -111,13 +120,11 @@ export function forTableInsert<T extends object>(
   return {
     insertParams,
     orderedColumns: columns.join(', '),
-    orderedValues: values.join(', ')
+    orderedValues: values.join(', '),
   };
 }
 
-export function setExprFor<T extends object>(
-  params: ParamsObject, omit?: (keyof T)[]
-): string {
+export function setExprFor<T extends object>(params: ParamsObject, omit?: (keyof T)[]): string {
   const setPairs: string[] = [];
   for (const paramField of Object.keys(params)) {
     const field = paramField.substring(1);
@@ -128,9 +135,7 @@ export function setExprFor<T extends object>(
   return setPairs.join(', ');
 }
 
-export function andEqualExprFor<T extends object>(
-  params: ParamsObject, omit?: (keyof T)[]
-): string {
+export function andEqualExprFor<T extends object>(params: ParamsObject, omit?: (keyof T)[]): string {
   const pairs: string[] = [];
   for (const paramField of Object.keys(params)) {
     const field = paramField.substring(1);
@@ -142,29 +147,39 @@ export function andEqualExprFor<T extends object>(
 }
 
 export const optJsonTransform = {
-  toSQLValue: (
-    v: object|null
-  ): string|null => (v ? JSON.stringify(v) : null),
-  fromSQLValue: (sv: SqlValue): object|null => (sv ?
-    JSON.parse(sv as string) : null
-  )
+  toSQLValue: (v: object | null): string | null => (v ? JSON.stringify(v) : null),
+  fromSQLValue: (sv: SqlValue): object | null => {
+    if (!sv || typeof sv !== 'string') {
+      return null;
+    }
+    try {
+      return JSON.parse(sv);
+    } catch {
+      return null;
+    }
+  },
 };
 
 export const jsonTransform = {
   toSQLValue: (v: object): string => JSON.stringify(v),
-  fromSQLValue: (sv: SqlValue): object => JSON.parse(sv as string)
+  fromSQLValue: (sv: SqlValue): object => {
+    if (!sv || typeof sv !== 'string') {
+      return {};
+    }
+    try {
+      return JSON.parse(sv);
+    } catch {
+      return {};
+    }
+  },
 };
 
 export const booleanTransform = {
-  toSQLValue: (b: boolean): 1|0 => (b ? 1 : 0),
-  fromSQLValue: (
-    flag: SqlValue
-  ): boolean => ((flag === 0) ? false : true)
-}
+  toSQLValue: (b: boolean): 1 | 0 => (b ? 1 : 0),
+  fromSQLValue: (flag: SqlValue): boolean => (flag === 0 ? false : true),
+};
 
 export const optStringAsEmptyTransform = {
-  toSQLValue: (s: string|null): string => (s ? s : ''),
-  fromSQLValue: (
-    s: SqlValue
-  ): string|null => (s ? s as string : '')
-}
+  toSQLValue: (s: string | null): string => (s ? s : ''),
+  fromSQLValue: (s: SqlValue): string | null => (s ? (s as string) : ''),
+};

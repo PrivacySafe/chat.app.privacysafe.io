@@ -17,33 +17,34 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import { appContactsSrv } from '@main/common/services/external-services.ts';
-import { toRO } from '@main/common/utils/readonly.ts';
+import { contactsSrv } from '@main/common/services/external-services.ts';
 import { areAddressesEqual } from '@shared/address-utils.ts';
 import { ensureASMailAddressExists, makeContactsException } from '../utils/contact-checks.ts';
 import type { Person, PersonView } from '~/contact.types.ts';
+import { makeLogger } from '@shared/logger';
+
+const log = makeLogger('ContactsStore');
 
 export const useContactsStore = defineStore('contacts', () => {
-
   const contactList = ref<(PersonView & { displayName: string })[]>([]);
 
   async function fetchContacts() {
     try {
-      contactList.value = (await appContactsSrv.getContactList())
+      contactList.value = (await (await contactsSrv()).getContactList())
         .map(contact => ({
           ...contact,
           displayName: contact.name || contact.mail || ' ',
         }))
         .sort((a, b) => (a.displayName > b.displayName ? 1 : -1));
     } catch (e) {
-      w3n.log('error', 'Error contacts fetching. ', e);
+      log.error('Error contacts fetching. ', e);
     }
     return contactList.value;
   }
 
   async function addContact(mail: string): Promise<void> {
-    const known = await appContactsSrv.isThereContactWithTheMail(mail);
-    if (known) {
+    const isThereSuchContact = !!(await (await contactsSrv()).getContactByMail(mail));
+    if (isThereSuchContact) {
       throw makeContactsException({ contactAlreadyExists: true });
     }
     await ensureASMailAddressExists(mail);
@@ -54,24 +55,30 @@ export const useContactsStore = defineStore('contacts', () => {
       notice: '',
       phone: '',
     };
-    await appContactsSrv.upsertContact(person);
+    // The contacts service RETURNS {errorType, errorMessage} instead of
+    // throwing (e.g. 'exists') — discarding the result silently swallowed
+    // those failures while the UI showed nothing.
+    const result = await (await contactsSrv()).upsertContact(person);
+    if (result && 'errorType' in result) {
+      throw makeContactsException(
+        result.errorType === 'exists'
+          ? { contactAlreadyExists: true, message: result.errorMessage }
+          : { invalidValue: true, message: result.errorMessage },
+      );
+    }
     await fetchContacts();
   }
 
   function getContactName(mail: string): string {
-    const contact = contactList.value.find(
-      c => areAddressesEqual(c.mail, mail),
-    );
+    const contact = contactList.value.find(c => areAddressesEqual(c.mail, mail));
     return contact ? contact.displayName : mail;
   }
 
   return {
-    contactList: toRO(contactList),
-
+    contactList,
     initialize: fetchContacts,
     fetchContacts,
     addContact,
-
     getContactName,
   };
 });
