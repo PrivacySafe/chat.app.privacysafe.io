@@ -240,10 +240,19 @@ export default function useChatMessages(
           },
         });
       }
-
       if (element.classList.contains('url')) {
         let dataHref = element.dataset.href;
         if (!dataHref) {
+          return;
+        }
+
+        if (/^w3n:\/\//i.test(dataHref)) {
+          const url = new URL(dataHref!);
+          const contactCommand = url.hostname;
+          const contactAccount = url.searchParams.get('a');
+          const contactName = url.searchParams.get('n');
+
+          openContact(contactCommand!, contactAccount!, contactName!);
           return;
         }
 
@@ -281,6 +290,22 @@ export default function useChatMessages(
       await nextTick();
       const initialMessageElement = document.getElementById(`msg-${chatMessageId}`);
       initialMessageElement && initialMessageElement.scrollIntoView(false);
+    }
+  }
+
+  interface OpenContactCmdArg {
+    mail: string;
+    name?: string;
+  }
+
+  async function openContact(command: string, account: string, name: string) {
+    try {
+      await w3n.shell!.startAppWithParams!('contacts.app.privacysafe.io', command, {
+        mail: account,
+        name: name,
+      } as OpenContactCmdArg);
+    } catch (error) {
+      console.log(error);
     }
   }
 
@@ -394,8 +419,7 @@ export default function useChatMessages(
 
   async function forwardMsg(chatMessageId: string) {
     const msg = currentChatMessages.value.find(m => m.chatMessageId === chatMessageId) as
-      | RegularMsgView
-      | undefined;
+      RegularMsgView | undefined;
 
     if (!msg) {
       return;
@@ -452,8 +476,7 @@ export default function useChatMessages(
 
   async function cancelSending(chatMessageId: string) {
     const msg = currentChatMessages.value.find(m => m.chatMessageId === chatMessageId) as
-      | RegularMsgView
-      | undefined;
+      RegularMsgView | undefined;
     if (!msg) {
       return;
     }
@@ -474,8 +497,7 @@ export default function useChatMessages(
 
   async function resendMsg(chatMessageId: string) {
     const msg = currentChatMessages.value.find(m => m.chatMessageId === chatMessageId) as
-      | RegularMsgView
-      | undefined;
+      RegularMsgView | undefined;
     if (!msg) {
       return;
     }

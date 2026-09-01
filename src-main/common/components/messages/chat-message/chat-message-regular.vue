@@ -246,6 +246,11 @@
     display: inline-block;
     color: var(--color-text-chat-bubble-user-quote-header);
   }
+
+  // .w3nUrl {
+  //   display: inline-block;
+  //   color: var(--color-text-chat-bubble-user-quote-header);
+  // }
 </style>
 
 <style lang="scss" module>
