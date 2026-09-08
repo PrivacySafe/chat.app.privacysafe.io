@@ -15,15 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import type { ChatIdObj, ChatMessageId, DeleteMessageSysMsgData } from '../../../../types/asmail-msgs.types.ts';
-import type { ChatMessageAttachmentsInfo, MsgsDeletionResult } from '../../../../types/chat.types.ts';
+import type { MsgsDeletionResult } from '../../../../types/chat.types.ts';
 import type { ChatDbEntry, ChatSrvEmit, DB, FileStoreService } from '../../../types/index.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
 import { includesAddress } from '../../../../shared-libs/address-utils.ts';
-import {
-  removeAttachmentsOfOutgoingMsg,
-  removeMsgDataNotInDB,
-  removeMessageFromInbox,
-} from './_msgs-related-methods.ts';
+import { removeMsgBytes, removeMsgDataNotInDB } from './_msgs-related-methods.ts';
 import { removeMessagesFromInboxBatch } from '../../../utils/inbox-utils.ts';
 import { chatIdOfChat, recipientsInChat } from './_chats-related-methods.ts';
 import { sendSystemMessage, makeDeleteMessagePhantom, queueSyncPhantom } from '../../mail-sending-service/index.ts';
@@ -103,24 +99,6 @@ export async function msgDeletion({
     return { deleted, failed };
   }
 
-  async function removeMsgBytes(
-    id: ChatMessageId,
-    isIncomingMsg: boolean,
-    incomingMsgId: string | null,
-    attachments: ChatMessageAttachmentsInfo[] | null,
-    msgOwnersDeviceId: string | undefined,
-  ): Promise<void> {
-    await data.deleteMessage(id);
-    if (isIncomingMsg && incomingMsgId) {
-      await removeMessageFromInbox(incomingMsgId);
-    } else if (!isIncomingMsg && attachments && !msgOwnersDeviceId) {
-      // A record synced from another device (settings.msgOwnersDeviceId set)
-      // is not incoming, but its attachment ids are that other device's
-      // file-store-service references - meaningless (and not owned) here.
-      await removeAttachmentsOfOutgoingMsg(attachments, filesStore);
-    }
-  }
-
   async function deleteMessage(id: ChatMessageId, deleteForEveryone: boolean): Promise<void> {
     const chat = data.findChat(id.chatId);
     if (!chat) {
@@ -132,7 +110,7 @@ export async function msgDeletion({
     }
 
     // change local data
-    await removeMsgBytes(id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments, msg.settings?.msgOwnersDeviceId);
+    await removeMsgBytes(data, filesStore, id, msg);
     emit.message.removed(id);
 
     // Sync this deletion to the user's other devices regardless of
@@ -189,9 +167,7 @@ export async function msgDeletion({
       }
 
       attempted.push(chatMessageId);
-      removeMsgsPr.push(
-        removeMsgBytes(chatMessageId, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments, msg.settings?.msgOwnersDeviceId),
-      );
+      removeMsgsPr.push(removeMsgBytes(data, filesStore, chatMessageId, msg));
     }
     const { deleted, failed } = await partitionDeletionOutcomes(attempted, removeMsgsPr);
 
@@ -330,7 +306,7 @@ export async function msgDeletion({
         return;
       }
 
-      await removeMsgBytes(id, msg.isIncomingMsg, msg.incomingMsgId, msg.attachments, msg.settings?.msgOwnersDeviceId);
+      await removeMsgBytes(data, filesStore, id, msg);
       emit.message.removed(id);
       return;
     }
@@ -347,15 +323,7 @@ export async function msgDeletion({
 
         if (msg) {
           attempted.push({ chatId, chatMessageId });
-          removeMsgsPr.push(
-            removeMsgBytes(
-              { chatId, chatMessageId },
-              msg.isIncomingMsg,
-              msg.incomingMsgId,
-              msg.attachments,
-              msg.settings?.msgOwnersDeviceId,
-            ),
-          );
+          removeMsgsPr.push(removeMsgBytes(data, filesStore, { chatId, chatMessageId }, msg));
         }
       }
       // Messages absent from the database are left out of the event as well:

@@ -28,6 +28,7 @@ import type {
   OneToOneChatParameters,
   PhantomSyncMsgDataBasedOnRegularMsgV1,
   ResyncMsgRecordSysMsgData,
+  RestoreSnapshotSysMsgData,
   UpdateAdminsSysMsgData,
   UpdatedChatNameSysMsgData,
   UpdatedChatSettingsSysMsgData,
@@ -38,15 +39,22 @@ import type {
   UpdateMembersSysMsgData,
 } from '../../../../types/asmail-msgs.types.ts';
 import type { GroupChatStatus, SingleChatStatus } from '../../../../types/chat.types.ts';
-import type { ChatSrvEmit, DB, OrphanedMsgDbEntry } from '../../../types/index.ts';
+import type { ChatSrvEmit, DB, FileStoreService, OrphanedMsgDbEntry } from '../../../types/index.ts';
 import { AUTODELETE_OFF, AUTO_DELETE_MESSAGES_BY_ID } from '../../../../shared-libs/constants/chat-settings.ts';
-import { isTerminalStatus, makeMsgDbEntry, statusForSyncedOutgoingMsg } from './_msgs-related-methods.ts';
+import {
+  isTerminalStatus,
+  makeMsgDbEntry,
+  removeMsgBytes,
+  removeMsgDataNotInDB,
+  statusForSyncedOutgoingMsg,
+} from './_msgs-related-methods.ts';
 import { requestMsgRecordResync, respondToMsgRecordResync, type ResyncCtx } from './msg-resync.ts';
+import { applyRestoreSnapshot } from './restore-snapshot.ts';
 import {
   applyIfNewer,
   chatEntityId,
   isDeletedLaterThan,
-  isNewerToken,
+  isRecordDeletedLater,
   msgEntityId,
   recordDeletion,
   type SyncToken,
@@ -77,6 +85,7 @@ export async function handleIncomingSync({
   db,
   emit,
   ownAddr,
+  filesStore,
   observeSyncStamp,
   resync,
 }: {
@@ -84,6 +93,7 @@ export async function handleIncomingSync({
   db: DB;
   emit: ChatSrvEmit;
   ownAddr: string;
+  filesStore: FileStoreService;
   observeSyncStamp: (ts: number) => Promise<void>;
   resync?: ResyncCtx;
 }): Promise<void> {
@@ -95,7 +105,7 @@ export async function handleIncomingSync({
     await observeSyncStamp(syncMsg.timestamp);
   }
 
-  await dispatchSync({ syncMsg, db, emit, ownAddr, resync });
+  await dispatchSync({ syncMsg, db, emit, ownAddr, filesStore, resync });
 }
 
 async function dispatchSync({
@@ -103,12 +113,14 @@ async function dispatchSync({
   db,
   emit,
   ownAddr,
+  filesStore,
   resync,
 }: {
   syncMsg: ChatSyncMsgV1<PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1>;
   db: DB;
   emit: ChatSrvEmit;
   ownAddr: string;
+  filesStore: FileStoreService;
   resync?: ResyncCtx;
 }): Promise<void> {
   const { value, chatId, sourceDeviceId } = syncMsg;
@@ -122,6 +134,7 @@ async function dispatchSync({
       sourceDeviceId,
       syncMsg: syncMsg as ChatSyncMsgV1<PhantomSyncMsgDataBasedOnRegularMsgV1>,
       ownAddr,
+      filesStore,
       resync,
     });
     return;
@@ -136,6 +149,7 @@ async function dispatchSync({
       sourceDeviceId,
       syncMsg: syncMsg as ChatSyncMsgV1<ChatSystemMsgV1>,
       ownAddr,
+      filesStore,
       resync,
     });
     return;
@@ -150,6 +164,7 @@ async function dispatchSync({
       sourceDeviceId,
       syncMsg: syncMsg as ChatSyncMsgV1<ChatInvitationMsgV1>,
       ownAddr,
+      filesStore,
       resync,
     });
     return;
@@ -160,19 +175,6 @@ async function dispatchSync({
 
 function chatExists(db: DB, chatId: ChatIdObj): boolean {
   return !!db.findChat(chatId);
-}
-
-/**
- * Tells if a message must not be (re)created because it was deleted after the
- * change this phantom carries - either individually, or by a clearing of the
- * whole chat history.
- */
-function isRecordDeletedLater(db: DB, chatId: ChatIdObj, chatMessageId: string, token: SyncToken): boolean {
-  if (isDeletedLaterThan(db, 'msg', msgEntityId(chatId, chatMessageId), token)) {
-    return true;
-  }
-  const historyCleared = db.getSyncVersion('chat', chatEntityId(chatId), 'historyCleared');
-  return !!historyCleared && !isNewerToken(token, historyCleared);
 }
 
 /**
@@ -337,6 +339,7 @@ async function handleRegularSync({
   sourceDeviceId,
   syncMsg,
   ownAddr,
+  filesStore,
   resync,
 }: {
   syncData: PhantomSyncMsgDataBasedOnRegularMsgV1;
@@ -346,6 +349,7 @@ async function handleRegularSync({
   sourceDeviceId: string;
   syncMsg: ChatSyncMsgV1<PhantomSyncMsgDataBasedOnRegularMsgV1>;
   ownAddr: string;
+  filesStore: FileStoreService;
   resync?: ResyncCtx;
 }): Promise<void> {
   const { chatMessageId, text, attachments, relatedMessage, status, history, isIncomingMsg, groupSender } =
@@ -417,7 +421,7 @@ async function handleRegularSync({
   await db.addMessage(msg);
   emit.message.added(msg);
 
-  await processOrphanedForTarget(db, emit, chatMessageId, ownAddr, resync);
+  await processOrphanedForTarget(db, emit, filesStore, chatMessageId, ownAddr, resync);
 }
 
 /**
@@ -437,6 +441,7 @@ async function handleSystemSync({
   sourceDeviceId,
   syncMsg,
   ownAddr,
+  filesStore,
   resync,
 }: {
   syncData: ChatSystemMsgV1;
@@ -446,6 +451,7 @@ async function handleSystemSync({
   sourceDeviceId: string;
   syncMsg: ChatSyncMsgV1<ChatSystemMsgV1>;
   ownAddr: string;
+  filesStore: FileStoreService;
   resync?: ResyncCtx;
 }): Promise<void> {
   const { chatMessageId, chatSystemData } = syncData;
@@ -457,7 +463,12 @@ async function handleSystemSync({
   // 'resync:msg-record' is not buffered for a missing chat either: a device
   // that doesn't know the chat cannot answer the ask, and the ask must never
   // wait - other devices answer it or nobody can.
-  const chatRequired = !['member-removed', 'resync:msg-record'].includes(event);
+  //
+  // 'restore:snapshot' spans many chats at once, so waiting for the ONE named
+  // in its envelope would be plainly wrong: the envelope's chat is the chat of
+  // the chunk's first record and means nothing to this branch (it is there for
+  // the benefit of older builds - see RestoreSnapshotSysMsgData).
+  const chatRequired = !['member-removed', 'resync:msg-record', 'restore:snapshot'].includes(event);
 
   if (chatRequired && !chatExists(db, chatId)) {
     // Waiting on the chat's existence, not on a specific message; see the matching
@@ -539,21 +550,39 @@ async function handleSystemSync({
       // A tombstone is recorded whether or not the message is here yet, which is
       // why this branch needs no buffering: a phantom of the message itself
       // arriving later finds the tombstone and does not recreate it.
+      //
+      // Removal goes through removeMsgBytes/removeMsgDataNotInDB rather than
+      // through db.deleteMessage alone: a deletion made on another device has to
+      // clear the same three things a local one does - the row, the inbox
+      // message an incoming record was built from, and the attachment bytes of
+      // an outgoing one. Dropping only the row left both of the latter behind
+      // forever, growing with every deletion made anywhere else.
       if (value.oneMessage) {
         await recordDeletion(db, 'msg', msgEntityId(chatId, value.oneMessage.chatMessageId), token);
-        await db.deleteMessage(value.oneMessage);
+        // A record that is not here is skipped silently: the tombstone above is
+        // what this branch is built on, and it stands with or without a row.
+        const msg = await db.getMessage(value.oneMessage);
+        if (msg) {
+          await removeMsgBytes(db, filesStore, value.oneMessage, msg);
+        }
         emit.message.removed(value.oneMessage);
       } else if (value.multipleMessages) {
         for (const msgId of value.multipleMessages.chatMsgIds) {
           await recordDeletion(db, 'msg', msgEntityId(chatId, msgId.chatMessageId), token);
-          await db.deleteMessage(msgId);
+          const msg = await db.getMessage(msgId);
+          if (msg) {
+            await removeMsgBytes(db, filesStore, msgId, msg);
+          }
         }
         emit.message.removedMultiple(value.multipleMessages.chatMsgIds);
       } else if (value.allInChat) {
         // History clearing wipes an open-ended set of messages, so a single
         // chat-wide marker stands in for per-message tombstones.
         await db.setSyncVersion('chat', chatKey, 'historyCleared', { ...token, tombstonedAt: Date.now() });
-        await db.deleteMessagesInChat(value.allInChat);
+        const msgsDataToRm = await db.deleteMessagesInChat(value.allInChat);
+        if (msgsDataToRm) {
+          await removeMsgDataNotInDB(msgsDataToRm, filesStore);
+        }
         emit.chat.allMsgsRemoved(value.allInChat);
       }
       break;
@@ -719,7 +748,10 @@ async function handleSystemSync({
         // Tombstoned, so that a phantom of a change predating the deletion
         // (a rename, say) cannot bring the chat back.
         await recordDeletion(db, 'chat', chatKey, token);
-        await db.deleteChat(chatId);
+        const msgsDataToRm = await db.deleteChat(chatId);
+        if (msgsDataToRm) {
+          await removeMsgDataNotInDB(msgsDataToRm, filesStore);
+        }
         emit.chat.removed(chatId);
         await w3n.log('info', `Deleted chat ${chatId.chatId} due to member-removed sync (chatDeleted: true)`);
       } else {
@@ -794,6 +826,47 @@ async function handleSystemSync({
       break;
     }
 
+    case 'restore:snapshot': {
+      const { value } = chatSystemData as RestoreSnapshotSysMsgData;
+      // The same function the restoring device ran, with the same mode and the
+      // same per-aspect tokens. That identity IS the guarantee that `merge`
+      // here means what `merge` meant there.
+      const applied = await applyRestoreSnapshot(
+        {
+          mode: value.mode,
+          snapshotTs: value.snapshotTs,
+          chats: value.chats ?? [],
+          msgs: value.msgs ?? [],
+          ...(value.deleted && { deleted: value.deleted }),
+        },
+        {
+          db,
+          emit,
+          filesStore,
+          ownAddr,
+          sourceDeviceId,
+          // No bytes travel with a snapshot, ever.
+          hasLocalAttachmentBytes: false,
+          // The restoring device already listed the shared inbox, and the
+          // answer is in the records it sent: an incomingMsgId that was found
+          // dead there is simply absent. Listing again here would be asking the
+          // same question twice and getting a worse answer.
+          inboxMsgIds: new Set<string>(),
+          inboxListingAvailable: false,
+          drainOrphanedForChat: chatId2 =>
+            processOrphanedForChatCreation(db, emit, filesStore, chatId2, ownAddr, resync),
+        },
+      );
+      await w3n.log(
+        'info',
+        `Applied restore snapshot ${value.restoreId} part ${value.part}/${value.of} (${value.mode}): `
+          + `chats +${applied.chatsCreated}/~${applied.chatsUpdated}, `
+          + `messages +${applied.messagesCreated}/~${applied.messagesUpdated}, `
+          + `${applied.skipped} skipped`,
+      );
+      break;
+    }
+
     default: {
       await w3n.log('warning', `Unhandled system sync event: ${event}`);
     }
@@ -817,6 +890,7 @@ async function handleInvitationSync({
   sourceDeviceId,
   syncMsg,
   ownAddr,
+  filesStore,
   resync,
 }: {
   syncData: ChatInvitationMsgV1;
@@ -826,6 +900,7 @@ async function handleInvitationSync({
   sourceDeviceId: string;
   syncMsg: ChatSyncMsgV1<ChatInvitationMsgV1>;
   ownAddr: string;
+  filesStore: FileStoreService;
   resync?: ResyncCtx;
 }): Promise<void> {
   const { chatMessageId, inviteData } = syncData;
@@ -839,7 +914,7 @@ async function handleInvitationSync({
   if (!chatExists(db, chatId)) {
     if (inviteData.type === 'group-chat-invite' || inviteData.type === 'oto-chat-invite') {
       await createChatFromInvitationSync(db, emit, chatId, inviteData);
-      await processOrphanedForChatCreation(db, emit, chatId, ownAddr, resync);
+      await processOrphanedForChatCreation(db, emit, filesStore, chatId, ownAddr, resync);
     } else {
       // Waiting on the chat's existence, not on a specific message; see the matching
       // comment in handleRegularSync().
@@ -872,7 +947,7 @@ async function handleInvitationSync({
   await db.addMessage(msg);
   emit.message.added(msg);
 
-  await processOrphanedForTarget(db, emit, chatMessageId, ownAddr, resync);
+  await processOrphanedForTarget(db, emit, filesStore, chatMessageId, ownAddr, resync);
 }
 
 /**
@@ -882,6 +957,7 @@ async function handleInvitationSync({
 export async function processOrphanedForTarget(
   db: DB,
   emit: ChatSrvEmit,
+  filesStore: FileStoreService,
   targetMessageId: string,
   ownAddr: string,
   resync?: ResyncCtx,
@@ -901,7 +977,7 @@ export async function processOrphanedForTarget(
       PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1
     >;
 
-    await dispatchSync({ syncMsg, db, emit, ownAddr, resync });
+    await dispatchSync({ syncMsg, db, emit, ownAddr, filesStore, resync });
   }
 }
 
@@ -914,6 +990,7 @@ export async function processOrphanedForTarget(
 export async function processOrphanedForChatCreation(
   db: DB,
   emit: ChatSrvEmit,
+  filesStore: FileStoreService,
   chatId: ChatIdObj,
   ownAddr: string,
   resync?: ResyncCtx,
@@ -936,6 +1013,6 @@ export async function processOrphanedForChatCreation(
       PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1
     >;
 
-    await dispatchSync({ syncMsg, db, emit, ownAddr, resync });
+    await dispatchSync({ syncMsg, db, emit, ownAddr, filesStore, resync });
   }
 }

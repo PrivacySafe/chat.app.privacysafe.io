@@ -25,7 +25,7 @@ import { prepareCheckAddrErrorText } from '@main/common/utils/chats.helper';
 import { useAppStore } from '@main/common/store/app.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
-import type { ChatListItemView, GroupChatView, RegularMsgView } from '~/chat.types';
+import type { ChatListItemView, GroupChatView, OutgoingAttachment, RegularMsgView } from '~/chat.types';
 import type { ChatIdObj, RelatedMessage } from '~/index';
 import { makeLogger } from '@shared/logger';
 
@@ -126,7 +126,7 @@ export const useChatStore = defineStore('chat', () => {
     chatId: ChatIdObj;
     chatMessageId?: string;
     text: string;
-    files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined;
+    files: OutgoingAttachment[] | undefined;
     relatedMessage: RelatedMessage | undefined;
     withoutCurrentChatCheck?: boolean;
   }) {

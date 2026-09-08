@@ -138,6 +138,34 @@ export interface ChatMessageAttachmentsInfo {
   originDeviceId?: string;
 }
 
+/**
+ * A file or folder on its way into an outgoing message.
+ *
+ * A wrapper rather than the entity itself, so that what the GUI already knows
+ * about the entity can travel with it. The IPC serializer walks the argument
+ * graph to any depth, lifts platform objects out into passedByReference and
+ * puts them back at the same place on the other side, so the entity survives
+ * the trip while the fields beside it go as plain JSON. Writing those fields
+ * onto the entity object instead would not work: the receiving side replaces
+ * that object with the restored core one.
+ */
+export interface OutgoingAttachment {
+  entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS;
+  /**
+   * An item the GUI has already put into this app's file store, whose id
+   * becomes the attachment's id as it is. Set only for a file pasted from the
+   * clipboard: such a file has no existence outside this app to begin with, so
+   * there is nothing to copy it from and nothing to link to - the bytes are
+   * already stored, once.
+   */
+  storedId?: string;
+  /**
+   * The name the attachment should carry, when it is not the entity's own. A
+   * stored item is named after its id, which is not a name to show anybody.
+   */
+  name?: string;
+}
+
 export interface ChatMessageViewBase {
   chatId: ChatIdObj;
   /**

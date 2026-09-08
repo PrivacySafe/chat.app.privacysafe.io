@@ -307,7 +307,7 @@
                       v-for="(attachmentInfo, index) in attachmentsInfo!"
                       :key="`${attachmentInfo.name}-${attachmentInfo.id || ''}`"
                       :info="attachmentInfo"
-                      :entity="files[index]"
+                      :entity="files[index].entity"
                       @change:size="attachmentInfo.size = $event"
                       @delete="deleteAttachment(index)"
                     />

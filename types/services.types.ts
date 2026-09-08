@@ -24,6 +24,7 @@ import type {
   ChatOutgoingMessage,
 } from './asmail-msgs.types';
 import type { ChatMessageView, ChatListItemView } from './chat.types';
+import type { BackupProgress, RestoreProgress } from './backup.types';
 import type { GuiLogLine } from '../shared-libs/log-relay';
 import type { SendingProgressInfo } from '../src-deno/types/index.ts';
 
@@ -162,7 +163,50 @@ export interface DuplicateDeviceInstanceEvent {
 
 export type SyncStateEvent = SyncStateChangedEvent | DuplicateDeviceInstanceEvent;
 
-export type UpdateEvent = ChatEvent | ChatMessageEvent | SyncStateEvent;
+/**
+ * Progress of a backup or of a restore.
+ *
+ * Two more members of UpdateEvent rather than channels of their own: watch() is
+ * this app's only observable method, and UpdateEvent is already a union of
+ * families. The GUI intercepts these before the update queue - see
+ * useInitialize.ts and the note there about why 'sync-state' does the same.
+ *
+ * `null` closes the dialog, which is what makes an error message readable: it
+ * stays up until a null progress replaces it.
+ */
+export interface BackupProgressEvent {
+  updatedEntityType: 'backup-progress';
+  event: 'changed';
+  progress: BackupProgress | null;
+}
+
+export interface RestoreProgressEvent {
+  updatedEntityType: 'restore-progress';
+  event: 'changed';
+  progress: RestoreProgress | null;
+}
+
+/**
+ * One event standing in for an unbounded number of per-record ones.
+ *
+ * A restore, and the receipt of a restore snapshot, write records one at a
+ * time; announcing each of them would make the GUI patch its stores thousands
+ * of times over. Instead the per-record events are swallowed while a bulk
+ * replay is open (see beginBulkReplay in chat-service/events.ts) and this one
+ * closes it: the GUI re-reads everything.
+ */
+export interface BulkReloadEvent {
+  updatedEntityType: 'bulk';
+  event: 'reload';
+}
+
+export type UpdateEvent =
+  | ChatEvent
+  | ChatMessageEvent
+  | SyncStateEvent
+  | BackupProgressEvent
+  | RestoreProgressEvent
+  | BulkReloadEvent;
 
 export type AddressCheckResult =
   | 'found'

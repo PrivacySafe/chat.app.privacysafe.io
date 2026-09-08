@@ -14,7 +14,14 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import type { ChatSrvEmit, DB, GroupChatDbEntry, MsgDbEntry, OTOChatDbEntry } from '../../../types/index.ts';
+import type {
+  ChatSrvEmit,
+  DB,
+  FileStoreService,
+  GroupChatDbEntry,
+  MsgDbEntry,
+  OTOChatDbEntry,
+} from '../../../types/index.ts';
 import type {
   GroupChatStatus,
   GroupChatView,
@@ -56,6 +63,7 @@ export async function chatCreation({
   emit,
   appSettings,
   ownAddr,
+  filesStore,
   getAppDeviceId,
   nextSyncStamp,
   resync,
@@ -64,6 +72,7 @@ export async function chatCreation({
   emit: ChatSrvEmit;
   appSettings: AppSettings;
   ownAddr: string;
+  filesStore: FileStoreService;
   getAppDeviceId: () => string;
   nextSyncStamp: () => Promise<number>;
   resync?: ResyncCtx;
@@ -77,7 +86,7 @@ export async function chatCreation({
    */
   async function drainOrphanedSyncsOf(chatId: ChatIdObj): Promise<void> {
     try {
-      await processOrphanedForChatCreation(data, emit, chatId, ownAddr, resync);
+      await processOrphanedForChatCreation(data, emit, filesStore, chatId, ownAddr, resync);
     } catch (err) {
       await w3n.log('error', `Failed to process orphaned syncs buffered before chat ${chatId.chatId} existed`, err);
     }

@@ -18,6 +18,7 @@
 import { setupGlobalReportingOfUnhandledErrors } from '../shared-libs/error-handling.ts';
 import { initDebugLogging, makeLogger, setLogUserAddress } from '../shared-libs/logger.ts';
 import { defer } from '../shared-libs/processes/deferred.ts';
+import { MAX_ATTACHMENT_SIZE } from '../shared-libs/constants/attachment-limits.ts';
 import { ensureDefaultAnonSenderMaxMsgSize } from './utils/workarounds.ts';
 import { dataset } from './dataset/index.ts';
 import { localDataStore } from './services/local-data-store/local-data-store.ts';
@@ -203,6 +204,6 @@ try {
   }, 100);
 }
 
-ensureDefaultAnonSenderMaxMsgSize(100 * 1024 * 1024).catch(err => {
+ensureDefaultAnonSenderMaxMsgSize(MAX_ATTACHMENT_SIZE).catch(err => {
   w3n.log('error', `Fail in checking and setting anonymous sender max message size`, err);
 });

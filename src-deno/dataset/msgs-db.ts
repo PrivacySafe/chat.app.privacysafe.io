@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-// @deno-types="../../../shared-libs/sqlite-on-3nstorage/sqljs.d.ts"
+// @deno-types="../../shared-libs/sqlite-on-3nstorage/index.d.ts"
 import { objectFromQueryExecResult, SQLiteOn3NStorage } from '../../shared-libs/sqlite-on-3nstorage/index.js';
 import {
   MSGS_DBS_DIR_NAME,
@@ -40,6 +40,7 @@ import type {
   SyncAspect,
   SyncEntityType,
   SyncVersionDbEntry,
+  SyncVersionRow,
   SyncVersionWrite,
 } from '../types/index.ts';
 import {
@@ -395,6 +396,33 @@ export async function msgsDb({
     if (sqlValue) {
       return fromQueryResult(sqlValue, msgsTabFields)[0];
     }
+  }
+
+  /**
+   * Every message row there is, oldest first.
+   *
+   * Only a backup needs this: everything else reads a chat, or a page of one.
+   * Ordered by timestamp so that an archive reads as the history does, and so
+   * that a restore inserts a chat's messages in the order they were said.
+   */
+  function getAllMessages(): MsgDbEntry[] {
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT *
+      FROM messages
+      ORDER BY timestamp ASC`,
+    );
+    return sqlValue ? fromQueryResult<MsgDbEntry>(sqlValue, msgsTabFields) : [];
+  }
+
+  /** The count alone, without reading a single row - for a dialog's summary. */
+  function countMessages(): number {
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT COUNT(*) AS count
+      FROM messages`,
+    );
+    return sqlValue ? objectFromQueryExecResult<{ count: number }>(sqlValue)[0].count : 0;
   }
 
   async function getMessagesInOneToOneChat(otoPeerCAddr: string) {
@@ -1031,6 +1059,42 @@ export async function msgsDb({
   }
 
   /**
+   * Every row of sync_versions, tombstones included.
+   *
+   * Only a backup needs this too: the LWW code reads one (entity, aspect) at a
+   * time, and tombstones it reads only through isDeletedLaterThan(). An archive
+   * has to carry them all, because the tokens are what let a restore be
+   * expressed in the merge rules that already exist rather than in rules of its
+   * own.
+   */
+  function getAllSyncVersions(): SyncVersionRow[] {
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT entityType, entityId, aspect, ts, deviceId, tombstonedAt
+      FROM sync_versions`,
+    );
+    return sqlValue ? objectFromQueryExecResult<SyncVersionRow>(sqlValue) : [];
+  }
+
+  /**
+   * Writes a batch of sync versions, with a single file write for the lot.
+   *
+   * A restore records a token per aspect per entity, which through
+   * setSyncVersion() would be one scheduled write of the whole database per
+   * row. writeSyncVersion() below is the same rule this uses, so a batched
+   * write and a single one cannot drift apart.
+   */
+  async function setSyncVersions(writes: SyncVersionWrite[]): Promise<void> {
+    if (writes.length === 0) {
+      return;
+    }
+    for (const write of writes) {
+      writeSyncVersion(write);
+    }
+    await saveLocally(sqlite);
+  }
+
+  /**
    * Drops versions of an entity, except its tombstones: the whole point of a
    * tombstone is to outlive the entity and keep a late phantom from
    * resurrecting it.
@@ -1219,6 +1283,8 @@ export async function msgsDb({
     flush,
     addMessage,
     getMessage,
+    getAllMessages,
+    countMessages,
     getExpiredMessages,
     getMessagesByChat,
     getMessagesPageInChat,
@@ -1247,6 +1313,8 @@ export async function msgsDb({
 
     getSyncVersion,
     setSyncVersion,
+    getAllSyncVersions,
+    setSyncVersions,
     deleteSyncVersionsOf,
     collectGarbageInSyncVersions,
 

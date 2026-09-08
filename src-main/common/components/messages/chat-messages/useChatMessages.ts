@@ -455,7 +455,12 @@ export default function useChatMessages(
       await sendMessageInChat({
         chatId: chatId!,
         text: msg.body,
-        files: isEmpty(entities) ? undefined : Object.values(entities),
+        // Named by the key rather than by the entity: the entity may be an item
+        // of this app's store, whose name is an id, and the forward has to
+        // carry the name the attachment had.
+        files: isEmpty(entities)
+          ? undefined
+          : Object.entries(entities).map(([name, entity]) => ({ entity, name })),
         relatedMessage: {
           forwardFrom: {
             sender: msg.sender || ownAddr.value,
@@ -502,16 +507,15 @@ export default function useChatMessages(
       return;
     }
 
-    let entities: Record<string, web3n.files.ReadonlyFile | web3n.files.ReadonlyFS> = {};
-    if (!isEmpty(msg.attachments)) {
-      entities = await getMessageAttachments(msg.attachments!, msg.incomingMsgId);
-    }
-
+    // No attachments are passed: the record of this message already exists, and
+    // sending reads its attachments out of the store by the ids that record
+    // holds. Handing them over again only made the service store a second copy
+    // of every file on each attempt.
     await sendMessageInChat({
       chatId: msg.chatId,
       chatMessageId: msg.chatMessageId,
       text: msg.body,
-      files: isEmpty(entities) ? undefined : Object.values(entities),
+      files: undefined,
       relatedMessage: undefined,
       withoutCurrentChatCheck: true,
     });

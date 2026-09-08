@@ -194,7 +194,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
   UI["GUI: sendMessageInChat()"] --> CS["ChatSrv.sendRegularMessage()"]
-  CS --> PREP["prepOutgoingAttachments()<br/>saveLink → attachments[].id"]
+  CS --> PREP["prepOutgoingAttachments()<br/>saveCopy до 20 МиБ, иначе saveLink<br/>→ attachments[].id"]
   PREP --> DB["addMessage(status='sending')"]
   DB --> PH["фантом своим устройствам<br/>(оптимистично)"]
   DB --> ADD["delivery.addMsg(recipients, msg, deliveryId, {localMeta})"]
@@ -234,7 +234,7 @@ sequenceDiagram
 
     UI->>CS: sendRegularMessage({chatId, text, files, relatedMessage})
     CS->>DB: findChat() — иначе исключение chatNotFound
-    CS->>FS: saveLink(файл/папка) для каждого вложения
+    CS->>FS: saveCopy() до 20 МиБ, иначе saveLink() — на каждое вложение
     CS->>DB: addMessage(status='sending', attachments[].id)
     CS->>DEL: фантом 'synchronization' на ownAddr
     CS->>DEL: addMsg(recipients, regular, deliveryId, localMeta)

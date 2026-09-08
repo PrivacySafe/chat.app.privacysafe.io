@@ -17,15 +17,14 @@
 <script lang="ts" setup>
   import {
     Ui3nDialogProvider,
-    Ui3nMenu,
     Ui3nProgressLinear,
-    Ui3nRipple as vUi3nRipple,
     Ui3nResize as vUi3nResize,
   } from '@v1nt1248/3nclient-lib';
   import prLogo from '@main/common/assets/images/privacysafe-logo-new.svg';
   import { useAppView } from '@main/common/composables/useAppView';
   import { useAppStore } from '@main/common/store/app.store';
   import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
+  import AppMenu from '@main/desktop/components/app-shell/app-menu.vue';
 
   const {
     me,
@@ -39,7 +38,7 @@
     syncStatusText,
     showSyncStatus,
     openDashboard,
-    appExit,
+    runMenuAction,
     t,
   } = useAppView();
   const appStore = useAppStore();
@@ -92,32 +91,13 @@
           </span>
         </div>
 
-        <ui3n-menu
-          position-strategy="fixed"
-          :offset-y="4"
-        >
-          <div
-            v-ui3n-ripple
-            :class="$style.icon"
-          >
-            <contact-icon
-              :name="me"
-              :size="36"
-              :readonly="true"
-            />
-          </div>
+        <contact-icon
+          :name="me"
+          :size="36"
+          :readonly="true"
+        />
 
-          <template #menu>
-            <div :class="$style.menu">
-              <div
-                :class="$style.menuItem"
-                @click="appExit"
-              >
-                {{ t('app.exit') }}
-              </div>
-            </div>
-          </template>
-        </ui3n-menu>
+        <app-menu @action="runMenuAction" />
       </div>
 
       <div
@@ -147,8 +127,6 @@
 </template>
 
 <style lang="scss" module>
-  @use '@main/common/assets/styles/mixins' as mixins;
-
   .app {
     --main-toolbar-height: calc(var(--spacing-s) * 9);
 
@@ -235,6 +213,7 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
+    column-gap: var(--spacing-xs);
   }
 
   .userInfo {
@@ -262,40 +241,6 @@
 
   .connectivity {
     color: var(--success-content-default);
-  }
-
-  .icon {
-    position: relative;
-    cursor: pointer;
-    overflow: hidden;
-    border-radius: 50%;
-  }
-
-  .menu {
-    position: relative;
-    background-color: var(--color-bg-control-secondary-default);
-    width: max-content;
-    border-radius: var(--spacing-xs);
-    @include mixins.elevation(1);
-  }
-
-  .menuItem {
-    position: relative;
-    width: 60px;
-    height: var(--spacing-l);
-    padding: 0 var(--spacing-s);
-    font-size: var(--font-13);
-    font-weight: 500;
-    color: var(--color-text-control-primary-default);
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    cursor: pointer;
-
-    &:hover {
-      background-color: var(--color-bg-control-primary-hover);
-      color: var(--color-text-control-accent-default);
-    }
   }
 
   .content {

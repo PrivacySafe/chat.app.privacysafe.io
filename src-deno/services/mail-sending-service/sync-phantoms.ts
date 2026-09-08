@@ -313,6 +313,48 @@ export async function queueSyncPhantom({
   await releasePendingSyncPhantoms(db, ownAddr);
 }
 
+/**
+ * Journals every chunk of a restore snapshot, and makes ONE pass over the
+ * journal afterwards.
+ *
+ * queueSyncPhantom() above releases on every call, which for a snapshot of
+ * dozens of chunks would mean dozens of passes over a journal that grows with
+ * each of them. The spacing, the stepping aside for a call and the retries all
+ * work as they are - they belong to the pass, not to the queuing.
+ *
+ * No sync versions are written here: the restore has already written the
+ * archived tokens, and this only announces them.
+ *
+ * The entityId names the part (`restore/<restoreId>#<part>`), which is what
+ * keeps the chunks out of each other's way twice over: no two rows share an
+ * (entity, aspect) pair, so planJournalRelease cannot pick one as "the newer
+ * one" - and 'snapshot' is not in SUPERSEDABLE_ASPECTS to begin with.
+ */
+export async function queueSnapshotChunks({
+  db,
+  ownAddr,
+  restoreId,
+  chunks,
+}: {
+  db: DB;
+  ownAddr: string;
+  restoreId: string;
+  chunks: SyncPhantom[];
+}): Promise<void> {
+  for (let i = 0; i < chunks.length; i += 1) {
+    const phantom = chunks[i];
+    await db.queueSyncPhantom({
+      entityType: 'chat',
+      entityId: `restore/${restoreId}#${i + 1}`,
+      aspect: 'snapshot',
+      ts: phantom.timestamp,
+      payload: JSON.stringify(phantom),
+    });
+  }
+
+  await releasePendingSyncPhantoms(db, ownAddr);
+}
+
 const releaseProc = new SingleProc();
 
 /**

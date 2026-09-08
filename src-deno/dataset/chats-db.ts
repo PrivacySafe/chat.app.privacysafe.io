@@ -14,10 +14,17 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-// @deno-types="../../../shared-libs/sqlite-on-3nstorage/sqljs.d.ts"
 import type { ChatIdObj } from '../../types/asmail-msgs.types.ts';
-import type { ChatDbEntry, GroupChatDbEntry, OTOChatDbEntry, ChatsDb } from '../types/index.ts';
+import type {
+  ChatDbEntry,
+  ChatsDb,
+  GroupChatDbEntry,
+  GroupChatTableFields,
+  OTOChatDbEntry,
+  OTOChatTableFields,
+} from '../types/index.ts';
 import { CHATS_DB_FNAME, CHATS_DB_META_ATTR, DATASET_META_ATTR } from '../../shared-libs/constants/index.ts';
+// @deno-types="../../shared-libs/sqlite-on-3nstorage/index.d.ts"
 import { SQLiteOn3NStorage } from '../../shared-libs/sqlite-on-3nstorage/index.js';
 import { makeDbWriter } from './db-writer.ts';
 import {
@@ -317,6 +324,61 @@ export async function chatsDb({
     }
   }
 
+  /**
+   * Inserts a chat row EXACTLY as given, and says nothing at all if the chat is
+   * already there.
+   *
+   * addOneToOneChat/addGroupChat above cannot serve a restore: both overwrite
+   * `settings` with `{autoDeleteMessages: '0'}` and set createdAt and
+   * lastUpdatedAt to Date.now(), which for a restore means an archive that says
+   * how old a chat is and where it belongs in the list is ignored on the one
+   * occasion the answer is not "now". Their get-or-create semantics are wrong
+   * here too: a restore that finds the chat present has to go through the
+   * per-aspect rules instead, and needs to be told so.
+   *
+   * ensureAllAdminsAreInMembers() stays: it is the invariant
+   * canReceiveRegularMessages() reads, not a normalization of input.
+   */
+  async function addOTOChatRecord(chat: OTOChatTableFields): Promise<OTOChatDbEntry | undefined> {
+    const { insertParams, orderedColumns, orderedValues } = forTableInsert(chat, otoChatTabFields);
+    try {
+      sqlite.db.exec(
+        `--sql
+        INSERT INTO oto_chats (${orderedColumns})
+        VALUES (${orderedValues})`,
+        insertParams,
+      );
+      await saveLocally();
+    } catch (err) {
+      if (isUniqueViolation(err as Error, 'peerCAddr')) {
+        return undefined;
+      }
+      throw err;
+    }
+    return getOTOChat(chat.peerCAddr);
+  }
+
+  async function addGroupChatRecord(chat: GroupChatTableFields): Promise<GroupChatDbEntry | undefined> {
+    ensureAllAdminsAreInMembers(chat.admins, chat.members);
+
+    const { insertParams, orderedColumns, orderedValues } = forTableInsert(chat, groupChatTabFields);
+    try {
+      sqlite.db.exec(
+        `--sql
+        INSERT INTO group_chats (${orderedColumns})
+        VALUES (${orderedValues})`,
+        insertParams,
+      );
+      await saveLocally();
+    } catch (err) {
+      if (isUniqueViolation(err as Error, 'chatId')) {
+        return undefined;
+      }
+      throw err;
+    }
+    return getGroupChat(chat.chatId);
+  }
+
   async function updateOTOChatRecord(
     peerCAddr: string,
     toUpdate: Partial<OTOChatDbEntry>,
@@ -448,6 +510,8 @@ export async function chatsDb({
     findChat,
     addOneToOneChat,
     addGroupChat,
+    addOTOChatRecord,
+    addGroupChatRecord,
     updateOTOChatRecord,
     updateGroupChatRecord,
     getChatList,

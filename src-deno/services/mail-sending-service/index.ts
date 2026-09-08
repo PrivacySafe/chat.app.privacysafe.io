@@ -67,6 +67,7 @@ export {
   makeInvitationPhantom,
   makeInvitationAcceptedPhantom,
   queueSyncPhantom,
+  queueSnapshotChunks,
   releasePendingSyncPhantoms,
   planJournalRelease,
   setPhantomReleaseBusyCheck,

@@ -33,9 +33,17 @@ import type {
   ChatMessageView,
   MsgPageCursor,
   MsgsDeletionResult,
+  OutgoingAttachment,
   SingleChatView,
 } from '../../types/chat.types.ts';
 import type { AddressCheckResult, SyncActivityView, UpdateEvent } from '../../types/services.types.ts';
+import type {
+  BackupPlan,
+  BackupRecordFiles,
+  RestoreMode,
+  RestoreOutcome,
+  RestorePreview,
+} from '../../types/backup.types.ts';
 import type { GuiLogLine } from '../../shared-libs/log-relay.ts';
 import type { SyncPhantomReleaseResult } from '../services/mail-sending-service/sync-phantoms.ts';
 import type { ChatDbEntry, ChatSettings, GroupChatDbEntry, OTOChatDbEntry } from './chat-db.types.ts';
@@ -222,7 +230,7 @@ export interface ChatSrv {
     chatId: ChatIdObj;
     chatMessageId?: string;
     text: string;
-    files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined;
+    files: OutgoingAttachment[] | undefined;
     relatedMessage: RelatedMessage | undefined;
   }): Promise<void>;
 
@@ -297,6 +305,46 @@ export interface ChatSrv {
     ChatSystemMsgV1,
     'chatMessageId' | 'chatSystemData'
   >): Promise<void>;
+
+  /**
+   * Everything the database side knows about an archive to be taken: the
+   * records and the work-list of attachments. Attachment BYTES are not in it -
+   * this app's window reaches the file store itself, so nothing of a file
+   * crosses IPC (see doc/08-backup-and-restore.md §1).
+   *
+   * Flushes pending writes and takes the archive's HLC stamp before reading a
+   * single row.
+   */
+  createBackupPlan(opts: { withAttachments?: boolean }): Promise<BackupPlan>;
+
+  /** Stops a scan in progress. Only a backup is cancellable; a restore is not. */
+  cancelBackupPlan(): Promise<void>;
+
+  /**
+   * A dry run over an archive that has already been read: the numbers the mode
+   * dialog shows before the most destructive action in the whole feature.
+   * Writes nothing.
+   */
+  previewRestore(recordFiles: BackupRecordFiles, mode: RestoreMode): Promise<RestorePreview>;
+
+  /**
+   * Applies an archive, and announces what it did to the user's other devices.
+   *
+   * `storedAttachments` maps an archive's blobName to the id the WINDOW created
+   * when it wrote those bytes into the file store; the archived id is never
+   * reused. `snapshotTs` comes from the archive's metadata - for an encrypted
+   * archive the window is the only one that can read it.
+   *
+   * `unusedAttachmentIds` in the answer are the ids the aspect rules found no
+   * use for; the window deletes them, or every restore would leave orphans in
+   * the store.
+   */
+  restoreBackupArchive(params: {
+    recordFiles: BackupRecordFiles;
+    storedAttachments: Record<string, string>;
+    mode: RestoreMode;
+    snapshotTs?: number;
+  }): Promise<RestoreOutcome>;
 
   makeAndSaveMsgToDb(ownAddr: string, msgData: Partial<MsgDbEntry>): Promise<ChatMessageView>;
 

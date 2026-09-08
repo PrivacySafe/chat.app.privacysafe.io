@@ -22,15 +22,17 @@ import type {
   ChatRegularMsgV1,
   RelatedMessage,
 } from '../../../../types/asmail-msgs.types.ts';
-import type { ChatMessageAttachmentsInfo } from '../../../../types/chat.types.ts';
+import type { ChatMessageAttachmentsInfo, OutgoingAttachment } from '../../../../types/chat.types.ts';
 import type { OpenChatCmdArg } from '../../../../types/chat-commands.types.ts';
-import type { AttachmentsContainer, FileWithId, ReadonlyFsWithId } from '../../../../types/app.types.ts';
+import type { AttachmentsContainer, ReadonlyFsWithId } from '../../../../types/app.types.ts';
 import type { ChatDbEntry, ChatSrvEmit, DB, FileStoreService, MsgDbEntry } from '../../../types/index.ts';
 import { LOGO_ICON_AS_ARRAY } from '../../../../src-main/common/constants/files.ts';
 import { AUTO_DELETE_MESSAGES_BY_ID, AUTODELETE_OFF } from '../../../../shared-libs/constants/chat-settings.ts';
+import { ATTACHMENT_COPY_THRESHOLD } from '../../../../shared-libs/constants/attachment-limits.ts';
 import { addFolderTo, addFileTo } from '../../../../shared-libs/attachments-container.ts';
 import { generateChatMessageId } from '../../../../shared-libs/chat-ids.ts';
-import { getFileStat, getEntityStat } from '../../../../shared-libs/get-stats-safely.ts';
+import { getEntityStat } from '../../../../shared-libs/get-stats-safely.ts';
+import { folderSizeUpTo } from '../../../../shared-libs/folder-size.ts';
 import { AppSettings } from '../../../utils/app-settings.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
 import {
@@ -60,9 +62,76 @@ export async function msgSending({
   getAppDeviceId: () => string;
   nextSyncStamp: () => Promise<number>;
 }) {
-  async function prepOutgoingAttachments(
-    entities: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined,
-  ): Promise<{
+  /**
+   * Size of an attachment, and whether it is small enough to be worth copying.
+   *
+   * A size that could not be established counts as too big: it must not fall
+   * into the copying branch, where a file that cannot even be measured would
+   * only fail later. Note that `getFileStat` cannot be used here for the same
+   * reason - it answers 0 for a file it failed to stat.
+   */
+  async function sizeOfAttachment(
+    entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS,
+    isFolder: boolean,
+  ): Promise<{ size: number; worthCopying: boolean }> {
+    if (isFolder) {
+      const { size, exceeded } = await folderSizeUpTo(
+        entity as web3n.files.ReadonlyFS,
+        ATTACHMENT_COPY_THRESHOLD,
+      );
+      // A walk that stopped early knows no total, and 0 is what a folder's size
+      // has always been in this record - the GUI computes it for display.
+      return exceeded ? { size: 0, worthCopying: false } : { size, worthCopying: true };
+    }
+
+    try {
+      const { size = 0 } = await (entity as web3n.files.ReadonlyFile).stat();
+      return { size, worthCopying: size <= ATTACHMENT_COPY_THRESHOLD };
+    } catch (exc) {
+      await w3n.log('error', `Fail to stat the file ${entity.name} being attached`, exc);
+      return { size: 0, worthCopying: false };
+    }
+  }
+
+  /**
+   * Puts an attachment into this app's file store and returns the id under
+   * which the message will refer to it, together with the entity the message
+   * should actually carry.
+   *
+   * A copy is sent as the copy, not as the file it was made from: delivery reads
+   * attachments lazily, long after the message was queued, and reading the copy
+   * is the whole point of having made one.
+   */
+  async function storeAttachment(
+    entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS,
+    worthCopying: boolean,
+  ): Promise<{ id?: string; toSend: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS }> {
+    if (worthCopying) {
+      try {
+        const id = await filesStore.saveCopy(entity);
+        const copy = await filesStore.getFile(id);
+        if (copy) {
+          return { id, toSend: copy as web3n.files.ReadonlyFile | web3n.files.ReadonlyFS };
+        }
+        await w3n.log('error', `Copy ${id} of the attachment ${entity.name} cannot be read back`);
+      } catch (exc) {
+        await w3n.log('error', `Fail to copy the attachment ${entity.name} into the store`, exc);
+      }
+    }
+
+    try {
+      return { id: await filesStore.saveLink(entity), toSend: entity };
+    } catch (exc) {
+      // The message still goes out with the file in it; what is lost is only
+      // this device's own way back to the attachment. Recorded without an id,
+      // which every reader already treats as "nothing to read here", instead of
+      // with an id that leads nowhere.
+      await w3n.log('error', `Fail to store the attachment ${entity.name}`, exc);
+      return { toSend: entity };
+    }
+  }
+
+  async function prepOutgoingAttachments(entities: OutgoingAttachment[] | undefined): Promise<{
     attachments: ChatMessageAttachmentsInfo[] | null;
     attachmentContainer?: AttachmentsContainer;
   }> {
@@ -72,35 +141,70 @@ export async function msgSending({
 
     const attachments: ChatMessageAttachmentsInfo[] = [];
     const attachmentContainer = {} as AttachmentsContainer;
-    for (const entity of entities) {
+    for (const { entity, storedId, name } of entities) {
       const isFolder = !!(entity as ReadonlyFsWithId).listFolder;
-      const entityStat = isFolder
-        ? {
-            name: entity.name,
-            size: 0,
-            isFolder: true,
-            ...((entity as ReadonlyFsWithId).id && { id: (entity as ReadonlyFsWithId).id }),
-          }
-        : {
-            name: entity.name,
-            size: (await getFileStat(entity as FileWithId)).size!,
-            isFolder: false,
-            ...((entity as FileWithId).fileId && { id: (entity as FileWithId).fileId }),
-          };
+      const { size, worthCopying } = await sizeOfAttachment(entity, isFolder);
 
-      const entityId = await filesStore.saveLink(entity);
+      // An entity that came with a stored id is already in the store, and
+      // neither a copy nor a link is made for it: the id it arrived with is the
+      // attachment's id, and its bytes are held exactly once.
+      const { id, toSend } = storedId
+        ? { id: storedId, toSend: entity }
+        : await storeAttachment(entity, worthCopying);
+
+      // Named explicitly, and not left to the container to take from the entity
+      // it is given: a stored copy is named after its id, which is no name to
+      // send anybody.
+      const attachmentName = name ?? entity.name;
+
       attachments.push({
-        ...entityStat,
-        id: entityId,
+        name: attachmentName,
+        size,
+        isFolder,
+        ...(id && { id }),
       });
 
       if (isFolder) {
-        addFolderTo(attachmentContainer, entity as web3n.files.ReadonlyFS);
+        addFolderTo(attachmentContainer, toSend as web3n.files.ReadonlyFS, attachmentName);
       } else {
-        addFileTo(attachmentContainer, entity as web3n.files.ReadonlyFile);
+        addFileTo(attachmentContainer, toSend as web3n.files.ReadonlyFile, attachmentName);
       }
     }
     return { attachments, attachmentContainer };
+  }
+
+  /**
+   * Container for a message that is being sent again: its attachments are
+   * already in the store, and the store is where they are read from. Storing
+   * them anew - which is what calling prepOutgoingAttachments here used to do -
+   * left one more copy of every file behind on each attempt.
+   */
+  async function containerOfStoredAttachments(
+    attachments: ChatMessageAttachmentsInfo[] | null,
+  ): Promise<AttachmentsContainer | undefined> {
+    if (!attachments || attachments.length === 0) {
+      return;
+    }
+
+    const attachmentContainer = {} as AttachmentsContainer;
+    for (const { id, name, isFolder } of attachments) {
+      if (!id) {
+        continue;
+      }
+
+      const entity = await filesStore.getFile(id);
+      if (!entity) {
+        await w3n.log('error', `Attachment ${name} of a message being resent cannot be read`);
+        continue;
+      }
+
+      if (isFolder) {
+        addFolderTo(attachmentContainer, entity as web3n.files.ReadonlyFS, name);
+      } else {
+        addFileTo(attachmentContainer, entity as web3n.files.ReadonlyFile, name);
+      }
+    }
+    return attachmentContainer;
   }
 
   async function infoOfIncomingAttachments(
@@ -140,7 +244,7 @@ export async function msgSending({
     chatId: ChatIdObj;
     chatMessageId?: string;
     text: string;
-    files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined;
+    files: OutgoingAttachment[] | undefined;
     relatedMessage: RelatedMessage | undefined;
   }): Promise<void> {
     const chat = data.findChat(chatId);
@@ -162,7 +266,7 @@ export async function msgSending({
         await sendStatusSyncMsg(chatId, updatedMsg);
       }
 
-      const { attachmentContainer } = await prepOutgoingAttachments(files);
+      const attachmentContainer = await containerOfStoredAttachments(existingMsg.attachments);
       const recipients = recipientsInChat(chat, ownAddr);
       await _sendRegularMessage(chatId, msgId, recipients, text, attachmentContainer, relatedMessage);
       return;

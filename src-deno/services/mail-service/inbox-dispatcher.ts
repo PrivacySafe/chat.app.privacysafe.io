@@ -25,7 +25,7 @@ import type { SyncActivityTracker } from '../../utils/sync-activity.ts';
 import { SingleProc } from '../../../shared-libs/processes/single.ts';
 import { startStageFirst } from '../video-chat-service/utils/_common.ts';
 import { MAX_SIGNAL_AGE_MILLIS } from '../video-chat-service/utils/call-state.ts';
-import { INBOX_COMMIT_BATCH, MAX_WATERMARK_LAG } from '../../../shared-libs/constants/index.ts';
+import { INBOX_COMMIT_BATCH, INBOX_SCAN_FLOOR_MS, MAX_WATERMARK_LAG } from '../../../shared-libs/constants/index.ts';
 import { makeLogger } from '../../../shared-libs/logger.ts';
 
 const log = makeLogger('InboxDispatcher');
@@ -309,13 +309,20 @@ export async function inboxDispatcher({
 
   async function scanMissedInboxMessages(): Promise<void> {
     const watermark = localDataStoreSrv.getLastReceivedMessageTimestamp();
-    const scanFrom = Math.max(watermark - 60 * 1000, 0);
+    // Floored, not clamped at zero: listMsgs(0) throws ENOENT instead of
+    // listing (see INBOX_SCAN_FLOOR_MS), so a device with a zero watermark -
+    // a fresh install, which is precisely the state that needs the scan most -
+    // used to pick up nothing at all from the shared inbox.
+    const scanFrom = Math.max(watermark - 60 * 1000, INBOX_SCAN_FLOOR_MS);
     const listMessages = await w3n
       .mail!.inbox.listMsgs(scanFrom)
       .catch(err => w3n.log('error', `Fail to list messages`, err));
 
     if (!listMessages) {
-      log.info(`Catch-up scan got no listing (watermark: ${watermark}); only live messages will be handled`);
+      // An error, not info: a refused listing is not "nothing to list", and it
+      // costs this start-up every phantom and every missed message that is only
+      // in the shared inbox. A single info line is why this went unnoticed.
+      log.error(`Catch-up scan got no listing (watermark: ${watermark}); only live messages will be handled`);
       return;
     }
 

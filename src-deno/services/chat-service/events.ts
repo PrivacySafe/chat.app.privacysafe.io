@@ -35,6 +35,14 @@ export interface ChatEventsBundle {
   watch: (obs: web3n.Observer<UpdateEvent>) => () => void;
   /** Direct access to the observers set, if needed */
   observers: ObserversSet<UpdateEvent>;
+  /**
+   * Opens a window in which per-record events are swallowed. Nestable: a
+   * counter, not a flag, because a restore of a snapshot chunk can be reached
+   * while a restore of an archive is already open.
+   */
+  beginBulkReplay: () => void;
+  /** Closes it, and announces the whole change as one 'bulk'/'reload'. */
+  endBulkReplay: () => void;
 }
 
 /**
@@ -45,11 +53,37 @@ export function createChatEvents(ownAddr: string, data: DB): ChatEventsBundle {
   const observers = new ObserversSet<UpdateEvent>();
 
   /**
+   * Depth of the bulk-replay window. A counter rather than a flag: a restore
+   * opens one, and a snapshot chunk received while it is open opens another.
+   */
+  let bulkDepth = 0;
+
+  function beginBulkReplay(): void {
+    bulkDepth += 1;
+  }
+
+  function endBulkReplay(): void {
+    bulkDepth = Math.max(0, bulkDepth - 1);
+    if (bulkDepth === 0) {
+      emitChatEvent(() => ({ updatedEntityType: 'bulk', event: 'reload' }), false);
+    }
+  }
+
+  /**
    * Events are built lazily, inside the emptiness check: with no GUI attached
    * there is nobody to receive them, and assembling a message view (let alone
    * querying chat aggregates for it) would be work done for nothing.
+   *
+   * `coalescable` says whether a bulk replay may swallow this event. Everything
+   * about one record is coalescable; progress of a backup or a restore, and the
+   * synchronization indicator, are NOT - the window a restore opens must not
+   * swallow the restore's own progress, which is the whole of what the user can
+   * see while it runs.
    */
-  function emitChatEvent(makeEvent: () => UpdateEvent): void {
+  function emitChatEvent(makeEvent: () => UpdateEvent, coalescable = true): void {
+    if (coalescable && (bulkDepth > 0)) {
+      return;
+    }
     if (!observers.isEmpty()) {
       observers.next(makeEvent());
     }
@@ -97,8 +131,10 @@ export function createChatEvents(ownAddr: string, data: DB): ChatEventsBundle {
   }
 
   const emit: ChatSrvEmit = {
+    // Never coalesced: the progress of a backup or a restore, and the
+    // synchronization indicator, come through here.
     common: (event: UpdateEvent) => {
-      emitChatEvent(() => event);
+      emitChatEvent(() => event, false);
     },
 
     chat: {
@@ -187,5 +223,5 @@ export function createChatEvents(ownAddr: string, data: DB): ChatEventsBundle {
     return () => observers.delete(obs);
   }
 
-  return { emit, watch, observers };
+  return { emit, watch, observers, beginBulkReplay, endBulkReplay };
 }

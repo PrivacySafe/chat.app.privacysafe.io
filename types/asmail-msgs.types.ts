@@ -24,6 +24,10 @@ import type {
   SingleChatStatus,
 } from './chat.types.ts';
 import type { ChatSettings, MsgDbEntry } from '../src-deno/types/index.ts';
+// A type-only cycle with backup.types.ts, which names its records by ChatIdObj
+// from here. Erased at compile time, and the alternative - restating the shape
+// of a snapshot entry - is how the wire form and the archive form would drift.
+import type { SnapshotChatEntry, SnapshotMsgEntry } from './backup.types.ts';
 
 export type ASMailSendException = web3n.asmail.ASMailSendException;
 export type ServLocException = web3n.ServLocException;
@@ -432,6 +436,49 @@ export interface WebRTCMsgBodySysMsgData {
   };
 }
 
+/**
+ * One chunk of a restore snapshot, announced to the user's other devices.
+ *
+ * A new `system` event inside an ordinary `synchronization` phantom (`v: 1`),
+ * and NOT a new chatMessageType or `v: 2`. That is forced, not stylistic:
+ * checkChatMessageJSON() admits only `jsonBody.v === 1`, and checkV1() returns
+ * undefined for a chatMessageType it does not know - and either answer makes an
+ * older build remove the message from the shared inbox IMMEDIATELY, taking the
+ * snapshot away from the newer devices that still need it. As a system event of
+ * a known shape it passes validation on an old build, reaches handleSystemSync,
+ * falls into its `default:` (one `w3n.log('warning')`) and is then scheduled for
+ * REMOVAL IN 15 DAYS rather than at once.
+ *
+ * The chunks carry records and never bytes; an attachment travels as its name,
+ * its size and `hasNoLocalSource`, with `incomingMsgId` standing in for the
+ * bytes of a received message. See doc/08-backup-and-restore.md for the carrier
+ * rule and why this app answers it differently from the mail app.
+ */
+export interface RestoreSnapshotSysMsgData {
+  event: 'restore:snapshot';
+  value: {
+    /** The receiver applies the same rule the user chose at the source. */
+    mode: 'replace' | 'merge';
+    snapshotTs: number;
+    /** Ties the chunks of one restore together, for the journal and the log. */
+    restoreId: string;
+    part: number;
+    of: number;
+    chats?: SnapshotChatEntry[];
+    msgs?: SnapshotMsgEntry[];
+    /**
+     * Only in 'replace', and only in the last chunk. Carries a FRESH token: a
+     * deletion has to win on the neighbours over everything the same snapshot
+     * has just restored.
+     */
+    deleted?: {
+      chatIds?: ChatIdObj[];
+      msgIds?: ChatMessageId[];
+      token: { ts: number; deviceId: string };
+    };
+  };
+}
+
 export type ChatSystemMessageData =
   | UpdateMembersSysMsgData
   | UpdateAdminsSysMsgData
@@ -447,7 +494,8 @@ export type ChatSystemMessageData =
   | AcceptedMsgBodySysMsgData
   | CallMsgBodySysMsgData
   | WebRTCMsgBodySysMsgData
-  | ResyncMsgRecordSysMsgData;
+  | ResyncMsgRecordSysMsgData
+  | RestoreSnapshotSysMsgData;
 
 export interface WebRTCMsg {
   // XXX should we have more explicit stages here?

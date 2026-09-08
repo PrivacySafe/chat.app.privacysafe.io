@@ -21,8 +21,10 @@ import { useCommandHandler } from '@main/common/composables/useCommandHandler';
 import { useAppStore } from '@main/common/store/app.store';
 import { useContactsStore } from '@main/common/store/contacts.store';
 import { useInitialize } from '@main/common/composables/useInitialize';
+import { useBackupRestore } from '@main/common/composables/useBackupRestore';
 import { chatService } from '@main/common/services/external-services.ts';
 import { makeLogger } from '@shared/logger';
+import type { AppMenuAction } from '~/app.types';
 
 const log = makeLogger('AppView');
 
@@ -42,6 +44,7 @@ export function useAppView() {
   } = storeToRefs(appStore);
 
   const { initialize, stopMessagesProcessing, stopVideoCallsWatching } = useInitialize();
+  const { startBackupWorkflow, runRestoreWorkflow } = useBackupRestore();
 
   const connectivityStatusText = computed(() =>
     connectivityStatus.value === 'online' ? 'app.status.connected.online' : 'app.status.connected.offline',
@@ -53,6 +56,27 @@ export function useAppView() {
 
   async function appExit() {
     w3n.closeSelf!();
+  }
+
+  /**
+   * The one handler of the avatar menu, for both form factors: the desktop
+   * dropdown and the phone drawer emit the same action ids (see useAppMenu).
+   */
+  async function runMenuAction(action: AppMenuAction): Promise<void> {
+    switch (action) {
+      case 'make-backup':
+        await startBackupWorkflow();
+        break;
+      case 'restore-backup':
+        await runRestoreWorkflow();
+        break;
+      case 'exit':
+        await appExit();
+        break;
+      default: {
+        log.error(`Unknown app menu action: ${action}`);
+      }
+    }
   }
 
   async function deleteExpiredMessages() {
@@ -114,5 +138,6 @@ export function useAppView() {
     showSyncStatus,
     openDashboard,
     appExit,
+    runMenuAction,
   };
 }

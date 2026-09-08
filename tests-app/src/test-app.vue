@@ -48,6 +48,7 @@
         await import('./tests/messaging.js');
         await import('./tests/msg-modifications.js');
         await import('./tests/sync-conflicts.js');
+        await import('./tests/backup-restore.js');
         await import('./tests/sync-activity.js');
         await import('./tests/group-members.js');
         await import('./tests/invitations.js');

@@ -395,9 +395,17 @@ erDiagram
 ```mermaid
 flowchart LR
   subgraph out["Исходящее сообщение"]
-    F1["Файл/папка, выбранные пользователем"] --> SL["filesStore.saveLink()"]
-    SL --> ID["attachments[].id"]
-    F1 --> AC["AttachmentsContainer → ASMail"]
+    F1["Файл/папка, выбранные пользователем"] --> Q{"размер ≤ 20 МиБ?"}
+    Q -->|да| SC["filesStore.saveCopy()"]
+    Q -->|нет| SL["filesStore.saveLink()"]
+    SC --> ID["attachments[].id"]
+    SL --> ID
+    SC --> AC["AttachmentsContainer → ASMail"]
+    F1 -->|только для ссылки| AC
+  end
+  subgraph paste["Вставка из буфера"]
+    P1["File в памяти"] --> PS["fileLinkStoreSrv.saveFile() в GUI"]
+    PS --> PID["storedId → attachments[].id, без копий"]
   end
   subgraph in["Входящее сообщение"]
     IM["msg.attachments (в inbox)"] --> INFO["attachments[] без id"]
@@ -405,11 +413,32 @@ flowchart LR
   end
 ```
 
-- Исходящие: [msg-sending.ts:62-103](../src-deno/services/chat-service/utils/msg-sending.ts#L62-L103)
-  — на каждое вложение создаётся запись в `file-store-service` (симлинк в local FS, а при
-  невозможности — копия файла/папки,
-  [file-store-service.ts:55-86](../src-deno/services/file-store-service/file-store-service.ts#L55-L86)),
-  её id попадает в `attachments[].id`.
+- Исходящие: [msg-sending.ts:63-174](../src-deno/services/chat-service/utils/msg-sending.ts#L63-L174)
+  — на каждое вложение создаётся запись в `file-store-service`, её id попадает в
+  `attachments[].id`. Какая именно запись, решает размер
+  ([attachment-limits.ts](../shared-libs/constants/attachment-limits.ts)):
+  - до `ATTACHMENT_COPY_THRESHOLD` (20 МиБ) — копия, и в ASMail уходит **копия**, а не файл
+    пользователя. Это то, ради чего копия и делается: своё отправленное сообщение остаётся
+    читаемым после того, как пользователь переместил или удалил оригинал, а доставка, которая
+    читает вложения лениво и много позже постановки в очередь, читает копию;
+  - больше порога — симлинк, и в ASMail уходит исходная сущность: дублировать большой файл дороже
+    риска, который это снимает. Такое вложение живо ровно настолько, насколько жив файл
+    пользователя;
+  - у папки размер считается обходом, который прекращается на пороге
+    ([folder-size.ts](../shared-libs/folder-size.ts)), поэтому обход никогда не стоит дороже
+    порога; у прервавшегося обхода размер в записи — 0, как было всегда;
+  - `MAX_ATTACHMENT_SIZE` (200 МиБ) — верхний предел, проверяется в GUI при выборе файла, тем же
+    числом поднимается лимит анонимных отправителей на своём сервере
+    ([index.ts](../src-deno/index.ts));
+  - вставленный из буфера файл GUI обязан записать в хранилище ещё до отправки, поэтому он
+    приходит с уже готовым `storedId`, и ни копии, ни ссылки для него не делается — его байты
+    лежат ровно один раз. Пока сообщение не отправлено, эта запись принадлежит композеру и
+    удаляется им ([useChatView.ts](../src-main/common/composables/useChatView.ts));
+  - если ни копия, ни ссылка не удались, вложение записывается **без** `id`: получателю файл
+    уходит как обычно, а у отправителя честно нет локального id вместо ссылки в пустоту.
+- Повторная отправка (`resendMsg`) вложений не передаёт: запись сообщения уже существует, и
+  контейнер собирается из её id (`containerOfStoredAttachments`). Иначе каждая попытка оставляла бы
+  в хранилище ещё по одной записи на файл.
 - Входящие: [msg-sending.ts:105-130](../src-deno/services/chat-service/utils/msg-sending.ts#L105-L130)
   — байты остаются в inbox, поэтому сообщение с вложениями **не** удаляется из inbox сразу, а
   `incomingMsgId` сохраняется в записи

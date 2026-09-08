@@ -40,8 +40,14 @@ import { makeLogger } from '@shared/logger';
 
 const log = makeLogger('ChatsHelper');
 
+/**
+ * @param name is the name to show for the attachment, when it is not the
+ * entity's own. A pasted file is stored before it can be attached at all, and
+ * the stored item's name is made of an id rather than anything worth showing.
+ */
 export async function prepareAttachmentEntityInfo(
   entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS,
+  name?: string,
 ): Promise<ChatMessageAttachmentsInfo | undefined> {
   if (!entity) {
     return;
@@ -53,7 +59,7 @@ export async function prepareAttachmentEntityInfo(
     : await getFileStat(entity as FileWithId);
 
   return {
-    name: entity.name,
+    name: name ?? entity.name,
     size: attachmentStat.size!,
     isFolder,
     ...((entity as ReadonlyFsWithId).id && { id: (entity as ReadonlyFsWithId).id }),

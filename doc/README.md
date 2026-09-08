@@ -18,6 +18,7 @@
 | [05-video-calls.md](./05-video-calls.md) | Видеозвонки в топологии Star (хостер — инициатор), сигналинг, SFU-ретрансляция, heartbeat/re-join |
 | [06-ui-architecture.md](./06-ui-architecture.md) | Vue 3 + Pinia, два формфактора (desktop/phone), поток событий из бекенда в UI |
 | [07-build-test-run.md](./07-build-test-run.md) | Сборка (Vite + Deno-бандл), тестовое приложение, запуск на платформе |
+| [08-backup-and-restore.md](./08-backup-and-restore.md) | Архив истории на диск и восстановление из него: формат, разделение слоёв, режимы `merge`/`replace`, анонс соседним устройствам |
 | [README.en.md](./README.en.md) | Обзорный дубль этого файла на английском |
 
 ## Что это за приложение

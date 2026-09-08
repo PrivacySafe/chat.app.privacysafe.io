@@ -69,6 +69,14 @@ export interface ChatsDb {
     params: Omit<OTOChatDbEntry, 'createdAt' | 'lastUpdatedAt' | 'peerCAddr'>,
   ): Promise<OTOChatDbEntry>;
   addGroupChat(chat: Omit<GroupChatDbEntry, 'createdAt' | 'lastUpdatedAt'>): Promise<GroupChatDbEntry>;
+  /**
+   * Inserts the row verbatim - createdAt, lastUpdatedAt and settings included -
+   * and returns undefined when the chat is already there. What a restore needs
+   * and what add*Chat above cannot give: those overwrite exactly the fields an
+   * archive is the only source of.
+   */
+  addOTOChatRecord(chat: OTOChatTableFields): Promise<OTOChatDbEntry | undefined>;
+  addGroupChatRecord(chat: GroupChatTableFields): Promise<GroupChatDbEntry | undefined>;
   updateOTOChatRecord(peerCAddr: string, toUpdate: Partial<OTOChatDbEntry>): Promise<OTOChatDbEntry | undefined>;
   updateGroupChatRecord(
     chatId: string,

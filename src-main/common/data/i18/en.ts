@@ -44,7 +44,11 @@ export const en = {
     orientation: {
       rotateBack: 'Please rotate your phone back to portrait orientation',
     },
-    exit: 'Exit',
+    menu: {
+      makeBackup: 'Create a backup',
+      restoreBackup: 'Restore from a backup',
+      exit: 'Exit',
+    },
     ok: 'Ok',
     text: {
       new: 'New',
@@ -53,6 +57,8 @@ export const en = {
       next: 'Next',
       create: 'Create',
       delete: 'Delete',
+      cancel: 'Cancel',
+      save: 'Save',
       dropzone_default: 'Upload',
       msg_sender: {
         you: 'You',
@@ -67,6 +73,145 @@ export const en = {
     notification: {
       new_message: '{sender} sent you a message',
       invite: '{sender} invites you',
+    },
+  },
+
+  backup: {
+    // One set of lines for both places the same fact is told: after a backup,
+    // and before a restore of one.
+    skipped: {
+      onAnotherDevice:
+        '{count} file(s) were attached on another of your devices, and file bytes never travel '
+        + 'between devices.',
+      notRequested: '{count} file(s) were left out because you asked for an archive without them.',
+      symlink:
+        '{count} file(s) are bigger than 20 MiB and were attached by reference, so the archive '
+        + 'points at them rather than holding them.',
+      inIncomingMsg:
+        '{count} file(s) belong to messages you received and stay in your mailbox on the server.',
+      unreadable: '{count} file(s) could not be read.',
+      folderPartial: '{count} attached folder(s) hold too many files, and only part of them is in.',
+      noLocalSource: '{count} file(s) have no readable file on this device.',
+    },
+    passphrase: {
+      createTitle: 'Protect the backup',
+      openTitle: 'Passphrase required',
+      createHint:
+        'A passphrase encrypts the archive. Leave both fields empty to save it unencrypted.',
+      openHint: 'This backup archive is encrypted. Enter the passphrase it was created with.',
+      label: 'Passphrase',
+      repeatLabel: 'Repeat passphrase',
+      placeholder: 'Leave empty for no encryption',
+      openBtn: 'Open',
+      show: 'Show passphrase',
+      hide: 'Hide passphrase',
+      wrong: 'That passphrase does not open this archive.',
+      mismatch: 'The two passphrases do not match.',
+      tooShort: 'A passphrase has to be at least {count} characters long.',
+      noRecovery: 'A forgotten passphrase cannot be recovered: the archive stays unreadable.',
+      optional:
+        'Without a passphrase the archive is only as private as the place you keep it in.',
+    },
+    create: {
+      dialogTitle: 'Creating backup',
+      fileDialogTitle: 'Save backup',
+      fileDialogBtn: 'Save',
+      text: {
+        scanning: 'Reading the chats',
+        readingAttachments: 'Reading file {number} of {total}',
+        compressing: 'Packing {number} of {total}',
+        encrypting: 'Encrypting the archive',
+        saving: 'Saving the backup file',
+      },
+      // Permanent explanations rather than warnings to confirm: they are not
+      // about the risk of this action but about the boundary of what an archive
+      // can ever bring back - said now, rather than in half a year when the
+      // archive is needed.
+      attachmentsNotice:
+        'Files of messages you received are kept in your mailbox on the server and do not go '
+        + 'into the archive. The messages themselves are restored in full.',
+      thisDeviceNotice:
+        'Only files that are on this device go into the archive. A message whose file was '
+        + 'attached on another of your devices is backed up without it, so take the backup '
+        + 'where the files are.',
+      bigFilesNotice:
+        'Files bigger than 20 MiB are attached by reference rather than copied, so the archive '
+        + 'points at your own file instead of holding it.',
+      autoDeleteNotice:
+        'Chats with auto-deletion on will restore only the messages whose lifetime has not run '
+        + 'out yet.',
+      success: 'The backup {filename} was saved.',
+      skippedTitle: 'Some files did not go into the archive.',
+      empty: 'There is nothing to back up.',
+      cancel: 'Creating the backup was stopped.',
+      error: 'The backup could not be created.',
+      errorTooLarge:
+        'This history is too big to be carried into an archive whole. Take a backup without '
+        + 'files instead.',
+    },
+    restore: {
+      dialogTitle: 'Restoring backup',
+      fileDialogTitle: 'Select backup file',
+      fileDialogBtn: 'Open',
+      confirmTitle: 'Restore from a backup',
+      confirmBtn: 'Restore',
+      confirmWarningText:
+        'This archive was written by version {archiveVersion}, and this app is version '
+        + '{appVersion}, or the archive carries no version at all. Restoring it may damage the '
+        + 'chats. Proceed at your own risk.',
+      unknownVersion: 'unknown',
+      unknownDate: 'unknown',
+      skippedTitle: 'This archive does not hold every file:',
+      summary: {
+        createdAt: 'Backup taken',
+        chats: 'Chats in the archive',
+        messages: 'Messages in the archive',
+        attachments: 'Files in the archive',
+        currentChats: 'Chats here now',
+        toCreate: 'Would be added',
+        toUpdate: 'Would be updated',
+        toDelete: 'Would be deleted',
+        expiredSkipped: 'Past their auto-deletion time, left out',
+      },
+      mode: {
+        mergeTitle: 'Add what is missing',
+        mergeHint:
+          'Chats and messages that are not here are put back. Nothing that is here is changed, '
+          + 'and nothing is deleted. A message deleted after the backup stays deleted.',
+        replaceTitle: 'Make the chats match the archive',
+        replaceHint:
+          'The archive states what the chats are. Anything you changed after the backup was '
+          + 'taken still wins over it.',
+        replaceWarning:
+          'Chats and messages that are not in the archive, and that are older than it, will be '
+          + 'deleted — on this device and on your other ones. Deleting a chat takes its whole '
+          + 'history with it.',
+      },
+      devicesNotice:
+        'Whatever you choose here is what every device of yours will do: the restore is sent '
+        + 'to them and applied by the same rule.',
+      text: {
+        unpacking: 'Reading the archive',
+        decrypting: 'Decrypting the archive',
+        storingAttachments: 'Storing file {number} of {total}',
+        listingInbox: 'Checking which messages are still on the server',
+        restoring: 'Restoring {number} of {total}',
+        announcing: 'Telling your other devices',
+        completed: 'Restoration completed',
+      },
+      success:
+        'The backup was restored: {created} added, {updated} updated, {deleted} deleted.',
+      expiredNotice: '{count} message(s) were left out: their auto-deletion time has passed.',
+      offlineNotice:
+        'The server could not be reached, so it is not known which received messages are still '
+        + 'there. Some files may turn out to be unavailable.',
+      error: 'The backup could not be restored.',
+      errorCorruptedArchive: 'This file is damaged or is not a ZIP archive.',
+      errorForeignArchive: 'This archive is a backup of another app, not of the chats.',
+      errorNoChats: 'This archive holds no chats. It may be a backup of another app.',
+      errorUnreadableRecords: 'The records in this archive cannot be read.',
+      errorPassphraseRequired: 'This archive is encrypted and needs its passphrase.',
+      errorEncryptionUnsupported: 'This archive is encrypted, and this app cannot decrypt it here.',
     },
   },
 
@@ -86,6 +231,20 @@ export const en = {
         remove: {
           all: 'Remove all attachments',
         },
+      },
+    },
+    attachment: {
+      dialog: {
+        title: 'Attach files',
+        btn: {
+          select: 'Select',
+        },
+      },
+      too_big: {
+        error: 'The file {fileName} is bigger than the {limit} limit and cannot be attached',
+      },
+      attaching: {
+        error: 'Error attaching the file {fileName}',
       },
     },
     action: {

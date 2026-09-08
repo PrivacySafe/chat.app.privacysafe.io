@@ -18,7 +18,7 @@
 import { randomStr } from './randomStr.ts';
 import { ChatMessageView } from '../types/chat.types.ts';
 import { ChatIdObj } from '../types/asmail-msgs.types.ts';
-import { generateFastRandomString } from '@shared/generate-random-string.ts';
+import { generateFastRandomString } from './generate-random-string.ts';
 
 export function chatIdToString({ isGroupChat, chatId }: ChatIdObj): string {
   return `${isGroupChat ? 'g' : 's'}/${chatId}`;

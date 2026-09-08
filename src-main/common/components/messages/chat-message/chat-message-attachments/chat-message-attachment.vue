@@ -168,7 +168,7 @@
     >
       <ui3n-icon
         v-if="blocked"
-        icon="outline-lock"
+        icon="cloud-lock"
         :size="attachmentsItemPreviewSize"
       />
 

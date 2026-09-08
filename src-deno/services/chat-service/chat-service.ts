@@ -33,6 +33,7 @@ import type {
   ChatMessageView,
   GroupChatView,
   MsgPageCursor,
+  OutgoingAttachment,
   RegularMsgView,
   SingleChatView,
 } from '../../../types/chat.types.ts';
@@ -85,7 +86,8 @@ import { msgStatusUpdating as _msgStatusUpdating } from './utils/msg-status-upda
 import { msgReactions as _msgReactions } from './utils/msg-reactions.ts';
 import { msgEditing as _msgEditing } from './utils/msg-editing.ts';
 import { checkChatMessageJSON } from './utils/_msgs-related-methods.ts';
-import { handleIncomingSync } from './utils/handle-incoming-sync.ts';
+import { handleIncomingSync, processOrphanedForChatCreation } from './utils/handle-incoming-sync.ts';
+import { chatBackupSrv } from '../backup-service/chat-backup-srv.ts';
 import { makeResyncCtx, requestResyncForStuckOrphans } from './utils/msg-resync.ts';
 import { msgEntityId } from './utils/sync-versions.ts';
 import { makeSyncActivityTracker, type SyncActivityTracker } from '../../utils/sync-activity.ts';
@@ -114,7 +116,8 @@ export async function chatService(
   const filesStore = await fileStoreService();
   const appSettings = new AppSettings();
 
-  const { emit: emitEventAfterAction, watch } = createChatEvents(ownAddr, data);
+  const { emit: emitEventAfterAction, watch, beginBulkReplay, endBulkReplay } =
+    createChatEvents(ownAddr, data);
 
   /**
    * Tracker of synchronization work, for the indicator in the GUI. It is made
@@ -161,6 +164,7 @@ export async function chatService(
     data,
     appSettings,
     emit: emitEventAfterAction,
+    filesStore,
     getAppDeviceId,
     nextSyncStamp,
     resync: resyncCtx,
@@ -233,6 +237,24 @@ export async function chatService(
     emit: emitEventAfterAction,
     getAppDeviceId,
     nextSyncStamp,
+  });
+
+  /**
+   * Backup and restore. Constructed after everything it leans on: the events
+   * (for progress and the bulk-replay window), the file store, and the drain of
+   * phantoms buffered before a chat existed - a restored chat can unblock them.
+   */
+  const backupSrv = chatBackupSrv({
+    db: data,
+    emit: emitEventAfterAction,
+    filesStore,
+    ownAddr,
+    getAppDeviceId,
+    nextSyncStamp,
+    beginBulkReplay,
+    endBulkReplay,
+    drainOrphanedForChat: chatId =>
+      processOrphanedForChatCreation(data, emitEventAfterAction, filesStore, chatId, ownAddr, resyncCtx),
   });
 
   function getAppDeviceId() {
@@ -326,6 +348,7 @@ export async function chatService(
           db: data,
           emit: emitEventAfterAction,
           ownAddr,
+          filesStore,
           observeSyncStamp: ts => localDataStoreSrv.observeSyncStamp(ts),
           resync: resyncCtx,
         });
@@ -626,7 +649,7 @@ export async function chatService(
     chatId: ChatIdObj;
     chatMessageId?: string;
     text: string;
-    files: (web3n.files.ReadonlyFile | web3n.files.ReadonlyFS)[] | undefined;
+    files: OutgoingAttachment[] | undefined;
     relatedMessage: RelatedMessage | undefined;
   }): Promise<void> {
     return msgSending.sendRegularMessage({ chatId, chatMessageId, text, files, relatedMessage });
@@ -924,6 +947,10 @@ export async function chatService(
     changeMessageReaction,
     makeAndSaveMsgToDb,
     saveAndSyncLocalSystemMsg,
+    createBackupPlan: backupSrv.createBackupPlan,
+    cancelBackupPlan: backupSrv.cancelBackupPlan,
+    previewRestore: backupSrv.previewRestore,
+    restoreBackupArchive: backupSrv.restoreBackupArchive,
     watch,
     onIncomingCallSysMsg,
   };

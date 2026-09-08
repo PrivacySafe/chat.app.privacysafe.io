@@ -21,6 +21,7 @@ import { chatService, videoOpenerSrv } from '@main/common/services/external-serv
 import { useAppStore } from '@main/common/store/app.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
+import { useBackupStore } from '@main/common/store/backup.store';
 import type { UpdateEvent } from '~/services.types';
 import { SingleProc } from '@shared/processes/single';
 import { makeLogger } from '@shared/logger';
@@ -34,6 +35,7 @@ export function useInitialize() {
   const appStore = useAppStore();
   const chatsStore = useChatsStore();
   const messagesStore = useMessagesStore();
+  const backupStore = useBackupStore();
 
   /** Reported once: it is a misconfiguration, not a passing condition. */
   let duplicateInstanceReported = false;
@@ -61,6 +63,13 @@ export function useInitialize() {
           await handleBackgroundChatEvents(event);
         } else if (event.updatedEntityType === 'message') {
           await handleBackgroundMessageEvents(event);
+        } else if (event.updatedEntityType === 'bulk') {
+          // The chat list first: fetchMessages() reads `unread` to size its
+          // first page.
+          await refreshChatList();
+          await messagesStore.fetchMessages();
+          messagesStore.clearSelectedMessages();
+          await fetchRecentReactions();
         } else {
           console.info(`Unknown update event from ChatService:`, event);
         }
@@ -76,6 +85,33 @@ export function useInitialize() {
 
     stopMessagesProcessing.value = chatService.watch({
       next: updateEvent => {
+        // FIRST, before anything else: the final `else` below logs every event
+        // it does not recognize, and these tick many times a second.
+        //
+        // Applied straight away rather than queued, for the same reason
+        // 'sync-state' is (see the note just below): the queue is drained by a
+        // SingleProc in which every event does database and IPC work, and a
+        // progress bar that lags behind by seconds is not a progress bar. The
+        // progress of a restore is if anything more sensitive to it - the
+        // restore is what fills that queue.
+        if (updateEvent.updatedEntityType === 'backup-progress') {
+          backupStore.applyServiceBackupProgress(updateEvent.progress);
+          return;
+        }
+        if (updateEvent.updatedEntityType === 'restore-progress') {
+          backupStore.onRestoreProgress(updateEvent.progress);
+          return;
+        }
+        // A restore, and the receipt of a restore snapshot, swallow their
+        // per-record events and close with this one instead: everything is
+        // re-read rather than patched thousands of times over.
+        if (updateEvent.updatedEntityType === 'bulk') {
+          updatesQueue.push(updateEvent);
+          if (!updatesProc.getP()) {
+            updatesProc.start(processQueuedUpdateEvents);
+          }
+          return;
+        }
         // Sync state is applied straight away rather than queued. The queue is
         // drained by a SingleProc, and every chat/message event in it does
         // database and IPC work, so during the very backlog the indicator exists

@@ -15,8 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { DELIVERY_SERVICE_DATA_FILE_NAME } from '../../../shared-libs/constants/index.ts';
-import { SingleProc } from '@shared/processes/single.ts';
-import { randomStr } from '@shared/randomStr.ts';
+import { SingleProc } from '../../../shared-libs/processes/single.ts';
+import { randomStr } from '../../../shared-libs/randomStr.ts';
 import type { LocalDataStore, DeliveryServiceData } from '../../types';
 
 /** How often the local data file is re-read to see whose stamp it carries. */

@@ -16,7 +16,7 @@
 -->
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import JSZip from 'jszip';
+import { unzipSync } from 'fflate';
 import size from 'lodash/size';
 import get from 'lodash/get';
 import set from 'lodash/set';
@@ -43,9 +43,8 @@ const emits = defineEmits<{
 const isProcessing = ref(true);
 const entityList = ref<EntityListItem[]>([]);
 
-function handleZipEntry(path: string, entry: JSZip.JSZipObject) {
+function handleZipEntry(path: string, dir: boolean) {
   const separator = path.includes('/') ? '/' : '\\';
-  const { dir } = entry;
   const processedPath = dir
     ? path.slice(0, path.length - 1).split(separator)
     : path.split(separator);
@@ -90,8 +89,15 @@ onMounted(async () => {
 
     const uint8Array = await (entity as web3n.files.ReadonlyFile).readBytes();
     if (uint8Array) {
-      const zip = await JSZip.loadAsync(uint8Array);
-      zip.forEach((path, entry) => handleZipEntry(path, entry));
+      // Only the archive's table of contents is needed here. The filter runs
+      // for every central directory entry, and returning false from it keeps
+      // fflate from inflating any of the content.
+      unzipSync(uint8Array, {
+        filter: ({ name }) => {
+          handleZipEntry(name, name.endsWith('/') || name.endsWith('\\'));
+          return false;
+        },
+      });
     }
   } catch (e) {
     log.error(`Error unzipping file ${props.item.filename}.`, e);

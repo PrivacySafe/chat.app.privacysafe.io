@@ -96,6 +96,17 @@ export interface SyncVersionDbEntry {
 }
 
 /**
+ * A whole row of sync_versions, i.e. a version together with what it is a
+ * version OF. Read only in bulk (getAllSyncVersions), where the key cannot be
+ * implied by the query.
+ */
+export interface SyncVersionRow extends SyncVersionDbEntry {
+  entityType: SyncEntityType;
+  entityId: string;
+  aspect: SyncAspect;
+}
+
+/**
  * A single version to record, as part of queueSyncPhantom().
  */
 export interface SyncVersionWrite {
@@ -124,7 +135,17 @@ export interface SyncVersionWrite {
  * message or an invitation) rather than a change of one of its aspects - those
  * are guarded by tombstones and have no version of their own.
  */
-export type SyncPhantomAspect = SyncAspect | 'record';
+export type SyncPhantomAspect =
+  | SyncAspect
+  | 'record'
+  /**
+   * One chunk of a restore snapshot. Only SyncPhantomAspect is widened for it
+   * and not SyncEntityType: the latter types sync_versions as well, and a value
+   * added there would leak into every piece of the last-write-wins code. This
+   * path writes no sync version at all - the restore has already written the
+   * archived tokens.
+   */
+  | 'snapshot';
 
 /**
  * An outgoing phantom, as written into the journal.
@@ -158,6 +179,9 @@ export interface MsgsDb {
   flush(): Promise<void>;
   addMessage(msg: MsgDbEntry): Promise<void>;
   getMessage(id: ChatMessageId): Promise<MsgDbEntry | undefined>;
+  /** Every row there is, oldest first. Read by a backup, and by nothing else. */
+  getAllMessages(): MsgDbEntry[];
+  countMessages(): number;
   getExpiredMessages(now: number): Promise<MsgDbEntry[]>;
   getMessagesByChat(chatIdObj: ChatIdObj): Promise<MsgDbEntry[]>;
   /**
@@ -207,6 +231,13 @@ export interface MsgsDb {
     aspect: SyncAspect,
     version: { ts: number; deviceId: string; tombstonedAt?: number },
   ): Promise<void>;
+  /** Every row, tombstones included. Read by a backup, and by nothing else. */
+  getAllSyncVersions(): SyncVersionRow[];
+  /**
+   * A batch of version writes, with one file write for the lot - what keeps a
+   * restore from costing a write of the whole database per token.
+   */
+  setSyncVersions(writes: SyncVersionWrite[]): Promise<void>;
   deleteSyncVersionsOf(entityType: SyncEntityType, entityId: string): Promise<void>;
   collectGarbageInSyncVersions(now: number): Promise<void>;
 

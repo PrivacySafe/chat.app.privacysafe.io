@@ -16,7 +16,7 @@
 */
 import type { ChatIdObj } from '../../../../types/asmail-msgs.types.ts';
 import type { DB, SyncAspect, SyncEntityType } from '../../../types/index.ts';
-import { chatIdToString } from '../../../../shared-libs/chat-ids.ts';
+import { chatIdToString, stringToChatId } from '../../../../shared-libs/chat-ids.ts';
 
 /**
  * The slice of the database these rules actually touch.
@@ -68,6 +68,38 @@ export function msgEntityId(chatId: ChatIdObj, chatMessageId: string): string {
 }
 
 /**
+ * The inverse of msgEntityId: the pair a message's entity id was built from.
+ *
+ * Split at the LAST slash, because chatIdToString() puts a `g/` or `s/` prefix
+ * in front of an id that may itself contain slashes, while a chatMessageId may
+ * not (see the alphabet chatMessageIdForCallEvent is confined to, and
+ * generateChatMessageId's `<seconds>-<10 chars>`).
+ *
+ * That invariant is not enforced by the column, hence undefined rather than a
+ * throw for an id this build cannot take apart: a caller that cannot resolve
+ * the pair degrades - a restore writes such a token without asking whether the
+ * entity is still alive - instead of failing the whole archive.
+ */
+export function parseMsgEntityId(
+  entityId: string,
+): { chatId: ChatIdObj; chatMessageId: string } | undefined {
+  const sepPos = entityId.lastIndexOf('/');
+  if (sepPos <= 1) {
+    return undefined;
+  }
+  const chatIdStr = entityId.substring(0, sepPos);
+  const chatMessageId = entityId.substring(sepPos + 1);
+  if (!chatMessageId) {
+    return undefined;
+  }
+  try {
+    return { chatId: stringToChatId(chatIdStr), chatMessageId };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Applies a change only if its token is newer than the one already recorded for
  * this aspect, and records the token when it does. This is the single place
  * where the last-write-wins rule lives.
@@ -116,6 +148,34 @@ export function isDeletedLaterThan(
 ): boolean {
   const tombstone = db.getSyncVersion(entityType, entityId, 'deleted');
   return !!tombstone && !isNewerToken(token, tombstone);
+}
+
+/**
+ * Tells if a message must not be (re)created because it was deleted after the
+ * change this token belongs to - either individually, or by a clearing of the
+ * whole chat's history.
+ *
+ * The one rule that accounts for BOTH `msg/deleted` and
+ * `chat/historyCleared`, and it lives here rather than in the incoming-sync
+ * handler because a restore has to be guarded by exactly the same rule: a
+ * second implementation of it is how a snapshot would come to resurrect what a
+ * phantom correctly refuses to.
+ *
+ * The asymmetry with a `merge`'s treatment of `historyCleared` is deliberate
+ * and belongs to the restore, not here: this asks "is the marker newer than
+ * the change", which is the question in both cases.
+ */
+export function isRecordDeletedLater(
+  db: SyncVersionStore,
+  chatId: ChatIdObj,
+  chatMessageId: string,
+  token: SyncToken,
+): boolean {
+  if (isDeletedLaterThan(db, 'msg', msgEntityId(chatId, chatMessageId), token)) {
+    return true;
+  }
+  const historyCleared = db.getSyncVersion('chat', chatEntityId(chatId), 'historyCleared');
+  return !!historyCleared && !isNewerToken(token, historyCleared);
 }
 
 /**

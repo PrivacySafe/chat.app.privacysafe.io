@@ -17,6 +17,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import {
   ChatIdObj,
+  ChatMessageId,
   ChatIncomingMessage,
   ChatInvitationMsgV1,
   ChatMessageJsonBody,
@@ -39,6 +40,7 @@ import type {
   FileStoreService,
   GroupChatDbEntry,
   MsgDbEntry,
+  MsgsDb,
   RefsToMsgsDataNoInDB,
 } from '../../../types/index.ts';
 import { toCanonicalAddress } from '../../../../shared-libs/address-utils.ts';
@@ -249,11 +251,42 @@ export async function removeAttachmentsOfOutgoingMsg(
 ): Promise<void> {
   for (const { id } of attachments) {
     if (id) {
-      await filesStore.deleteLink(id);
+      await filesStore.deleteEntity(id);
     }
   }
 }
 
+
+/**
+ * Removes a message and everything of it that does not live in the database:
+ * the inbox message an incoming record is built from, and the attachment bytes
+ * of an outgoing one.
+ *
+ * The single place this rule lives, deliberately: the local deletion path, the
+ * path driven by a phantom of another device, and a restore all have to remove
+ * the same three things, and a second implementation of the rule is how the
+ * phantom path came to remove only the database row (leaving inbox messages and
+ * attachment bytes behind forever).
+ *
+ * The subtlety worth keeping: a record synchronized from another device
+ * (settings.msgOwnersDeviceId set) is not incoming, yet its attachments[].id
+ * point into THAT device's file store. They are not ours to delete, and an id
+ * that happens to collide locally would take a stranger's file with it.
+ */
+export async function removeMsgBytes(
+  data: Pick<MsgsDb, 'deleteMessage'>,
+  filesStore: FileStoreService,
+  id: ChatMessageId,
+  msg: Pick<MsgDbEntry, 'isIncomingMsg' | 'incomingMsgId' | 'attachments' | 'settings'>,
+): Promise<void> {
+  const { isIncomingMsg, incomingMsgId, attachments, settings } = msg;
+  await data.deleteMessage(id);
+  if (isIncomingMsg && incomingMsgId) {
+    await removeMessageFromInbox(incomingMsgId);
+  } else if (!isIncomingMsg && attachments && !settings?.msgOwnersDeviceId) {
+    await removeAttachmentsOfOutgoingMsg(attachments, filesStore);
+  }
+}
 
 export async function removeMsgDataNotInDB(
   refs: RefsToMsgsDataNoInDB,
@@ -347,6 +380,33 @@ export async function getIncomingMessage(msgId: string): Promise<ChatIncomingMes
   }
 }
 
+/**
+ * An attachment list as it may travel to another device of the same user.
+ *
+ * `id` is a reference into THIS device's file store and means nothing anywhere
+ * else - worse, it can collide with a local id there - so it is cut out and the
+ * attachment is marked as having no local source. A message without files must
+ * carry no field at all rather than an empty list: `[]` is truthy, and on the
+ * receiving device it reads as "there are files, they are just elsewhere".
+ *
+ * Exported and used by both the phantom of a regular message and a restore
+ * snapshot, so that the removal of `id` lives in exactly one place. Both have
+ * the same problem to solve, and a snapshot that forgot to strip it would put
+ * ids of a stranger's store into a neighbour's records.
+ */
+export function attachmentsForPhantom(
+  attachments: ChatMessageAttachmentsInfo[] | null | undefined,
+  sourceDeviceId: string,
+): ChatMessageAttachmentsInfo[] | undefined {
+  return attachments?.length
+    ? attachments.map(({ id: _id, ...rest }) => ({
+        ...rest,
+        hasNoLocalSource: true,
+        originDeviceId: sourceDeviceId,
+      }))
+    : undefined;
+}
+
 export function createSyncMsgBasedOnRegularMsg({
   msg,
   sourceDeviceId,
@@ -364,19 +424,7 @@ export function createSyncMsgBasedOnRegularMsg({
   const isGroupChat = !!groupChatId;
   const chatId = (isGroupChat ? groupChatId : otoPeerCAddr)!;
 
-  // id is a reference into this device's own file-store-service and is
-  // meaningless on other devices - drop it, and mark the attachment as such,
-  // instead of letting a foreign id leak into the receiving device's record.
-  // A message without files must carry no field at all rather than an empty
-  // list: [] is truthy, and on the receiving device it reads as "there are
-  // files, they are just elsewhere".
-  const syncedAttachments = attachments?.length
-    ? attachments.map(({ id: _id, ...rest }) => ({
-        ...rest,
-        hasNoLocalSource: true,
-        originDeviceId: sourceDeviceId,
-      }))
-    : undefined;
+  const syncedAttachments = attachmentsForPhantom(attachments, sourceDeviceId);
 
   return {
     v: 1,
@@ -391,7 +439,7 @@ export function createSyncMsgBasedOnRegularMsg({
       chatMessageId,
       text: body || '',
       relatedMessage: relatedMessage || undefined,
-      attachments: syncedAttachments as ChatMessageAttachmentsInfo[] | undefined,
+      attachments: syncedAttachments,
       status: status || undefined,
       history: history || undefined,
       // Only a resync answer carries an incoming record (see the field's doc);

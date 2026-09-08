@@ -15,15 +15,31 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { onBeforeMount } from 'vue';
-  import { Ui3nDialogProvider, Ui3nButton, Ui3nMenu, Ui3nProgressLinear } from '@v1nt1248/3nclient-lib';
+  import { onBeforeMount, ref } from 'vue';
+  import { Ui3nDialogProvider, Ui3nButton, Ui3nProgressLinear } from '@v1nt1248/3nclient-lib';
   import { useAppView } from '@main/common/composables/useAppView';
   import { useAppStore } from '@main/common/store/app.store';
   import OrientationNotice from '@main/common/components/app-shell/orientation-notice.vue';
+  import AppMenu from '@main/mobile/components/app-shell/app-menu.vue';
 
-  const { t, appExit, isSyncing, syncPending, syncPhase, syncStalled, syncStatusText, showSyncStatus } =
-    useAppView();
+  const {
+    t,
+    me,
+    runMenuAction,
+    isSyncing,
+    syncPending,
+    syncPhase,
+    syncStalled,
+    syncStatusText,
+    showSyncStatus,
+  } = useAppView();
   const { setMobileMode } = useAppStore();
+
+  const isMenuOpen = ref(false);
+
+  function toggleMenu() {
+    isMenuOpen.value = !isMenuOpen.value;
+  }
 
   onBeforeMount(() => {
     setMobileMode(true);
@@ -32,60 +48,71 @@
 
 <template>
   <section :class="$style.app">
-    <div :class="$style.toolbar">
-      <div :class="$style.title">
-        {{ t('app.title') }}
-      </div>
-
+    <transition name="slide-fade">
       <div
-        v-if="showSyncStatus"
-        :class="[$style.syncStatus, syncStalled && $style.syncStalled]"
-        :title="syncStalled ? t('app.sync.stalledTooltip') : t(`app.sync.tooltip.${syncPhase}`)"
+        v-if="isMenuOpen"
+        :class="$style.menu"
       >
-        {{ t(syncStatusText, { count: syncPending }) }}
+        <app-menu
+          :user="me"
+          @close="isMenuOpen = false"
+          @action="runMenuAction"
+        />
       </div>
+    </transition>
 
-      <ui3n-menu>
+    <div :class="[$style.body, isMenuOpen && $style.bodyDisabled]">
+      <div :class="$style.toolbar">
         <ui3n-button
           type="icon"
-          color="var(--color-bg-block-primary-default)"
-          icon="round-more-vert"
-          icon-size="20"
-          icon-color="var(--color-icon-table-primary-default)"
+          size="large"
+          :color="isMenuOpen ? 'transparent' : 'var(--color-bg-block-primary-default)'"
+          :icon="isMenuOpen ? 'round-close' : 'round-menu'"
+          :icon-color="
+            isMenuOpen ? 'var(--color-icon-block-secondary-default)' : 'var(--color-icon-block-primary-default)'
+          "
+          icon-size="32"
+          :class="$style.menuBtn"
+          @click="toggleMenu"
         />
 
-        <template #menu>
-          <div :class="$style.menu">
-            <div
-              :class="$style.menuItem"
-              @click="appExit"
-            >
-              {{ t('app.exit') }}
-            </div>
-          </div>
-        </template>
-      </ui3n-menu>
+        <div :class="$style.title">
+          {{ t('app.title') }}
+        </div>
 
-      <div
-        v-if="isSyncing"
-        :class="$style.syncProgress"
-      >
-        <ui3n-progress-linear
-          :height="2"
-          indeterminate
-          bg-color="transparent"
-        />
+        <div
+          v-if="showSyncStatus"
+          :class="[$style.syncStatus, syncStalled && $style.syncStalled]"
+          :title="syncStalled ? t('app.sync.stalledTooltip') : t(`app.sync.tooltip.${syncPhase}`)"
+        >
+          {{ t(syncStatusText, { count: syncPending }) }}
+        </div>
+
+        <div
+          v-if="isSyncing"
+          :class="$style.syncProgress"
+        >
+          <ui3n-progress-linear
+            :height="2"
+            indeterminate
+            bg-color="transparent"
+          />
+        </div>
+      </div>
+
+      <div :class="$style.content">
+        <router-view v-slot="{ Component }">
+          <transition>
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </div>
     </div>
 
-    <div :class="$style.body">
-      <router-view v-slot="{ Component }">
-        <transition>
-          <component :is="Component" />
-        </transition>
-      </router-view>
-    </div>
-
+    <!--
+      Outside .body on purpose: notices, dialogs and the orientation prompt must
+      not be greyed out or made inert by the drawer's overlay.
+    -->
     <div id="notification" />
 
     <ui3n-dialog-provider />
@@ -95,26 +122,68 @@
 </template>
 
 <style lang="scss" module>
-  @use '@main/common/assets/styles/_mixins.scss' as mixins;
-
   .app {
     --main-toolbar-height: 64px;
 
     position: fixed;
     inset: 0;
+    display: flex;
+    justify-content: flex-start;
+    align-items: stretch;
     overflow: hidden;
+  }
+
+  .menu {
+    position: relative;
+    min-width: 80%;
+    width: 80%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  .body {
+    position: relative;
+    min-width: 100%;
+    width: 100%;
+    height: 100%;
+
+    &.bodyDisabled {
+      background-color: var(--files-darker);
+
+      .toolbar {
+        border-bottom: none !important;
+        background-color: var(--files-darker);
+      }
+
+      .content {
+        pointer-events: none;
+
+        &::after {
+          position: absolute;
+          content: '';
+          inset: 0;
+          z-index: 5;
+          background-color: var(--files-darker);
+        }
+      }
+    }
   }
 
   .toolbar {
     position: relative;
     width: 100%;
-    padding: 0 var(--spacing-m);
+    padding: 0 var(--spacing-m) 0 var(--spacing-s);
     height: var(--main-toolbar-height);
     display: flex;
     justify-content: space-between;
     align-items: center;
     background-color: var(--color-bg-block-primary-default);
     border-bottom: 1px solid var(--color-border-block-primary-default);
+
+    .menuBtn {
+      --ui3n-button-height: 40px !important;
+      --ui3n-button-icon-large: 40px !important;
+    }
   }
 
   .syncStatus {
@@ -152,39 +221,15 @@
     column-gap: var(--spacing-s);
   }
 
-  .body {
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: calc(var(--main-toolbar-height) + 1px);
-    bottom: 0;
-  }
-
-  .menu {
+  /*
+    `relative` with a calc height, not `fixed`: a fixed child escapes the
+    stacking context of .bodyDisabled, so the router's viewport would stay lit
+    and clickable behind the drawer's overlay.
+  */
+  .content {
     position: relative;
-    background-color: var(--color-bg-control-secondary-default);
-    width: max-content;
-    border-radius: var(--spacing-xs);
-    @include mixins.elevation(1);
-  }
-
-  .menuItem {
-    position: relative;
-    width: 60px;
-    height: var(--spacing-l);
-    padding: 0 var(--spacing-s);
-    font-size: var(--font-13);
-    font-weight: 500;
-    color: var(--color-text-control-primary-default);
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    cursor: pointer;
-
-    &:hover {
-      background-color: var(--color-bg-control-primary-hover);
-      color: var(--color-text-control-accent-default);
-    }
+    width: 100%;
+    height: calc(100% - var(--main-toolbar-height) - 1px);
   }
 
   #notification {
@@ -197,5 +242,20 @@
     display: flex;
     justify-content: center;
     align-content: center;
+  }
+</style>
+
+<style lang="scss">
+  .slide-fade-enter-active {
+    transition: all 0.2s ease-out;
+  }
+
+  .slide-fade-leave-active {
+    transition: all 0.2s cubic-bezier(1, 0.5, 0.8, 1);
+  }
+
+  .slide-fade-enter-from,
+  .slide-fade-leave-to {
+    opacity: 0;
   }
 </style>
