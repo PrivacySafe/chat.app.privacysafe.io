@@ -41,6 +41,7 @@
  */
 
 import { itCond } from '../libs-for-tests/jasmine-utils.js';
+import { withSetup } from '../libs-for-tests/with-setup.ts';
 import { chatService, fileLinkStoreSrv } from '@main/common/services/external-services.ts';
 import { useAppMenuItems } from '@main/common/composables/useAppMenu.ts';
 import {
@@ -56,13 +57,35 @@ import { chunkRestoreSnapshot } from '@deno/services/backup-service/backup-recor
 import { makeBackupMetadataBytes } from '@shared/backup-archive.ts';
 import { METADATA_FILE_NAME } from '@shared/constants/backup.ts';
 import { zipSync } from 'fflate';
+import { generateChatMessageId } from '@shared/chat-ids.ts';
 import type { ChatIdObj, ChatIncomingMessage } from '~/asmail-msgs.types';
+import type { ChatMessageView } from '~/chat.types';
+import type { MsgDbEntry } from '@deno/types/index.ts';
 import type { BackupPlan, BackupRecordFiles, SnapshotMsgEntry } from '~/backup.types';
 
 declare const w3n: web3n.testing.CommonW3N;
 
 function uniqueName(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Seeds a record straight into the live database, the way messaging.ts does.
+ *
+ * The id is generated HERE and not left to the service. makeAndSaveMsgToDb
+ * requires one and throws without it, deliberately: the records it exists for
+ * carry ids derived from the event they describe - a call, a restore - rather
+ * than freshly minted ones, so it does not invent them. Every seeding in this
+ * file goes through this one function, which is exactly what was missing when
+ * the same omission sat in seven call sites at once and failed every suite
+ * below.
+ *
+ * The caller's fields are spread last, so an explicit timestamp still wins -
+ * the ordering specs need consecutive stamps of their own choosing.
+ */
+async function seedMsgInDb(ownAddr: string, msgData: Partial<MsgDbEntry>): Promise<ChatMessageView> {
+  const { chatMessageId, timestamp } = generateChatMessageId();
+  return await chatService.makeAndSaveMsgToDb(ownAddr, { chatMessageId, timestamp, ...msgData });
 }
 
 /**
@@ -177,7 +200,7 @@ describe(`Backup and restore`, () => {
       const ownAddr = await w3n.testStand.idOfTestUser(1);
       const chatId = await makeChatFromPhantom(ownAddr, uniqueName('Archived chat'));
 
-      const msgView = await chatService.makeAndSaveMsgToDb(ownAddr, {
+      const msgView = await seedMsgInDb(ownAddr, {
         chatMessageType: 'regular',
         groupChatId: chatId.chatId,
         body: `a message to archive ${Date.now()}`,
@@ -210,7 +233,7 @@ describe(`Backup and restore`, () => {
 
       const bytes = new Uint8Array([1, 2, 3, 4]);
       const entityId = await fileLinkStoreSrv.saveFile(bytes.buffer as ArrayBuffer, 'attached.bin');
-      await chatService.makeAndSaveMsgToDb(ownAddr, {
+      await seedMsgInDb(ownAddr, {
         chatMessageType: 'regular',
         groupChatId: chatId.chatId,
         body: `with a file ${Date.now()}`,
@@ -248,18 +271,27 @@ describe(`Backup and restore`, () => {
   // ===========================================================================
   describe(`Test Suite 2: restore on this device`, () => {
 
-    itCond(`merge brings back a cleared history, but not a message deleted on its own`, async () => {
-      const ownAddr = await w3n.testStand.idOfTestUser(1);
+    /**
+     * A chat backed up, then had one message deleted and its whole history
+     * cleared - the ordinary shape of "I cleared this and want it back".
+     *
+     * Shared by the two specs below, one per mode, and they are two specs
+     * rather than one for a plain reason: a restore announces itself to the
+     * user's other devices, which takes seconds, and doing two of them in one
+     * spec ran past the 60s budget and reported as a timeout instead of as an
+     * answer about either mode.
+     */
+    async function chatClearedAfterItsArchive(ownAddr: string) {
       const chatId = await makeChatFromPhantom(ownAddr, uniqueName('Restore chat'));
 
-      const kept = await chatService.makeAndSaveMsgToDb(ownAddr, {
+      const kept = await seedMsgInDb(ownAddr, {
         chatMessageType: 'regular',
         groupChatId: chatId.chatId,
         body: `survives clearing ${Date.now()}`,
         timestamp: Date.now(),
         status: 'sent',
       });
-      const deletedOnItsOwn = await chatService.makeAndSaveMsgToDb(ownAddr, {
+      const deletedOnItsOwn = await seedMsgInDb(ownAddr, {
         chatMessageType: 'regular',
         groupChatId: chatId.chatId,
         body: `deleted on purpose ${Date.now()}`,
@@ -281,31 +313,63 @@ describe(`Backup and restore`, () => {
         .withContext(`the history is gone before the restore`)
         .toBeUndefined();
 
-      const outcome = await chatService.restoreBackupArchive({
-        recordFiles,
-        storedAttachments: {},
-        mode: 'merge',
-        snapshotTs: plan.snapshotTs,
-      });
-      expect(outcome.restored).toBeTrue();
+      return { chatId, kept, deletedOnItsOwn, recordFiles, snapshotTs: plan.snapshotTs };
+    }
 
+    itCond(`merge does not undo a clearing that happened after the archive`, async () => {
+      const ownAddr = await w3n.testStand.idOfTestUser(1);
+      const { chatId, kept, recordFiles, snapshotTs } = await chatClearedAfterItsArchive(ownAddr);
+
+      const merged = await chatService.restoreBackupArchive({
+        recordFiles, storedAttachments: {}, mode: 'merge', snapshotTs,
+      });
+      expect(merged.restored).toBeTrue();
+
+      // `merge` destroys nothing and resurrects nothing a tombstone forbids.
+      // These records are OLDER than the clearing marker, and the marker blocks
+      // exactly those. What merge DOES bring into a chat cleared long ago are
+      // records newer than the marker - pinned in ci/backup-restore.test.ts,
+      // where a token can be placed by hand.
       expect(await chatService.getMessage({ chatId, chatMessageId: kept.chatMessageId }))
-        .withContext(
-          `a cleared history comes back: the marker forbids only records older than itself, `
-            + `and treating its presence as "skip everything" would make merge useless `
-            + `in any chat ever cleared`,
-        )
+        .withContext(`merge leaves a clearing that postdates the archive in place`)
+        .toBeUndefined();
+      // 90s, the same budget Suite 3 takes for a restore plus its neighbour
+      // application: a restore lists the shared inbox and queues the snapshot
+      // chunks, and on an account whose inbox has filled up over many runs 60s
+      // turned out to be borderline - it passed once and timed out the next
+      // time, which reads as a failure of the rule under test rather than of
+      // the budget.
+    }, 90000);
+
+    itCond(`replace undoes it, and still honours a message's own tombstone`, async () => {
+      const ownAddr = await w3n.testStand.idOfTestUser(1);
+      const { chatId, kept, deletedOnItsOwn, recordFiles, snapshotTs } =
+        await chatClearedAfterItsArchive(ownAddr);
+
+      const replaced = await chatService.restoreBackupArchive({
+        recordFiles, storedAttachments: {}, mode: 'replace', snapshotTs,
+      });
+      expect(replaced.restored).toBeTrue();
+
+      // The mode's promise is that the state comes to match the archive, and a
+      // user who clears a history and then deliberately restores an archive
+      // that predates the clearing is asking for precisely that.
+      expect(await chatService.getMessage({ chatId, chatMessageId: kept.chatMessageId }))
+        .withContext(`replace brings back a history cleared after the archive was taken`)
         .toBeDefined();
 
+      // The asymmetry stops at `historyCleared`: a message the user deleted on
+      // its own stays deleted in both modes, that being a later and narrower
+      // decision than the archive.
       expect(await chatService.getMessage({ chatId, chatMessageId: deletedOnItsOwn.chatMessageId }))
         .withContext(`a message with a tombstone of its own is NOT resurrected`)
         .toBeUndefined();
-    }, 60000);
+    }, 90000);
 
     itCond(`previewRestore counts without writing anything`, async () => {
       const ownAddr = await w3n.testStand.idOfTestUser(1);
       const chatId = await makeChatFromPhantom(ownAddr, uniqueName('Preview chat'));
-      await chatService.makeAndSaveMsgToDb(ownAddr, {
+      await seedMsgInDb(ownAddr, {
         chatMessageType: 'regular',
         groupChatId: chatId.chatId,
         body: `for the preview ${Date.now()}`,
@@ -347,7 +411,7 @@ describe(`Backup and restore`, () => {
       const sourceChat = await makeChatFromPhantom(ownAddr, uniqueName('Announced chat'));
       const msgIds: string[] = [];
       for (let i = 0; i < 3; i += 1) {
-        const view = await chatService.makeAndSaveMsgToDb(ownAddr, {
+        const view = await seedMsgInDb(ownAddr, {
           chatMessageType: 'regular',
           groupChatId: sourceChat.chatId,
           body: `announced ${i} ${Date.now()}`,
@@ -455,7 +519,21 @@ describe(`Backup and restore`, () => {
       expect(checked)
         .withContext(`a snapshot phantom must be admitted by the validation of any build`)
         .toBeDefined();
-      expect(checked?.chatId.chatId).toBe(chatId.chatId);
+
+      // Admission is the whole contract here, and the chatId that comes back
+      // with it is deliberately NOT asserted to be the phantom's chat. For a
+      // 'synchronization' body checkV1 falls through to its address branch -
+      // such a body carries `chatId: ChatIdObj` rather than `groupChatId`, so
+      // what it derives is the sender's own address. That is harmless because
+      // nothing reads it: handleIncomingMsg takes the chat of a phantom from
+      // the explicit `chatId` field instead (see 03-message-flows.md §1).
+      // Asserting otherwise was pinning a value the receiving path never uses.
+      expect(checked?.chatId.isGroupChat)
+        .withContext(`a phantom is addressed to the user's own address, not to a group`)
+        .toBeFalse();
+      expect((msg.jsonBody as unknown as { chatId: ChatIdObj }).chatId.chatId)
+        .withContext(`the chat of a phantom is the one its own field states`)
+        .toBe(chatId.chatId);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const inner = (msg.jsonBody as any).value;
@@ -597,15 +675,23 @@ describe(`Backup and restore`, () => {
   describe(`Test Suite 6: the app menu`, () => {
 
     itCond(`offers the same three actions, in the order both form factors show`, async () => {
-      const items = useAppMenuItems();
-      expect(items.value.map(i => i.id))
-        .withContext(`one list for the desktop dropdown and the phone drawer`)
-        .toEqual(['make-backup', 'restore-backup', 'exit']);
-      for (const item of items.value) {
-        expect(item.icon)
-          .withContext(`the icon set is not open-ended: an unknown name renders as nothing`)
-          .toBeTruthy();
-        expect(item.label).toBeTruthy();
+      // Through withSetup, and not called directly: the composable labels the
+      // items with useI18n(), which needs an active component instance with the
+      // i18n plugin. Called from a bare spec it threw as a vue-i18n error code
+      // - a bare `SyntaxError: 26` with nothing in it to go on.
+      const { result: items, teardown } = withSetup(() => useAppMenuItems());
+      try {
+        expect(items.value.map(i => i.id))
+          .withContext(`one list for the desktop dropdown and the phone drawer`)
+          .toEqual(['make-backup', 'restore-backup', 'exit']);
+        for (const item of items.value) {
+          expect(item.icon)
+            .withContext(`the icon set is not open-ended: an unknown name renders as nothing`)
+            .toBeTruthy();
+          expect(item.label).toBeTruthy();
+        }
+      } finally {
+        teardown();
       }
     });
 
@@ -625,7 +711,7 @@ describe(`Backup and restore`, () => {
         .withContext(`the bytes are in the store before the deletion`)
         .toBeTruthy();
 
-      const msgView = await chatService.makeAndSaveMsgToDb(ownAddr, {
+      const msgView = await seedMsgInDb(ownAddr, {
         chatMessageType: 'regular',
         groupChatId: chatId.chatId,
         body: `will be deleted elsewhere ${Date.now()}`,

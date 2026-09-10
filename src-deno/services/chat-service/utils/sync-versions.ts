@@ -161,9 +161,15 @@ export function isDeletedLaterThan(
  * second implementation of it is how a snapshot would come to resurrect what a
  * phantom correctly refuses to.
  *
- * The asymmetry with a `merge`'s treatment of `historyCleared` is deliberate
- * and belongs to the restore, not here: this asks "is the marker newer than
- * the change", which is the question in both cases.
+ * The asymmetry in how a restore treats `historyCleared` is deliberate and
+ * belongs to the restore, not here: this asks "is the marker newer than the
+ * change", which is the question in every case. What differs is what is done
+ * with the answer - `merge` skips the record, `replace` brings it back over
+ * the marker (see applyMsg in restore-snapshot.ts) - and that is why the two
+ * halves are also exported separately below.
+ *
+ * The incoming-sync path asks this combined question and nothing else: a
+ * phantom resurrects nothing, whatever a restore may do.
  */
 export function isRecordDeletedLater(
   db: SyncVersionStore,
@@ -171,9 +177,26 @@ export function isRecordDeletedLater(
   chatMessageId: string,
   token: SyncToken,
 ): boolean {
-  if (isDeletedLaterThan(db, 'msg', msgEntityId(chatId, chatMessageId), token)) {
-    return true;
-  }
+  return isDeletedLaterThan(db, 'msg', msgEntityId(chatId, chatMessageId), token)
+    || isHistoryClearedLater(db, chatId, token);
+}
+
+/**
+ * The `chat/historyCleared` half of the rule above, on its own.
+ *
+ * Split out because a `replace` restore has to ask the two halves separately:
+ * a tombstone of one message is final for it, while a clearing of the whole
+ * history is what an explicit restore of an older archive is allowed to undo
+ * (see applyMsg in restore-snapshot.ts). Nothing else may take them apart -
+ * the incoming-sync path asks the combined question above, and a second
+ * opinion there is how a phantom would come to resurrect what the restore
+ * refuses to.
+ */
+export function isHistoryClearedLater(
+  db: SyncVersionStore,
+  chatId: ChatIdObj,
+  token: SyncToken,
+): boolean {
   const historyCleared = db.getSyncVersion('chat', chatEntityId(chatId), 'historyCleared');
   return !!historyCleared && !isNewerToken(token, historyCleared);
 }

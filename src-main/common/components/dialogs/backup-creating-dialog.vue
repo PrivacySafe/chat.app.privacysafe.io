@@ -165,30 +165,12 @@
         />
 
         <!--
-          Three permanent explanations, not warnings to confirm: they are not
-          about the risk of this particular action but about the boundary of
-          what an archive can ever bring back - and they are said HERE, at the
-          moment of making the backup, rather than in half a year at the moment
-          of needing it.
-
-          Received messages' files live inside those messages in the shared
-          inbox on the server; the messages themselves restore in full. Only
-          files on THIS device go in - bytes never travel between devices, so
-          with several devices an incomplete archive is the ordinary case. And a
-          file above 20 MiB is attached by reference rather than copied, so the
-          archive can only point at the user's own file.
+          The explanations of what an archive can bring back are NOT here any
+          more: backup-notices-dialog.vue shows them before the work starts, as
+          a step to read. Here they were on screen for exactly as long as the
+          backup took, which for a small history is under a second - long enough
+          to see that something was written, not long enough to read it.
         -->
-        <p :class="$style.notice">
-          {{ t('backup.create.attachmentsNotice') }}
-        </p>
-
-        <p :class="$style.notice">
-          {{ t('backup.create.thisDeviceNotice') }}
-        </p>
-
-        <p :class="$style.notice">
-          {{ t('backup.create.bigFilesNotice') }}
-        </p>
       </div>
     </template>
 
@@ -244,14 +226,6 @@
   .value {
     padding-right: var(--spacing-s);
     font-weight: 600;
-  }
-
-  .notice {
-    margin: var(--spacing-s) 0 0;
-    padding: 0 var(--spacing-s);
-    font-size: var(--font-12);
-    line-height: var(--font-16);
-    color: var(--color-text-block-secondary-default);
   }
 
   .actions {

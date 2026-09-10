@@ -48,6 +48,8 @@ const REQ_REPLY_METHODS: (keyof ChatSrv)[] = [
   'getMessagesByChat',
   'getMessagesPageByChat',
   'getRecentReactions',
+  'getThumbnails',
+  'saveThumbnail',
   'sendRegularMessage',
   'markMessageAsReadNotifyingSender',
   'checkAddressExistenceForASMail',

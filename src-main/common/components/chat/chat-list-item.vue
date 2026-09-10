@@ -26,6 +26,8 @@
     getChatNameHint,
     getTextForChatInvitationMessage,
     getTextForChatSystemMessage,
+    recordingExcerpt,
+    recordingOfAttachments,
   } from '@main/common/utils/chat-ui.helper';
   import { useAppStore } from '@main/common/store/app.store';
   import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
@@ -75,7 +77,12 @@
     switch (lastMsg.chatMessageType) {
       case 'regular': {
         const { attachments, isIncomingMsg, body } = lastMsg;
-        const attachmentsText = attachments?.map(a => a.name).join(', ') || ' ';
+        // A recording is named by what it is, not by the generated file name it
+        // was attached under.
+        const recording = recordingOfAttachments(attachments);
+        const attachmentsText = recording
+          ? recordingExcerpt(recording, t)
+          : attachments?.map(a => a.name).join(', ') || ' ';
         if (isIncomingMsg) {
           return body || `<i>${t('app.text.receive.file')}: ${attachmentsText}</i>`;
         }

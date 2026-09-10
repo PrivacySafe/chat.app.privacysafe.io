@@ -26,6 +26,7 @@ import {
   ChatSystemMsgV1,
   InvitationProcessMsgData,
   PhantomSyncMsgDataBasedOnRegularMsgV1,
+  RecordedMediaInMsg,
   StoredInvitationParams,
   UpdatedMembersInvitationData,
 } from '../../../../types/asmail-msgs.types.ts';
@@ -44,6 +45,7 @@ import type {
   RefsToMsgsDataNoInDB,
 } from '../../../types/index.ts';
 import { toCanonicalAddress } from '../../../../shared-libs/address-utils.ts';
+import { THUMBNAIL_CACHE_MAX_CHARS } from '../../../../shared-libs/constants/attachment-limits.ts';
 import { inviteChatId, isString } from './_common.ts';
 import { removeMessageFromInbox, removeMsgFromDelivery } from '../../../utils/inbox-utils.ts';
 
@@ -405,6 +407,81 @@ export function attachmentsForPhantom(
         originDeviceId: sourceDeviceId,
       }))
     : undefined;
+}
+
+/**
+ * Puts a preview into the previews table, unless it is too big to keep.
+ *
+ * The database file is rewritten whole on every save, so an outsized preview
+ * would be paid for on every write from then on. Dropping it costs only that
+ * it has to be made again next time, and the caller is not told - it keeps
+ * showing the preview it made, which is exactly the intent.
+ *
+ * Here rather than inline in the service because there are now two callers -
+ * the GUI, which asks for a preview it made, and the sending and receiving of
+ * a recording, whose preview travels with the message - and a cap enforced in
+ * two places is a cap that will end up different in two places.
+ */
+export async function saveThumbnailWithinLimit(
+  db: Pick<MsgsDb, 'upsertThumbnail'>,
+  id: ChatMessageId,
+  fileName: string,
+  dataUrl: string,
+): Promise<void> {
+  if (dataUrl.length > THUMBNAIL_CACHE_MAX_CHARS) {
+    return;
+  }
+  await db.upsertThumbnail(id, fileName, dataUrl);
+}
+
+/**
+ * What a message body should say about the recordings among its attachments.
+ *
+ * Read off the record rather than off the outgoing wrappers, so that a message
+ * SENT AGAIN says the same thing about its recordings as the first attempt did.
+ * There is no preview here on purpose: by the time a message is re-sent its
+ * preview is already in the previews table, and repeating it in the body would
+ * put a data URL on the wire for nothing.
+ */
+export function recordingsOfAttachments(
+  attachments: ChatMessageAttachmentsInfo[] | null | undefined,
+): Record<string, RecordedMediaInMsg> | undefined {
+  if (!attachments?.length) {
+    return undefined;
+  }
+  const recordings: Record<string, RecordedMediaInMsg> = {};
+  for (const { name, recording } of attachments) {
+    if (recording) {
+      recordings[name] = { kind: recording.kind, durationMs: recording.durationMs };
+    }
+  }
+  return (Object.keys(recordings).length > 0) ? recordings : undefined;
+}
+
+/**
+ * Marks the attachments an incoming message says are recordings.
+ *
+ * Matched by name, which is what the sender keyed the body's `recordings` by:
+ * the attachments folder of an ASMail message promises no order, so an index
+ * would pair a duration with whichever file happened to be listed first.
+ *
+ * Kept apart from reading the folder so that this - the part that can pair
+ * things up wrongly - is a pure function.
+ */
+export function withRecordingsApplied(
+  attachments: ChatMessageAttachmentsInfo[] | null,
+  recordings: Record<string, RecordedMediaInMsg> | undefined,
+): ChatMessageAttachmentsInfo[] | null {
+  if (!attachments?.length || !recordings) {
+    return attachments;
+  }
+  return attachments.map(item => {
+    const recorded = recordings[item.name];
+    // The preview does not go into the record - only the kind and duration do.
+    return recorded
+      ? { ...item, recording: { kind: recorded.kind, durationMs: recorded.durationMs } }
+      : item;
+  });
 }
 
 export function createSyncMsgBasedOnRegularMsg({

@@ -37,7 +37,8 @@
 | `mail.sendingTo` / `receivingFrom` | `all` ([231-235](../manifest.json#L231-L235)) | только `preflightsTo: all` ([18-20](../manifest.json#L18-L20)) | `all` ([146-149](../manifest.json#L146-L149)) |
 | `mail.config` | `all` | — | — |
 | `storage.appFS` | `default` ([248-250](../manifest.json#L248-L250)) | `default` + `sysFS: all` ([41-44](../manifest.json#L41-L44)) | — |
-| `mediaDevices`, `webrtc` | — | — | `all` ([157-164](../manifest.json#L157-L164)) |
+| `mediaDevices` | — | `microphones`/`cameras`/`speakers`: `use` | `all`, все пять ключей |
+| `webrtc` | — | — | `all` |
 | `shell.userNotifications` | ✔ ([240](../manifest.json#L240)) | ✔ ([24](../manifest.json#L24)) | — |
 | `shell.startAppCmds.thisApp` | `incoming-call`, `open-chat-with` ([237-239](../manifest.json#L237-L239)) | — | — |
 | `shell.fsResource` | `thisApp: ice-servers` + `ui-settings` лончера ([241-246](../manifest.json#L241-L246)) | `ui-settings` лончера ([25-29](../manifest.json#L25-L29)) | `ui-settings` лончера ([151-156](../manifest.json#L151-L156)) |
@@ -51,6 +52,28 @@
   через IPC.
 - **Окно звонка может отправлять ASMail самостоятельно** — этим пользуется сигналинг, когда
   DataChannel ещё не открыт ([05-video-calls.md](05-video-calls.md#3-сигналинг)).
+- **`mediaDevices` есть и у основного GUI** — это перестало быть привилегией окна звонка, когда
+  появилась запись голосовых и видео-сообщений прямо в чате
+  ([06-ui-architecture.md §6](06-ui-architecture.md)). Три ключа со значением `use`, и каждое
+  значение выбрано по коду платформы (`runner-in-electron/electron/session.ts`):
+  `mediaPermissionFrom()` пропускает аудио и видео только при `'all'` или `'use'` — `'select'`
+  доступа не даёт, — а `userMediaPermissionFrom()`, обслуживающий синхронную проверку разрешения,
+  требует, чтобы были заданы **все три** ключа (`cameras && microphones && speakers`). `screens` и
+  `windows` не запрашиваются: захват экрана окну чата не нужен, и без них `display-capture`
+  отклоняется, а `setSelectDisplayMediaForCaptureHandler` вообще не появляется в capability.
+- **Побочный эффект на macOS, о котором надо знать.** `setPermissionsInSession()` при **любом**
+  `mediaDevices` на darwin спрашивает доступ к микрофону, к камере и, если запись экрана не
+  разрешена, вызывает `ensureDeviceAllowsScreenCapture()` — а та **открывает System Settings**.
+  Условие — `screen !== 'granted'`, то есть настройки открываются при каждом создании окна, пока
+  запись экрана не разрешена, независимо от того, просило ли приложение `screens`/`windows`.
+  Первые два запроса теперь уместны, третий — нет; правка на стороне платформы (обложить каждый
+  вызов проверкой соответствующего под-капабилити) оформлена как заявка её владельцу.
+- **`isAudioCaptureAvailable()` не является проверкой микрофона.** Платформа реализует её как
+  `platform() === 'win32'`: это ответ про захват *системного* звука (loopback) вместе с экраном,
+  как её и использует `src-video`. На macOS и Linux она всегда `false`, на Android
+  `w3n.mediaDevices` отсутствует вовсе. Наличие устройств проверяется в
+  [media-recording-support.ts](../src-main/common/utils/media-recording-support.ts) — через
+  `MediaRecorder`, `navigator.permissions.query` и `enumerateDevices()`.
 - **Конфигурацию STUN/TURN читает только фон.** Ресурс `ice-servers` выставлен для
   `/background-instance.mjs` и никому больше, а окно звонка получает готовую `RTCConfiguration` в
   `ChatInfoForCall` (§3.3). Поэтому креды TURN не лежат ни в одном GUI-бандле

@@ -17,6 +17,7 @@
 
 <script lang="ts" setup>
 import { computed, VNode } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Ui3nButton, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
 import { mailReg } from '@v1nt1248/3nclient-lib/utils';
 import type { PersonView } from '~/index';
@@ -50,6 +51,8 @@ const emits = defineEmits<{
 defineSlots<{
   extra?: (props: { contactId: string, mail: string }) => VNode;
 }>();
+
+const { t } = useI18n();
 
 const contactListByLetters = computed<Record<string, (PersonView & { displayName: string })[]>>(() => {
   return props.contactList
@@ -146,7 +149,7 @@ function addNewContact(ev: Event) {
           size="16"
           :class="$style.addSpinner"
         />
-        Add {{ searchText }}
+        {{ t('chat.contact.add.btn', { addr: searchText }) }}
       </ui3n-button>
     </div>
   </div>

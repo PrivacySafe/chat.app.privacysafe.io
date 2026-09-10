@@ -231,6 +231,7 @@ export async function sendRegularMessage(
   text: string,
   attachments: ChatOutgoingMessage['attachments'],
   relatedMessage: RelatedMessage | undefined,
+  recordings?: ChatRegularMsgV1['recordings'],
 ): Promise<string> {
   const jsonBody: ChatRegularMsgV1 = {
     v: 1,
@@ -238,6 +239,10 @@ export async function sendRegularMessage(
     groupChatId: chatId.isGroupChat ? chatId.chatId : undefined,
     chatMessageId,
     relatedMessage,
+    // Left out entirely when there is none, rather than sent as an empty
+    // object: an older build ignores the field either way, but the wire form
+    // of a message without recordings must not change.
+    ...(recordings && { recordings }),
   };
 
   const outMsg: ChatOutgoingMessage = {

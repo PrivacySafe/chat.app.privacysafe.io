@@ -837,6 +837,13 @@ async function handleSystemSync({
           snapshotTs: value.snapshotTs,
           chats: value.chats ?? [],
           msgs: value.msgs ?? [],
+          // Taken from the snapshot, never minted here: this is the token a
+          // `replace` stamps a record it brings back over a clearing marker
+          // with, and it has to be the same on every device (see
+          // RestoreSnapshotSysMsgData.value.restoreToken). Absent from the
+          // chunks of an older build, which then simply keeps its old rule -
+          // its own restore of the same archive resurrects nothing.
+          ...(value.restoreToken && { restoreToken: value.restoreToken }),
           ...(value.deleted && { deleted: value.deleted }),
         },
         {

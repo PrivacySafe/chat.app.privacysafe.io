@@ -170,7 +170,7 @@
       </div>
 
       <div :class="$style.info">
-        {{ t('chat.viewer.label.pdf') }}
+        {{ t('chat.viewer.label.page') }}
         <span>{{ currentPage }}</span>
         &nbsp;/&nbsp;
         <span>{{ totalPage }}</span>

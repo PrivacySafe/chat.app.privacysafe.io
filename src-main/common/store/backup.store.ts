@@ -231,7 +231,7 @@ export const useBackupStore = defineStore('backup', () => {
       t('backup.create.fileDialogTitle'),
       t('backup.create.fileDialogBtn'),
       defaultFileName,
-      { filters: [{ name: 'ZIP Archive', extensions: ['zip'] }] },
+      { filters: [{ name: t('backup.zipFilterName'), extensions: ['zip'] }] },
     );
 
     if (!file) {

@@ -55,6 +55,7 @@
         await import('./tests/video-chat.js');
         await import('./tests/ice-config.js');
         await import('./tests/codec-preferences.js');
+        await import('./tests/media-recording.js');
         // Only its `report-latency` case runs from here (five ~300B messages):
         // the burst cases are a deliberate storm against a real server and are
         // gated by RUN_HEAVY_BURSTS inside the file, off by default. The

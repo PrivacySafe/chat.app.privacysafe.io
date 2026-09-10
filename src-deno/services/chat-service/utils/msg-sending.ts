@@ -19,7 +19,9 @@ import { excerpt } from 'jsr:@dbushell/hyperless';
 import type {
   ChatIdObj,
   ChatIncomingMessage,
+  ChatMessageId,
   ChatRegularMsgV1,
+  RecordedMediaInMsg,
   RelatedMessage,
 } from '../../../../types/asmail-msgs.types.ts';
 import type { ChatMessageAttachmentsInfo, OutgoingAttachment } from '../../../../types/chat.types.ts';
@@ -42,7 +44,13 @@ import {
   sendSystemMessage,
 } from '../../mail-sending-service/index.ts';
 import { chatIdOfChat, recipientsInChat } from './_chats-related-methods.ts';
-import { createSyncMsgBasedOnRegularMsg, makeMsgDbEntry } from './_msgs-related-methods.ts';
+import {
+  createSyncMsgBasedOnRegularMsg,
+  makeMsgDbEntry,
+  recordingsOfAttachments,
+  saveThumbnailWithinLimit,
+  withRecordingsApplied,
+} from './_msgs-related-methods.ts';
 import { msgEntityId } from './sync-versions.ts';
 
 export async function msgSending({
@@ -134,6 +142,13 @@ export async function msgSending({
   async function prepOutgoingAttachments(entities: OutgoingAttachment[] | undefined): Promise<{
     attachments: ChatMessageAttachmentsInfo[] | null;
     attachmentContainer?: AttachmentsContainer;
+    /**
+     * What goes into the message body for the recordings among these
+     * attachments, previews included. Built here and not from `attachments`
+     * because the preview is only ever on the outgoing wrapper: it belongs in
+     * the preview table, not in the message record.
+     */
+    recordings?: Record<string, RecordedMediaInMsg>;
   }> {
     if (!entities || entities.length === 0) {
       return { attachments: null };
@@ -141,7 +156,8 @@ export async function msgSending({
 
     const attachments: ChatMessageAttachmentsInfo[] = [];
     const attachmentContainer = {} as AttachmentsContainer;
-    for (const { entity, storedId, name } of entities) {
+    const recordings: Record<string, RecordedMediaInMsg> = {};
+    for (const { entity, storedId, name, recording } of entities) {
       const isFolder = !!(entity as ReadonlyFsWithId).listFolder;
       const { size, worthCopying } = await sizeOfAttachment(entity, isFolder);
 
@@ -162,7 +178,18 @@ export async function msgSending({
         size,
         isFolder,
         ...(id && { id }),
+        // The preview is deliberately left out of the record: it goes into the
+        // previews table, which is where every other preview is looked up.
+        ...(recording && { recording: { kind: recording.kind, durationMs: recording.durationMs } }),
       });
+
+      if (recording) {
+        recordings[attachmentName] = {
+          kind: recording.kind,
+          durationMs: recording.durationMs,
+          ...(recording.preview && { preview: recording.preview }),
+        };
+      }
 
       if (isFolder) {
         addFolderTo(attachmentContainer, toSend as web3n.files.ReadonlyFS, attachmentName);
@@ -170,7 +197,11 @@ export async function msgSending({
         addFileTo(attachmentContainer, toSend as web3n.files.ReadonlyFile, attachmentName);
       }
     }
-    return { attachments, attachmentContainer };
+    return {
+      attachments,
+      attachmentContainer,
+      ...(Object.keys(recordings).length > 0 && { recordings }),
+    };
   }
 
   /**
@@ -268,7 +299,15 @@ export async function msgSending({
 
       const attachmentContainer = await containerOfStoredAttachments(existingMsg.attachments);
       const recipients = recipientsInChat(chat, ownAddr);
-      await _sendRegularMessage(chatId, msgId, recipients, text, attachmentContainer, relatedMessage);
+      await _sendRegularMessage(
+        chatId,
+        msgId,
+        recipients,
+        text,
+        attachmentContainer,
+        relatedMessage,
+        recordingsOfAttachments(existingMsg.attachments),
+      );
       return;
     }
 
@@ -276,7 +315,7 @@ export async function msgSending({
     const autoDeleteMessagesId = settings?.autoDeleteMessages as '0' | '1' | '2' | '3' | '4' | '5';
     const autoDeleteTSValue = AUTO_DELETE_MESSAGES_BY_ID[autoDeleteMessagesId].value || AUTODELETE_OFF;
 
-    const { attachments, attachmentContainer } = await prepOutgoingAttachments(files);
+    const { attachments, attachmentContainer, recordings } = await prepOutgoingAttachments(files);
 
     const msg = makeMsgDbEntry('regular', msgId, {
       groupChatId: chat.isGroupChat ? chat.chatId : null,
@@ -291,6 +330,12 @@ export async function msgSending({
 
     await data.addMessage(msg);
 
+    // The sender's own preview, and it has to be put here rather than made on
+    // demand: a recording is far bigger than THUMBNAIL_AUTO_PREVIEW_LIMIT, so
+    // without this the sender's own chip would show a file icon for a video
+    // they just took.
+    await storeRecordingPreviews({ chatId, chatMessageId: msgId }, recordings);
+
     // Phantom (sync) message goes out optimistically, right after the record is
     // placed into a database, and not on a delivery to peers being done. Own
     // devices should learn about the message even if peers are unreachable, and
@@ -299,8 +344,45 @@ export async function msgSending({
     await sendSyncMsgOfRegularMsg(chatId, msg);
 
     const recipients = recipientsInChat(chat, ownAddr);
-    await _sendRegularMessage(chatId, msgId, recipients, text, attachmentContainer, relatedMessage);
+    await _sendRegularMessage(
+      chatId,
+      msgId,
+      recipients,
+      text,
+      attachmentContainer,
+      relatedMessage,
+      recordings,
+    );
     emit.message.added(msg);
+  }
+
+  /**
+   * Puts the previews a message's recordings carry into the previews table.
+   *
+   * Same call on both sides - the sender does it for the previews it just made,
+   * the recipient for the ones that arrived - so that a recording's frame is
+   * looked up exactly where every other preview is, and the size cap lives in
+   * one place (saveThumbnail) rather than in two.
+   */
+  async function storeRecordingPreviews(
+    msgId: ChatMessageId,
+    recordings: Record<string, RecordedMediaInMsg> | undefined,
+  ): Promise<void> {
+    if (!recordings) {
+      return;
+    }
+    for (const [fileName, { preview }] of Object.entries(recordings)) {
+      if (!preview) {
+        continue;
+      }
+      try {
+        await saveThumbnailWithinLimit(data, msgId, fileName, preview);
+      } catch (exc) {
+        // A missing preview costs a file icon, not the message: reported and
+        // stepped over, so one oversized frame cannot fail a delivery.
+        await w3n.log('error', `Failed to store the preview of the recording ${fileName}`, exc);
+      }
+    }
   }
 
   /**
@@ -352,13 +434,29 @@ export async function msgSending({
     await w3n.mail?.delivery.rmMsg(deliveryId, true);
   }
 
+  /**
+   * What a notification says about a message whose only content is a recording.
+   */
+  async function recordingNotificationBody(
+    attachments: ChatMessageAttachmentsInfo[] | null,
+  ): Promise<string> {
+    const recording = attachments?.find(a => a.recording)?.recording;
+    if (!recording) {
+      return '';
+    }
+    const label = await appSettings.t(
+      recording.kind === 'voice' ? 'chat.recording.label.voice' : 'chat.recording.label.video',
+    );
+    return label ?? '';
+  }
+
   async function handleRegularMsg(
     incomingMsg: ChatIncomingMessage,
     chat: ChatDbEntry,
     chatMsgBody: ChatRegularMsgV1,
   ): Promise<void> {
     const { msgId, sender, plainTxtBody, attachments: attachmentsFS, deliveryTS } = incomingMsg;
-    const { chatMessageId, relatedMessage } = chatMsgBody;
+    const { chatMessageId, relatedMessage, recordings } = chatMsgBody;
     const removeFromInbox = !incomingMsg.attachments;
 
     const chatId = chatIdOfChat(chat);
@@ -373,7 +471,7 @@ export async function msgSending({
       return;
     }
 
-    const attachments = await infoOfIncomingAttachments(attachmentsFS);
+    const attachments = withRecordingsApplied(await infoOfIncomingAttachments(attachmentsFS), recordings);
 
     const { settings } = chat;
     const autoDeleteMessagesId = settings?.autoDeleteMessages as '0' | '1' | '2' | '3' | '4' | '5';
@@ -394,6 +492,11 @@ export async function msgSending({
 
     await data.addMessage(msg);
 
+    // Before the event, so that the chip has its frame the first time it is
+    // drawn: a recording is well past THUMBNAIL_AUTO_PREVIEW_LIMIT, so this
+    // preview is the only one it will ever get without the user asking.
+    await storeRecordingPreviews({ chatId, chatMessageId }, recordings);
+
     emit.message.added(msg);
 
     if (removeFromInbox) {
@@ -406,7 +509,12 @@ export async function msgSending({
     await w3n.shell?.userNotifications?.addNotification({
       icon,
       title: notificationTitle,
-      body: plainTxtBody ? excerpt(`<div>${plainTxtBody}</div>`, 50) : '',
+      // A recording carries no text, and a notification with an empty body says
+      // only that something arrived. What kind of recording it was is the least
+      // the notification can say instead.
+      body: plainTxtBody
+        ? excerpt(`<div>${plainTxtBody}</div>`, 50)
+        : await recordingNotificationBody(attachments),
       cmd: {
         cmd: 'open-chat-with',
         params: [

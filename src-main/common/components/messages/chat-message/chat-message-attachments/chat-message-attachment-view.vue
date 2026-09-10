@@ -44,6 +44,22 @@
 
   const viewComponent = shallowRef<Component>();
 
+  /**
+   * The file was read and the player still could not make sense of it - a file
+   * renamed to .mp3, or one damaged in transit. Deliberately not showError():
+   * that says the file may have been deleted or moved, which about a file we
+   * have just read from beginning to end is simply untrue.
+   */
+  function onUnplayable() {
+    $createNotice({
+      type: 'error',
+      content: t('chat.viewer.error.cannot_play'),
+      duration: 3000,
+    });
+
+    emits('close');
+  }
+
   async function downloadFile() {
     const res = await saveFileFromMsg(props.item.id!, t, props.incomingMsgId);
     if (res === undefined) {
@@ -133,6 +149,8 @@
       :incoming-msg-id="incomingMsgId"
       :is-mobile-mode="isMobileMode"
       @error="showError"
+      @cancel="emits('close')"
+      @unplayable="onUnplayable"
     />
   </div>
 </template>

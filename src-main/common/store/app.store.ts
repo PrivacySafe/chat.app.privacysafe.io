@@ -20,6 +20,7 @@ import { defineStore } from 'pinia';
 import { AvailableColorTheme, AvailableLanguage } from '~/app.types';
 import { useSystemLevelAppConfig } from './app/system-level-app-config';
 import { useConnectivityStatus } from './app/connectivity';
+import { useMediaRecordingSupport } from './app/media-recording';
 import { useSyncState } from './app/sync-state';
 import { chatService } from '@main/common/services/external-services';
 import { type Ui3nResizeCbArg } from '@v1nt1248/3nclient-lib';
@@ -58,6 +59,9 @@ export const useAppStore = defineStore('app', () => {
   const commonAppConfs = useSystemLevelAppConfig();
   const { appVersion, user, lang, colorTheme, customLogoSrc } = commonAppConfs;
 
+  const mediaRecording = useMediaRecordingSupport();
+  const { canRecordAudio, canRecordVideo, canRecord, refreshRecordingSupport } = mediaRecording;
+
   // Deliberately not initialized here: initialize() runs before the GUI
   // subscribes to background events (see useAppView), and asking for the current
   // state before that would leave a gap in which changes go unnoticed. The ask is
@@ -79,6 +83,7 @@ export const useAppStore = defineStore('app', () => {
     await Promise.all([
       connectivity.initialize(),
       commonAppConfs.initialize(),
+      mediaRecording.initialize(),
       (async () => {
         const id = await chatService.getAppDeviceId();
         appDeviceId.value = id;
@@ -89,6 +94,7 @@ export const useAppStore = defineStore('app', () => {
   function stopWatching() {
     connectivity.stopConnectivityCheck();
     commonAppConfs.stopWatching();
+    mediaRecording.stopWatching();
   }
 
   return {
@@ -102,7 +108,11 @@ export const useAppStore = defineStore('app', () => {
     colorTheme,
     customLogoSrc,
     connectivityStatus,
+    canRecordAudio,
+    canRecordVideo,
+    canRecord,
     ...sync,
+    refreshRecordingSupport,
     setMobileMode,
     setAppWindowSize,
     initialize,

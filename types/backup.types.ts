@@ -18,7 +18,7 @@
 // type-only module: it is imported from the GUI as well as from the deno
 // component, so that both sides describe an archive with the same words.
 import type { ChatIdObj, ChatMessageId } from './asmail-msgs.types.ts';
-import type { ChatMessageAttachmentsInfo } from './chat.types.ts';
+import type { AttachmentRecordingInfo, ChatMessageAttachmentsInfo } from './chat.types.ts';
 import type {
   GroupChatTableFields,
   MsgDbEntry,
@@ -173,6 +173,16 @@ export interface BackedUpAttachment {
   blobName?: string;
   /** Why the bytes are not. */
   omitted?: OmittedAttachmentReason;
+  /**
+   * Set when the attachment was recorded in the app.
+   *
+   * Listed here explicitly because this is the one place where an attachment's
+   * fields are enumerated by hand rather than spread: everywhere else a new
+   * field on ChatMessageAttachmentsInfo travels by itself. Without it a
+   * restored voice or video message would quietly come back as an ordinary
+   * media attachment.
+   */
+  recording?: AttachmentRecordingInfo;
 }
 
 /**

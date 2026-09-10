@@ -220,6 +220,18 @@ export interface ChatSrv {
 
   getRecentReactions(quantity: number): Promise<string[]>;
 
+  /**
+   * Previews of this message's attachments that have already been made, by file
+   * name. A Promise even though the database read is synchronous: everything
+   * published on the IPC channel is wrapped in async by the facade.
+   */
+  getThumbnails(id: ChatMessageId): Promise<Record<string, string>>;
+  /**
+   * Keeps a preview for next time. Oversized ones are dropped rather than
+   * stored: see THUMBNAIL_CACHE_MAX_CHARS.
+   */
+  saveThumbnail(id: ChatMessageId, fileName: string, dataUrl: string): Promise<void>;
+
   sendRegularMessage({
     chatId,
     chatMessageId,

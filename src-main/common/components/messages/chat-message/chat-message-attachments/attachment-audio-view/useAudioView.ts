@@ -16,10 +16,9 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { onMounted, shallowRef, ref, useTemplateRef, computed, onBeforeUnmount } from 'vue';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import { transformWeb3nFileToFile } from '@v1nt1248/3nclient-lib/utils';
 import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
 import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
-import { getFileByInfoFromMsg } from '@main/common/utils/files.helper';
+import { usePlayableAttachment } from '@main/common/composables/usePlayableAttachment';
 import type { AttachmentAudioViewEmits } from './attachment-audio-view.vue';
 import { makeLogger } from '@shared/logger';
 
@@ -49,27 +48,94 @@ export function useAudioView(
 
   const currentAudioVisualization = ref(1);
 
+  const {
+    isLoading,
+    percent,
+    progress,
+    isStreaming,
+    seekableStart,
+    seekableEnd,
+    noteBuffered,
+    attachTo,
+    cancel,
+  } = usePlayableAttachment({
+    item,
+    incomingMsgId,
+    onMissing: () => {
+      isProcessing.value = false;
+      emits('error');
+    },
+    onUnplayable: () => {
+      isProcessing.value = false;
+      emits('unplayable');
+    },
+  });
+
+  /**
+   * How far the slider may go. While streaming that is what has arrived: the
+   * rest of the file is not in the SourceBuffer yet, and seeking into it lands
+   * on nothing.
+   */
+  const seekMax = computed(() => (isStreaming.value ? seekableEnd.value : duration.value));
+
   const durationAsText = computed(() => timeInSecondsToString(duration.value));
   const currentTimeAsText = computed(() => timeInSecondsToString(currentTime.value));
 
   let requestAnimation: number;
 
-  function onCanplaythrough() {
+  /**
+   * Until endOfStream() a MediaSource-backed element reports an infinite
+   * duration, and timeInSecondsToString turns that into 'Infinity:NaN:NaN'.
+   */
+  function readDuration() {
+    const el = audioPlayerRef.value;
+    return el && Number.isFinite(el.duration) ? el.duration : 0;
+  }
+
+  /**
+   * With an open MediaSource 'canplaythrough' may never fire at all - the
+   * browser cannot promise uninterrupted playback of a stream it is still being
+   * fed - so the overlay is taken down by 'canplay' as well. Without it the
+   * loading overlay stays over a file that is already playing, with every
+   * control disabled.
+   */
+  function onCanplay() {
     isProcessing.value = false;
-    duration.value = audioPlayerRef.value!.duration;
+    duration.value = readDuration();
+  }
+
+  function onDurationchange() {
+    duration.value = readDuration();
   }
 
   function onTimeupdate(event: Event) {
-    currentTime.value = (event.target as HTMLAudioElement).currentTime;
+    const el = event.target as HTMLAudioElement;
+    currentTime.value = el.currentTime;
+    // Appends make 'progress' fire irregularly, and a slider whose maximum lags
+    // behind the buffer refuses to move into what is already playable.
+    noteBuffered(el);
+  }
+
+  function onProgress(event: Event) {
+    noteBuffered(event.target as HTMLAudioElement);
   }
 
   function onEnded() {
     isPlaying.value = false;
-    currentTime.value = 0;
-    audioPlayerRef.value!.currentTime = 0;
+    // Back to the start of what can be played, not to a hard 0: should Chromium
+    // have dropped the head of the buffer, seeking to 0 lands outside it and the
+    // element stalls waiting for data that will never be appended.
+    currentTime.value = seekableStart.value;
+    audioPlayerRef.value!.currentTime = seekableStart.value;
   }
 
   function play() {
+    // A context made without a user gesture starts suspended. It used to be
+    // unnoticeable behind the wait for the whole file; with playback starting
+    // on the first chunks there is nothing left to hide it.
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(e => log.error('Failed to resume the audio context', e));
+    }
     requestAnimation = window.requestAnimationFrame(render);
     audioPlayerRef.value!.play();
     isPlaying.value = true;
@@ -90,8 +156,9 @@ export function useAudioView(
 
   function updateCurrentTime(val: number | [number, number]) {
     if (!Array.isArray(val)) {
-      currentTime.value = val;
-      audioPlayerRef.value!.currentTime = val;
+      const capped = Math.max(seekableStart.value, Math.min(val, seekMax.value || val));
+      currentTime.value = capped;
+      audioPlayerRef.value!.currentTime = capped;
     }
   }
 
@@ -197,40 +264,35 @@ export function useAudioView(
     audioPlayerRef.value!.currentTime = 0;
     audioPlayerRef.value!.volume = volume.value / 100;
 
-    audioPlayerRef.value!.addEventListener('canplaythrough', onCanplaythrough);
+    audioPlayerRef.value!.addEventListener('canplay', onCanplay);
+    audioPlayerRef.value!.addEventListener('canplaythrough', onCanplay);
+    audioPlayerRef.value!.addEventListener('durationchange', onDurationchange);
     audioPlayerRef.value!.addEventListener('timeupdate', onTimeupdate);
+    audioPlayerRef.value!.addEventListener('progress', onProgress);
     audioPlayerRef.value!.addEventListener('ended', onEnded);
 
+    // Bound to the element, not to what it plays, so it survives the change of
+    // src that the fall back from streaming makes.
     source.value = audioContext.createMediaElementSource(audioPlayerRef.value!);
     source.value!.connect(analyser);
     analyser.connect(audioContext.destination);
 
-    setTimeout(() => {
-      getFileByInfoFromMsg(item.id!, incomingMsgId)
-        .then(file3n => {
-          if (!file3n) {
-            isProcessing.value = false;
-            emits('error');
-            return;
-          }
-
-          return transformWeb3nFileToFile(file3n as web3n.files.ReadonlyFile);
-        })
-        .then(val => {
-          if (!val) {
-            return;
-          }
-
-          const mediaData = URL.createObjectURL(val);
-          audioPlayerRef.value && (audioPlayerRef.value.src = mediaData);
-        });
-    }, 100);
+    // Deliberately not awaited: playback is meant to begin while the read goes
+    // on behind it.
+    attachTo(audioPlayerRef.value!);
   });
 
   onBeforeUnmount(() => {
-    audioPlayerRef.value!.removeEventListener('canplaythrough', onCanplaythrough);
+    audioPlayerRef.value!.removeEventListener('canplay', onCanplay);
+    audioPlayerRef.value!.removeEventListener('canplaythrough', onCanplay);
+    audioPlayerRef.value!.removeEventListener('durationchange', onDurationchange);
     audioPlayerRef.value!.removeEventListener('timeupdate', onTimeupdate);
+    audioPlayerRef.value!.removeEventListener('progress', onProgress);
     audioPlayerRef.value!.removeEventListener('ended', onEnded);
+    window.cancelAnimationFrame(requestAnimation);
+    // A browser allows only so many audio contexts, and one was made per open
+    // of this viewer and never closed.
+    audioContext.close().catch(e => log.error('Failed to close the audio context', e));
   });
 
   return {
@@ -240,13 +302,19 @@ export function useAudioView(
     audioPlayerRef,
     duration,
     durationAsText,
+    seekMax,
     volume,
     currentTime,
     currentTimeAsText,
     currentAudioVisualization,
+    isLoading,
+    percent,
+    progress,
+    isStreaming,
     updateVolume,
     updateCurrentTime,
     play,
     pause,
+    cancel,
   };
 }

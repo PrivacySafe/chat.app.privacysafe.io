@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@v1nt1248/3nclient-lib':
-        specifier: 0.3.45
-        version: 0.3.45(pinia@3.0.4(typescript@6.0.3)(vue@3.5.42(typescript@6.0.3)))(vue@3.5.42(typescript@6.0.3))
+        specifier: 0.3.46
+        version: 0.3.46(pinia@3.0.4(typescript@6.0.3)(vue@3.5.42(typescript@6.0.3)))(vue@3.5.42(typescript@6.0.3))
       dayjs:
         specifier: 1.11.23
         version: 1.11.23
@@ -1566,8 +1566,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@v1nt1248/3nclient-lib@0.3.45':
-    resolution: {integrity: sha512-Q5I7+o7Avyu2i7IysuycobRkX6N1nrH2TlPafeM8kOOkPO6x3VHdFkU86jO8G4TV6uRcnB+R5tix/3KnSpil4A==}
+  '@v1nt1248/3nclient-lib@0.3.46':
+    resolution: {integrity: sha512-UzXShsI64pY+yHbk3N2gUQ+KJWyw4RGFt6VguysEqSTwkndK9ufiOmjAstKGZMJcNXLS1I7Slg+QMJ9yLi1I9A==}
     peerDependencies:
       pinia: 3.0.4
       vue: 3.5.35
@@ -6294,7 +6294,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.10.1':
     optional: true
 
-  '@v1nt1248/3nclient-lib@0.3.45(pinia@3.0.4(typescript@6.0.3)(vue@3.5.42(typescript@6.0.3)))(vue@3.5.42(typescript@6.0.3))':
+  '@v1nt1248/3nclient-lib@0.3.46(pinia@3.0.4(typescript@6.0.3)(vue@3.5.42(typescript@6.0.3)))(vue@3.5.42(typescript@6.0.3))':
     dependencies:
       '@floating-ui/dom': 1.7.6
       '@floating-ui/vue': 1.1.11(vue@3.5.42(typescript@6.0.3))

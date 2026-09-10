@@ -68,9 +68,12 @@ flowchart TB
   notifications work with no window open.
 - **`src-main/`** — main chat GUI (chat list, conversation, attachments, dialogs). It has no direct
   ASMail access; everything goes through the `AppChatsInternal` IPC service.
-- **`src-video/`** — the call window. It is the only component granted `mediaDevices` and `webrtc`
-  ([manifest.json:157-164](../manifest.json#L157-L164)); it sends signalling either itself (over the
-  ASMail capability granted to it) or through the DataChannel the host opens.
+- **`src-video/`** — the call window. It is the only component granted `webrtc`, and the only one
+  with `mediaDevices` in full (screen capture and device selection included); it sends signalling
+  either itself (over the ASMail capability granted to it) or through the DataChannel the host
+  opens. The main GUI now also has the microphone and the camera - narrowly, as `use`, for
+  recording voice and video messages
+  ([01-components-and-ipc.md §1.1](01-components-and-ipc.md#11-ключевые-capabilities)).
 - **`shared-libs/`** — code shared by Deno and browser components: addresses, chat ids, process
   helpers, constants (including the single source of truth for call constants), IPC and SQLite wrappers.
 - **`types/`** — chat message formats, view models, IPC contracts; `@types/` — platform `w3n` API

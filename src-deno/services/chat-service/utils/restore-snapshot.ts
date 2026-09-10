@@ -61,11 +61,12 @@ import {
   applyIfNewer,
   chatEntityId,
   isDeletedLaterThan,
+  isHistoryClearedLater,
   isNewerToken,
-  isRecordDeletedLater,
   msgEntityId,
   recordDeletion,
   type SyncToken,
+  type SyncVersionStore,
 } from './sync-versions.ts';
 
 export interface RestoreSnapshotInput {
@@ -78,6 +79,16 @@ export interface RestoreSnapshotInput {
   snapshotTs: number;
   chats: SnapshotChatEntry[];
   msgs: SnapshotMsgEntry[];
+  /**
+   * Only in `replace`: a fresh token, minted once for the whole restore, under
+   * which a record forbidden by a `historyCleared` marker is brought back.
+   *
+   * It is minted by the restoring device and travels in the snapshot, because
+   * every device applying that snapshot has to stamp the resurrected record
+   * with the same token - see RestoreSnapshotSysMsgData.value.restoreToken.
+   * Absent in `merge`, which resurrects nothing a tombstone forbids.
+   */
+  restoreToken?: BackedUpSyncToken;
   /** Only in `replace`, and under a token FRESHER than anything restored. */
   deleted?: SnapshotDeletions;
 }
@@ -130,6 +141,58 @@ export interface RestoreSnapshotResult {
 
 const CHAT_ASPECTS: SyncAspect[] = ['name', 'settings', 'members', 'admins', 'status'];
 
+export interface RestoreTombstoneVerdict {
+  /** The record must not be (re)created, in this mode. */
+  blocked: boolean;
+  /**
+   * A `historyCleared` marker is newer than the record. In `merge` that is the
+   * whole reason it is blocked; in `replace` it does not block, but the record
+   * then has to be stamped above the marker to stay.
+   */
+  overClearing: boolean;
+}
+
+/**
+ * What the tombstones say about (re)creating one archived record.
+ *
+ * Exported, and the only place this is decided, because TWO callers need the
+ * same verdict: the restore itself and `previewRestore`. The preview feeds the
+ * numbers of the dialog shown before the most destructive action in the whole
+ * feature, and one that counted records the restore then refuses would be a
+ * promise broken every time a chat's history had ever been cleared - which is
+ * exactly what it did before this was pulled out.
+ */
+export function tombstoneVerdictForRestore(
+  db: SyncVersionStore,
+  mode: RestoreMode,
+  entry: Pick<SnapshotMsgEntry, 'chatId' | 'chatMessageId' | 'record' | 'versions'>,
+): RestoreTombstoneVerdict {
+  const { chatId, chatMessageId, record, versions } = entry;
+  const newest = newestToken(versions, record.timestamp);
+
+  // A tombstone of the record ITSELF is final in both modes: the user deleted
+  // that one message, and no archive of an earlier state overrides a later,
+  // narrower decision about it.
+  if (isDeletedLaterThan(db, 'msg', msgEntityId(chatId, chatMessageId), newest)) {
+    return { blocked: true, overClearing: false };
+  }
+
+  // The chat's `historyCleared` marker is where the two modes part.
+  //
+  // In `merge` it blocks records older than itself, and lets through those
+  // newer - which is what keeps merge useful in a chat cleared long ago and
+  // used since; treating the marker's mere presence as "skip everything" would
+  // make merge restore nothing at all into such a chat.
+  //
+  // In `replace` it does not block. The mode's promise is that the state comes
+  // to match the archive, and a user who clears a history and then
+  // deliberately restores an archive that predates the clearing is asking for
+  // exactly that. The asymmetry was anticipated where the rule itself lives
+  // (see isRecordDeletedLater) and belongs here, in the restore.
+  const overClearing = isHistoryClearedLater(db, chatId, newest);
+  return { blocked: overClearing && (mode === 'merge'), overClearing };
+}
+
 function tokenOf(token: BackedUpSyncToken): SyncToken {
   return { ts: token.ts, deviceId: token.deviceId };
 }
@@ -164,7 +227,7 @@ export async function applyRestoreSnapshot(
   }
 
   for (const msg of input.msgs) {
-    await applyMsg(msg, input.mode, now, ctx, res);
+    await applyMsg(msg, input.mode, now, input.restoreToken, ctx, res);
     processed += 1;
     ctx.onProgress?.(processed, total, msg.chatMessageId);
   }
@@ -333,6 +396,8 @@ async function applyMsg(
   entry: SnapshotMsgEntry,
   mode: RestoreMode,
   now: number,
+  /** Only a `replace` has one; see RestoreSnapshotInput.restoreToken. */
+  restoreToken: BackedUpSyncToken | undefined,
   ctx: RestoreSnapshotCtx,
   res: RestoreSnapshotResult,
 ): Promise<void> {
@@ -353,16 +418,13 @@ async function applyMsg(
       return;
     }
 
-    const newest = newestToken(versions, record.timestamp);
-    if (isRecordDeletedLater(db, chatId, chatMessageId, newest)) {
+    // The one place this is decided, shared with previewRestore so that the
+    // dialog's numbers and what actually happens cannot drift apart.
+    const { blocked, overClearing } = tombstoneVerdictForRestore(db, mode, entry);
+    if (blocked) {
       res.skipped += 1;
       return;
     }
-    // In `merge` a chat's `historyCleared` marker blocks only records older
-    // than itself - which isRecordDeletedLater above has already decided.
-    // Treating the marker's mere presence as "skip everything" would mean merge
-    // could restore nothing at all into a chat whose history was ever cleared,
-    // and such a chat is alive and ordinary.
 
     if (isExpiredRecord(record, now)) {
       // Restoring one is work with a negative result: the next start's
@@ -394,7 +456,19 @@ async function applyMsg(
       return;
     }
 
-    await writeAspectTokens(ctx, 'msg', entityId, versions);
+    // A record brought back OVER a clearing marker is stamped with the
+    // restore's own fresh token, and this is not decoration: the marker stays
+    // where it is, so without a token newer than it the resurrection lasts only
+    // until the clearing phantom is replayed - and it is replayed, by every
+    // catch-up scan for as long as it sits in the shared inbox. The token comes
+    // from the snapshot rather than from this device's clock so that every
+    // device applying the same snapshot writes the same version.
+    await writeAspectTokens(
+      ctx,
+      'msg',
+      entityId,
+      (overClearing && restoreToken) ? tokensAtLeast(versions, restoreToken) : versions,
+    );
     emit.message.added(row);
     res.messagesCreated += 1;
     return;
@@ -681,6 +755,29 @@ async function applyDeletions(
     emit.chat.removed(chatId);
     res.chatsDeleted += 1;
   }
+}
+
+/**
+ * The archived tokens, with every aspect raised to at least `floor`.
+ *
+ * Used by a `replace` that brings a record back over a clearing marker: the
+ * record has to end up newer than that marker, and the archive's own tokens
+ * are by definition older than it. An archive with no versions at all - a
+ * record written straight into a database, which is what the specs seed - gets
+ * `body`, the aspect a record's content belongs to, so that there is something
+ * for the marker to be compared against at all.
+ */
+function tokensAtLeast(
+  versions: Partial<Record<SyncAspect, BackedUpSyncToken>>,
+  floor: BackedUpSyncToken,
+): Partial<Record<SyncAspect, BackedUpSyncToken>> {
+  const entries = Object.entries(versions) as [SyncAspect, BackedUpSyncToken][];
+  if (entries.length === 0) {
+    return { body: floor };
+  }
+  return Object.fromEntries(
+    entries.map(([aspect, token]) => [aspect, (token.ts >= floor.ts) ? token : floor]),
+  ) as Partial<Record<SyncAspect, BackedUpSyncToken>>;
 }
 
 /**

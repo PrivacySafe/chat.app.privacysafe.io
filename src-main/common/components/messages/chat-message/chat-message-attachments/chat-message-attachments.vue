@@ -21,13 +21,17 @@
   import { useI18n } from 'vue-i18n';
   import { getFileExtension, isFileImage, isFileVideo, isFileAudio } from '@v1nt1248/3nclient-lib/utils';
   import type { ChatMessageAttachmentsInfo, RegularMsgView } from '~/index';
+  import { recordingOfAttachments } from '@main/common/utils/chat-ui.helper';
   import type { AttachmentViewInfo } from './types';
   import ChatMessageAttachment from './chat-message-attachment.vue';
+  import RecordingVoiceBubble from '../chat-message-recording/recording-voice-bubble.vue';
+  import RecordingVideoBubble from '../chat-message-recording/recording-video-bubble.vue';
 
   const props = defineProps<{
     message: RegularMsgView;
     disabled?: boolean;
     isOriginDevice?: boolean;
+    isMobile?: boolean;
   }>();
 
   const { t } = useI18n();
@@ -68,6 +72,19 @@
     });
   });
 
+  /**
+   * A message that is a recording made in the app, and is shown as one rather
+   * than as a file with a generated name.
+   *
+   * Not for the blocked case: playing needs a file, and there is none on this
+   * device - that message keeps the chip and the caption saying why. Nor for a
+   * message whose recording came without an id, which is the same thing.
+   */
+  const recording = computed(() => recordingOfAttachments(props.message.attachments));
+  const asMediaBubble = computed(
+    () => !!recording.value && !areAttachmentsUnavailable.value && !!attachments.value[0]?.id,
+  );
+
   function isActionAvailableForFile(item: ChatMessageAttachmentsInfo) {
     const { name } = item;
     return isFileImage({ fullName: name }) || isFileVideo({ fullName: name }) || isFileAudio({ fullName: name });
@@ -76,23 +93,47 @@
 
 <template>
   <div :class="[$style.chatMessageAttachments, disabled && $style.disabled]">
-    <template
-      v-for="(item, index) in attachments"
-      :key="`${index}-${item.name}`"
-    >
-      <chat-message-attachment
-        :item="item"
+    <template v-if="asMediaBubble">
+      <recording-voice-bubble
+        v-if="recording!.kind === 'voice'"
+        :item="attachments[0]"
+        :recording="recording!"
         :incoming-msg-id="message.incomingMsgId"
-        :blocked="areAttachmentsUnavailable"
+        :is-mobile="isMobile"
+      />
+
+      <recording-video-bubble
+        v-else
+        :item="attachments[0]"
+        :recording="recording!"
+        :chat-id="message.chatId"
+        :chat-message-id="message.chatMessageId"
+        :incoming-msg-id="message.incomingMsgId"
+        :is-mobile="isMobile"
       />
     </template>
 
-    <div
-      v-if="areAttachmentsUnavailable"
-      :class="$style.unavailableNote"
-    >
-      {{ t('chat.message.attachment.only_on_sending_device') }}
-    </div>
+    <template v-else>
+      <template
+        v-for="(item, index) in attachments"
+        :key="`${index}-${item.name}`"
+      >
+        <chat-message-attachment
+          :item="item"
+          :chat-id="message.chatId"
+          :chat-message-id="message.chatMessageId"
+          :incoming-msg-id="message.incomingMsgId"
+          :blocked="areAttachmentsUnavailable"
+        />
+      </template>
+
+      <div
+        v-if="areAttachmentsUnavailable"
+        :class="$style.unavailableNote"
+      >
+        {{ t('chat.message.attachment.only_on_sending_device') }}
+      </div>
+    </template>
   </div>
 </template>
 

@@ -220,6 +220,16 @@ export interface MsgsDb {
   getDueInboxMsgRemovals(now: number): string[];
   clearInboxMsgRemovals(msgIds: string[]): Promise<void>;
 
+  /**
+   * Previews of this message's attachments that have already been made, by file
+   * name. Making one needs the whole file, which for an attachment of an
+   * incoming message means pulling it from the server, so they are kept rather
+   * than remade.
+   */
+  getThumbnails(id: ChatMessageId): Record<string, string>;
+  upsertThumbnail(id: ChatMessageId, fileName: string, dataUrl: string): Promise<void>;
+  deleteThumbnails(id: ChatMessageId): Promise<void>;
+
   getSyncVersion(
     entityType: SyncEntityType,
     entityId: string,

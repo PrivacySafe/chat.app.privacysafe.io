@@ -22,8 +22,10 @@ import { useAppStore } from '@main/common/store/app.store';
 import { AUTO_DELETE_MESSAGES_BY_ID } from '@shared/constants';
 import { callCancelWording } from '@shared/call-record-wording';
 import {
+  AttachmentRecordingInfo,
   ChatListItemView,
   ChatListItemUiView,
+  ChatMessageAttachmentsInfo,
   ChatSysMsgView,
   ChatInvitationMsgView,
   OneToOneChatParameters,
@@ -33,6 +35,7 @@ import {
   WebRTCMsgBodySysMsgData,
   UpdatedChatSettingsSysMsgData,
 } from '~/index';
+import type { RecordingKind } from '@shared/constants/media-recording';
 
 export function getChatName(chat: ChatListItemView): string {
   const { name, isGroupChat } = chat;
@@ -94,16 +97,16 @@ export function getTextForChatSystemMessage(
         case '3':
         case '4':
           return !sender || sender === ownAddr
-            ? t('messages.info_message.autodelete.set_you', { value: timerValueText })
-            : t('messages.info_message.autodelete.set_user', {
+            ? t('chat.messages.info_message.autodelete.set_you', { value: timerValueText })
+            : t('chat.messages.info_message.autodelete.set_user', {
                 user: sender,
                 value: timerValueText,
               });
         case '0':
         default:
           return !sender || sender === ownAddr
-            ? t('messages.info_message.autodelete.unset_you')
-            : t('messages.info_message.autodelete.unset_user', { user: sender });
+            ? t('chat.messages.info_message.autodelete.unset_you')
+            : t('chat.messages.info_message.autodelete.unset_user', { user: sender });
       }
     }
 
@@ -115,7 +118,7 @@ export function getTextForChatSystemMessage(
     case 'member-removed': {
       const { chatDeleted } = systemData;
       return chatDeleted
-        ? t('chat_deleted.chat.system.message', { admin: sender })
+        ? t('chat.system_message.chat_deleted', { admin: sender })
         : t('chat.system_message.you_are_removed', { admin: sender });
     }
 
@@ -277,6 +280,47 @@ export function getTextForChatInvitationMessage(
       return t('chat.invitation.message.default.sent');
     }
   }
+}
+
+/**
+ * i18n key naming a recording made in the app.
+ *
+ * A recording is attached under a generated name (`voice_26-09-09_15-12.weba`),
+ * which says nothing to anybody - so wherever an attachment would be named,
+ * a recording is named by what it is instead. One place for the mapping,
+ * because four of them need it: the chip, the chat list, a reply's excerpt and
+ * the composer's caption.
+ */
+export function recordingLabelKey(kind: RecordingKind): string {
+  return (kind === 'voice') ? 'chat.recording.label.voice' : 'chat.recording.label.video';
+}
+
+/**
+ * What a message consisting of a recording reads as in a one-line excerpt:
+ * "Voice message 00:03".
+ */
+export function recordingExcerpt(
+  { kind, durationMs }: AttachmentRecordingInfo,
+  t: (key: string) => string,
+): string {
+  return `${t(recordingLabelKey(kind))} ${timeInSecondsToString(Math.round(durationMs / 1000))}`;
+}
+
+/**
+ * The recording among a message's attachments, if the message is one.
+ *
+ * Decided by the marker and never by the file's extension: an ordinary audio
+ * file someone attached is not a voice message, and an older correspondent's
+ * build sends recordings without the marker at all - both must keep showing as
+ * plain attachments.
+ */
+export function recordingOfAttachments(
+  attachments: ChatMessageAttachmentsInfo[] | undefined,
+): AttachmentRecordingInfo | undefined {
+  if (!attachments || (attachments.length !== 1)) {
+    return undefined;
+  }
+  return attachments[0].recording;
 }
 
 export function timeInSecondsToString(timeInSeconds: number): string {

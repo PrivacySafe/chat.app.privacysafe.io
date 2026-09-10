@@ -67,6 +67,7 @@ import {
   getIncomingMessage,
   msgViewFromDbEntry,
   removeMessageFromInbox,
+  saveThumbnailWithinLimit,
 } from './utils/_msgs-related-methods.ts';
 import {
   chatViewForGroupChat,
@@ -938,6 +939,8 @@ export async function chatService(
     getMessagesPageByChat,
     getIncomingMessage,
     getRecentReactions: data.getRecentReactions,
+    getThumbnails: async id => data.getThumbnails(id),
+    saveThumbnail: (id, fileName, dataUrl) => saveThumbnailWithinLimit(data, id, fileName, dataUrl),
     sendRegularMessage,
     cancelSendingMessage,
     markMessageAsReadNotifyingSender: msgStatusUpdating.markMessageAsReadNotifyingSender,

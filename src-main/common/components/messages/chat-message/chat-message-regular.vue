@@ -27,9 +27,11 @@
   import { useContactsStore } from '@main/common/store/contacts.store';
   import { useMessagesStore } from '@main/common/store/messages.store';
   import { useUiOutgoingStore } from '@main/common/store/ui.outgoing.store';
+  import { recordingOfAttachments } from '@main/common/utils/chat-ui.helper';
   import ChatMessageStatus from './chat-message-status.vue';
   import ChatMessageAttachments from './chat-message-attachments/chat-message-attachments.vue';
   import ChatMessageReactions from './chat-message-reactions/chat-message-reactions.vue';
+  import RecordingQuote from './chat-message-recording/recording-quote.vue';
 
   const props = defineProps<{
     msg: RegularMsgView;
@@ -78,13 +80,22 @@
     return get(objOfCurrentChatMessages.value, replyMessageId, null);
   }) as ComputedRef<RegularMsgView | null>;
 
+  /**
+   * A recording quoted in a reply is shown as itself - a small frame and what
+   * it is - rather than as the generated name it was attached under.
+   */
+  const replyRecording = computed(() => {
+    const quoted = replyMessage.value;
+    return (quoted && !quoted.body) ? recordingOfAttachments(quoted.attachments) : undefined;
+  });
+
   const replyMessageText = computed(() => {
     if (!replyMessage.value) return '';
 
     const body = replyMessage.value.body;
     const attachments = replyMessage.value.attachments;
     const attachmentsText = (attachments || []).map(a => a.name).join(', ');
-    return body || `<i>${t('text.receive.file')}: ${attachmentsText}</i>`;
+    return body || `<i>${t('app.text.receive.file')}: ${attachmentsText}</i>`;
   });
 
   const forwardMessageSender = computed(
@@ -144,7 +155,15 @@
           <span :class="$style.replyMessageSender">
             {{ getContactName(replyMessage.sender || ownAddr) }}
           </span>
+          <recording-quote
+            v-if="replyRecording"
+            :msg-id="{ chatId: replyMessage!.chatId, chatMessageId: replyMessage!.chatMessageId }"
+            :attachment-name="replyMessage!.attachments![0].name"
+            :recording="replyRecording"
+          />
+
           <span
+            v-else
             v-ui3n-html:sanitize="{
               dirty: replyMessageText,
               allowedAttributes: { '*': ['class', 'data-mention', 'data-href'] },
@@ -157,10 +176,15 @@
           v-if="forwardMessageSender"
           :class="$style.forwardMessage"
         >
-          {{ t('chat.message.label.forward') }}: {{ forwardMessageSender }}
+          {{ t('chat.message.label.forward') }}: {{ getContactName(forwardMessageSender) }}
         </div>
 
+        <!-- Skipped when there is no text: an empty <pre> still takes a line's
+             height, which put a blank strip above the attachments of every
+             message sent without a caption - and a recording is normally sent
+             without one. -->
         <pre
+          v-if="msg.body"
           v-ui3n-html:sanitize="{
             dirty: msg.body,
             allowedAttributes: { '*': ['class', 'data-mention', 'data-href'] },
@@ -173,6 +197,7 @@
           v-if="msg.attachments?.length"
           :message="msg"
           :is-origin-device="isOriginDevice"
+          :is-mobile="isMobileMode"
           :class="$style.chatMessageAttachments"
         />
 

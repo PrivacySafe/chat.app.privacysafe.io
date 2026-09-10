@@ -49,6 +49,7 @@ import {
 } from '@shared/check-backup-version';
 import { BACKUP_FORMAT_VERSION } from '@shared/constants/backup';
 import BackupCreatingDialog from '@main/common/components/dialogs/backup-creating-dialog.vue';
+import BackupNoticesDialog from '@main/common/components/dialogs/backup-notices-dialog.vue';
 import BackupPassphraseDialog from '@main/common/components/dialogs/backup-passphrase-dialog.vue';
 import BackupRestoringDialog from '@main/common/components/dialogs/backup-restoring-dialog.vue';
 import RestoreOptionsDialog from '@main/common/components/dialogs/restore-options-dialog.vue';
@@ -172,7 +173,7 @@ export function useBackupRestore() {
         t('backup.restore.fileDialogTitle'),
         t('backup.restore.fileDialogBtn'),
         false,
-        { filters: [{ name: 'ZIP Archive', extensions: ['zip'] }] },
+        { filters: [{ name: t('backup.zipFilterName'), extensions: ['zip'] }] },
       );
     } catch (err) {
       await w3n.log('info', 'Could not open the file dialog to pick a backup archive', err);
@@ -205,7 +206,7 @@ export function useBackupRestore() {
           : t('backup.passphrase.openTitle'),
         // Note that the icon set is not open-ended: a name it does not define
         // renders as nothing at all, and silently.
-        icon: (mode === 'create') ? 'outline-file-download' : 'outline-file-upload',
+        icon: (mode === 'create') ? 'shield-alert-outline' : 'outline-file-upload',
         confirmButtonText: (mode === 'create') ? t('app.text.save') : t('backup.passphrase.openBtn'),
         cancelButtonText: t('app.text.cancel'),
         closeOnClickOverlay: false,
@@ -230,6 +231,33 @@ export function useBackupRestore() {
   }
 
   /**
+   * Says what an archive can and cannot bring back, and waits to be let on.
+   *
+   * A step of its own, because it is the last one the user can still walk away
+   * from: after it the chats are read, the archive is packed and the platform
+   * asks where to save it. These explanations used to sit inside the creating
+   * dialog, where a small backup left them on screen for under a second.
+   */
+  async function confirmBackupNotices(): Promise<boolean> {
+    if (!dialog) {
+      return false;
+    }
+
+    const res = await dialog.$openDialog<boolean>(BackupNoticesDialog, {
+      dialogProps: {
+        icon: 'outline-file-download',
+        title: t('backup.create.noticesTitle'),
+        cssStyle: { width: '570px', maxWidth: '95%' },
+        confirmButtonText: t('backup.create.noticesBtn'),
+        cancelButtonText: t('app.text.cancel'),
+        closeOnClickOverlay: false,
+      },
+    });
+
+    return res?.event === 'confirm';
+  }
+
+  /**
    * The whole of making a backup, from the passphrase to the saved file.
    *
    * Named apart from the store's `runBackupWorkflow`, which it is not: that one
@@ -238,6 +266,10 @@ export function useBackupRestore() {
   async function startBackupWorkflow(): Promise<void> {
     const asked = await askBackupPassphrase();
     if (!asked) {
+      return;
+    }
+
+    if (!await confirmBackupNotices()) {
       return;
     }
 

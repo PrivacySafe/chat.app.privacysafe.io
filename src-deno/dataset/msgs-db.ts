@@ -148,6 +148,39 @@ const queryToCreatePendingInboxRemovalsV1 = `--sql
 `;
 
 /**
+ * Previews of message attachments, kept so that they are not made again.
+ *
+ * Making one needs the whole file, and an attachment of an incoming message is
+ * not on this device until something reads it - so a chat with ten photos in a
+ * message pulled all ten from the server on every open, and a video preview
+ * costs a full decode on top of that.
+ *
+ * Lives in the auxiliary database rather than the main one: saveToFile()
+ * serializes the whole base and rewrites the file, and the main one (messages,
+ * sync_versions, pending_sync_msgs) is written far the most often - data URLs
+ * there would be paid for on every one of those writes. This is also where the
+ * other locally-rebuildable things already are.
+ *
+ * The key is (chat, message, file name), not the flat (message, file name)
+ * INBOX can use: a chatMessageId is unique only within its chat. The columns
+ * are named as in the messages table on purpose, so that msgWhereParamsFor()
+ * builds the WHERE clause for them unchanged.
+ *
+ * No foreign key: PRAGMA foreign_keys is never turned on in this project, so
+ * rows are removed by whoever removes the message.
+ */
+const queryToCreateThumbnailsV1 = `--sql
+  CREATE TABLE thumbnails (
+    groupChatId TEXT NOT NULL,
+    otoPeerCAddr TEXT NOT NULL,
+    chatMessageId TEXT NOT NULL,
+    fileName TEXT NOT NULL,
+    dataUrl TEXT NOT NULL,
+    PRIMARY KEY (groupChatId, otoPeerCAddr, chatMessageId, fileName)
+  ) STRICT
+`;
+
+/**
  * Per-aspect ordering tokens for last-write-wins synchronization between the
  * user's own devices.
  *
@@ -331,6 +364,13 @@ async function getSqliteDb({
   if (sqlite.db.exec(`PRAGMA table_info(pending_sync_msgs)`).length === 0) {
     sqlite.db.exec(queryToCreatePendingSyncMsgsV1);
     await saveLocally(sqlite);
+  }
+
+  // No data migration to do: on a profile made before this table existed it is
+  // simply created here, and previews are made again as messages are shown.
+  if (auxiliarySqlite.db.exec(`PRAGMA table_info(thumbnails)`).length === 0) {
+    auxiliarySqlite.db.exec(queryToCreateThumbnailsV1);
+    await saveLocally(auxiliarySqlite);
   }
 
   return {
@@ -554,6 +594,11 @@ export async function msgsDb({
     if (sqlite.db.getRowsModified() > 0) {
       await saveLocally(sqlite);
     }
+    // Every single-message deletion there is - one message, a batch, the
+    // lifetime sweep, a deletion that arrived from the other side - comes
+    // through here, which is why the cached previews are dropped in the
+    // database layer rather than in each of those paths.
+    await deleteThumbnails(chatMessageId);
   }
 
   /**
@@ -759,8 +804,13 @@ export async function msgsDb({
       WHERE ${whereGroup}`,
       whereGroupParams,
     );
+    const msgsDeleted = sqlite.db.getRowsModified() > 0;
 
-    return sqlite.db.getRowsModified() > 0;
+    // The mass delete goes around removeMsgBytes, hence around deleteMessage:
+    // this is the second, and last, point where cached previews are dropped.
+    await deleteThumbnailsWhere(whereGroup, whereGroupParams);
+
+    return msgsDeleted;
   }
 
   async function deleteMessagesInGroupChat(groupChatId: string): Promise<boolean> {
@@ -773,7 +823,11 @@ export async function msgsDb({
       WHERE ${whereGroup}`,
       whereGroupParams,
     );
-    return sqlite.db.getRowsModified() > 0;
+    const msgsDeleted = sqlite.db.getRowsModified() > 0;
+
+    await deleteThumbnailsWhere(whereGroup, whereGroupParams);
+
+    return msgsDeleted;
   }
 
   async function deleteMessagesInChat({
@@ -1012,6 +1066,68 @@ export async function msgsDb({
     }
 
     await saveLocally(auxiliarySqlite);
+  }
+
+  /* block for cached previews of message attachments */
+
+  /**
+   * Previews of this message's attachments that have already been made, by file
+   * name. Synchronous: the read goes to the in-memory sql.js base.
+   */
+  function getThumbnails(id: ChatMessageId): Record<string, string> {
+    const { whereMsg, whereMsgParams } = msgWhereParamsFor(id);
+    const [sqlValue] = auxiliarySqlite.db.exec(
+      `--sql
+      SELECT fileName, dataUrl
+      FROM thumbnails
+      WHERE ${whereMsg}`,
+      whereMsgParams,
+    );
+
+    if (!sqlValue) {
+      return {};
+    }
+
+    const byFileName: Record<string, string> = {};
+    for (const row of objectFromQueryExecResult<{ fileName: string; dataUrl: string }>(sqlValue)) {
+      byFileName[row.fileName] = row.dataUrl;
+    }
+    return byFileName;
+  }
+
+  async function upsertThumbnail(id: ChatMessageId, fileName: string, dataUrl: string): Promise<void> {
+    const { whereMsgParams } = msgWhereParamsFor(id);
+    auxiliarySqlite.db.exec(
+      `--sql
+      INSERT INTO thumbnails (groupChatId, otoPeerCAddr, chatMessageId, fileName, dataUrl)
+      VALUES ($groupChatId, $otoPeerCAddr, $chatMessageId, $fileName, $dataUrl)
+      ON CONFLICT(groupChatId, otoPeerCAddr, chatMessageId, fileName) DO UPDATE
+      SET dataUrl=$dataUrl`,
+      { ...whereMsgParams, $fileName: fileName, $dataUrl: dataUrl },
+    );
+    await saveLocally(auxiliarySqlite);
+  }
+
+  async function deleteThumbnails(id: ChatMessageId): Promise<void> {
+    const { whereMsg, whereMsgParams } = msgWhereParamsFor(id);
+    await deleteThumbnailsWhere(whereMsg, whereMsgParams);
+  }
+
+  /**
+   * Rows matching a WHERE built over the same column names the messages table
+   * uses - one message, or every message of a chat.
+   */
+  async function deleteThumbnailsWhere(where: string, whereParams: ParamsObject): Promise<void> {
+    auxiliarySqlite.db.exec(
+      `--sql
+      DELETE FROM thumbnails
+      WHERE ${where}`,
+      whereParams,
+    );
+
+    if (auxiliarySqlite.db.getRowsModified() > 0) {
+      await saveLocally(auxiliarySqlite);
+    }
   }
 
   /* block for per-aspect synchronization versions (last-write-wins ordering
@@ -1310,6 +1426,10 @@ export async function msgsDb({
     scheduleInboxMsgRemoval,
     getDueInboxMsgRemovals,
     clearInboxMsgRemovals,
+
+    getThumbnails,
+    upsertThumbnail,
+    deleteThumbnails,
 
     getSyncVersion,
     setSyncVersion,

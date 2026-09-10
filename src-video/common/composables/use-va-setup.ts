@@ -215,7 +215,7 @@ export function useVaSetup() {
       console.error('[useVaSetup] startChatCall() error:', err);
       notification.$createNotice({
         type: 'error',
-        content: `Failed to start call: ${err instanceof Error ? err.message : String(err)}`,
+        content: t('va.text.call_start_failed'),
       });
     }
   }

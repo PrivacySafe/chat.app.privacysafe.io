@@ -53,6 +53,29 @@ export async function getFileByInfoFromMsg(
   return entity || null;
 }
 
+/**
+ * The attachment as a readable file, or null when there is nothing to read.
+ *
+ * getFileByInfoFromMsg answers with a file or a folder, and every reader of
+ * bytes had its own `as ReadonlyFile` cast over that - a cast that says nothing
+ * when the entity turns out to be a folder. Here the folder case is an answer of
+ * null, which callers already handle as "no file".
+ */
+export async function getReadableFileFromMsg(
+  entityId: string | undefined,
+  incomingMsgId?: string,
+): Promise<Nullable<ReadonlyFile>> {
+  if (!entityId) {
+    return null;
+  }
+
+  const entity = await getFileByInfoFromMsg(entityId, incomingMsgId);
+  if (!entity || (entity as ReadonlyFS).listFolder) {
+    return null;
+  }
+  return entity as ReadonlyFile;
+}
+
 export async function saveFileFromMsg(
   fileId: string,
   t: (key: string, placeholders?: Record<string, string>) => string,
@@ -66,7 +89,9 @@ export async function saveFileFromMsg(
   if ((entity as ReadonlyFS).listFolder) {
     const targetFolder = await w3n.shell?.fileDialogs?.saveFolderDialog!(
       t('chat.message.dialog.folder_download.title'),
-      '',
+      // Not '': an empty label leaves the platform to put its own, untranslated
+      // one on the button.
+      t('app.text.save'),
       entity.name,
     );
 
@@ -84,7 +109,7 @@ export async function saveFileFromMsg(
   } else {
     const targetFile = await w3n.shell?.fileDialogs?.saveFileDialog!(
       t('chat.message.dialog.file_download.title'),
-      '',
+      t('app.text.save'),
       entity.name,
     );
 

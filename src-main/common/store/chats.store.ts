@@ -16,6 +16,7 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, inject, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import cloneDeep from 'lodash/cloneDeep';
 import { NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
@@ -56,6 +57,7 @@ export interface ChatCreationException extends web3n.RuntimeException {
 }
 
 export const useChatsStore = defineStore('chats', () => {
+  const { t } = useI18n();
   const { $createNotice } = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const route = useRoute();
@@ -276,7 +278,7 @@ export const useChatsStore = defineStore('chats', () => {
     } catch (error: unknown) {
       $createNotice({
         type: 'error',
-        content: 'Error creating a one to one chat.',
+        content: t('chat.app_message.error.create_oto_chat'),
       });
       log.error('Error creating a one to one chat. ', error);
     }
@@ -295,7 +297,7 @@ export const useChatsStore = defineStore('chats', () => {
     } catch (error: unknown) {
       $createNotice({
         type: 'error',
-        content: 'Error creating a group chat.',
+        content: t('chat.app_message.error.create_group_chat'),
       });
       log.error('Error creating a group chat. ', error);
     }

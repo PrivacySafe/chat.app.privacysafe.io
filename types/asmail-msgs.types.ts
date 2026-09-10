@@ -15,6 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import type {
+  AttachmentRecordingInfo,
   ChatMessageAttachmentsInfo,
   ChatMessageHistory,
   ChatMessageReaction,
@@ -92,6 +93,34 @@ export interface ChatRegularMsgV1 extends ChatMessageJsonBodyV1Base {
   chatMessageId: string;
 
   relatedMessage?: RelatedMessage;
+
+  /**
+   * Media recorded in the app, keyed by the name of the attachment carrying it.
+   *
+   * An optional field on the existing 'regular' type, and deliberately not a
+   * new chatMessageType: checkV1() answers `undefined` for a type it does not
+   * know, and a build that gets such a message deletes it from the shared
+   * inbox outright (the same reasoning as for RestoreSnapshotSysMsgData
+   * below). An unknown field on a known type is simply ignored, so an older
+   * correspondent sees an ordinary audio or video attachment instead.
+   *
+   * Keyed by name rather than being one field for the whole message because
+   * the receiving side rebuilds its attachment list from the ASMail
+   * attachments folder, where `listFolder` promises no order, and the
+   * container puts files in by name (`addFileTo(container, file, name)`).
+   *
+   * `durationMs` travels because it cannot be recovered from the file - see
+   * AttachmentRecordingInfo. `preview` travels because a video message is far
+   * past THUMBNAIL_AUTO_PREVIEW_LIMIT, so without it neither the recipient nor
+   * the sender would see a frame until the whole file had been read; both sides
+   * put it into their preview table rather than into the message record.
+   */
+  recordings?: Record<string, RecordedMediaInMsg>;
+}
+
+export interface RecordedMediaInMsg extends AttachmentRecordingInfo {
+  /** Data URL of a small frame; only a video message has one. */
+  preview?: string;
 }
 
 export interface ChatInvitationMsgV1 extends ChatMessageJsonBodyV1Base {
@@ -466,6 +495,21 @@ export interface RestoreSnapshotSysMsgData {
     of: number;
     chats?: SnapshotChatEntry[];
     msgs?: SnapshotMsgEntry[];
+    /**
+     * Only in 'replace', and in every chunk. A FRESH token, minted once for the
+     * whole restore, under which a `replace` re-creates a record that a
+     * `historyCleared` marker would otherwise forbid.
+     *
+     * It travels rather than being minted per device for one reason: every
+     * device applying this snapshot has to stamp the resurrected record with
+     * the SAME token. Minted locally, two devices would write two different
+     * versions of one aspect, and the next change to that record would be
+     * ordered differently on each of them.
+     *
+     * Strictly older than `deleted.token` below, so that the invariant there -
+     * a deletion wins over everything the same snapshot restores - still holds.
+     */
+    restoreToken?: { ts: number; deviceId: string };
     /**
      * Only in 'replace', and only in the last chunk. Carries a FRESH token: a
      * deletion has to win on the neighbours over everything the same snapshot

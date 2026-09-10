@@ -11,7 +11,7 @@
 flowchart TB
   subgraph local["appFS local (не выгружается на сервер)"]
     M["msgs-dbs/msgs-db_0<br/>главная БД: messages, sync_versions,<br/>pending_sync_msgs"]
-    A["msgs-dbs/msgs-orphaned-dbs<br/>вспомогательная БД:<br/>orphaned_messages, pending_inbox_removals"]
+    A["msgs-dbs/msgs-orphaned-dbs<br/>вспомогательная БД:<br/>orphaned_messages, pending_inbox_removals,<br/>thumbnails"]
     C["chats-db<br/>group_chats, oto_chats"]
     F["ссылки/копии вложений<br/>(file-store-service)"]
     D["delivery-service-data<br/>appDeviceId, watermark, HLC"]
@@ -87,6 +87,7 @@ xattr теряется. Поэтому все решения — и «созда
 | `messages` | `getSqliteDb` в [msgs-db.ts](../src-deno/dataset/msgs-db.ts) | `{datasetVersion: 2, db: 'msgs'}` |
 | `orphaned_messages` | там же | `{datasetVersion: 3, db: 'msgs-orphaned'}` |
 | `pending_inbox_removals` | там же | (версии нет, только наличие таблицы) |
+| `thumbnails` | там же | (версии нет, только наличие таблицы) |
 | `sync_versions` | там же | (версии нет) |
 | `pending_sync_msgs` | там же | (версии нет) |
 | `group_chats` / `oto_chats` | `getSqliteDb` в [chats-db.ts](../src-deno/dataset/chats-db.ts) | `{datasetVersion: 3, db: 'chats'}` |
@@ -130,7 +131,7 @@ DDL — [msgs-db.ts:53-110](../src-deno/dataset/msgs-db.ts#L53-L110), TS-тип 
 | `incomingMsgId` | TEXT | id сообщения в inbox — заполняется **только когда в inbox остались байты** (вложения) |
 | `groupSender` | TEXT | автор в групповом чате |
 | `body` | TEXT | текст для `regular`; JSON для `system` и `invitation` |
-| `attachments` | TEXT (JSON) | `ChatMessageAttachmentsInfo[]` |
+| `attachments` | TEXT (JSON) | `ChatMessageAttachmentsInfo[]`; у записанного в приложении медиа несёт ещё `recording: {kind, durationMs}` |
 | `chatMessageType` | TEXT NOT NULL | `regular` / `system` / `invitation` |
 | `relatedMessage` | TEXT (JSON) | ответ/пересылка |
 | `status` | TEXT | статус сообщения (см. §2.2) |
@@ -139,6 +140,16 @@ DDL — [msgs-db.ts:53-110](../src-deno/dataset/msgs-db.ts#L53-L110), TS-тип 
 | `history` | TEXT (JSON) | изменения текста/реакций/ошибки доставки |
 | `reactions` | TEXT (JSON) | `Record<адрес, ChatMessageReaction>` |
 | `settings` | TEXT (JSON) | `ChatSettings`; для сообщений здесь лежит `msgOwnersDeviceId` |
+
+**Почему у голосовых и видео-сообщений нет своей колонки.** Признак «это записано в приложении» и
+длительность записи лежат внутри JSON колонки `attachments`, а не рядом с ней, и это не экономия
+места: из-за этого признак не требует ни правки схемы, ни фиксапа при открытии базы (§1.2), а на
+другие устройства пользователя уезжает сам — `attachmentsForPhantom` копирует список вложений через
+`{ id: _id, ...rest }`. Заплатить пришлось в одном месте: `BackedUpAttachment`
+([types/backup.types.ts](../types/backup.types.ts)) перечисляет поля вложения руками, поэтому там
+`recording` пришлось добавить явно, иначе восстановленная из бэкапа запись деградировала бы до
+обычного медиа-вложения. Обоснование выбора формата и «почему не новый `chatMessageType`» —
+[03-message-flows.md §1](03-message-flows.md#1-форматы-сообщений).
 
 **PRIMARY KEY (`chatMessageId`, `groupChatId`, `otoPeerCAddr`)**. Поскольку поля первичного ключа не
 могут быть NULL, отсутствующие значения пишутся как пустая строка
@@ -297,6 +308,45 @@ Inbox — общий на всех устройствах пользовател
 не прошли проверку тела, относятся к неизвестному чату, отправитель не участник группы, неизвестный
 тип ([chat-service.ts:185-257](../src-deno/services/chat-service/chat-service.ts#L185-L257)), а
 также служебные WebRTC-сигналы ([05-video-calls.md](./05-video-calls.md)).
+
+### 3.3 `thumbnails`
+
+DDL — [msgs-db.ts:172-181](../src-deno/dataset/msgs-db.ts#L172-L181), API —
+[msgs-db.ts:1071-1131](../src-deno/dataset/msgs-db.ts#L1071-L1131), сигнатуры —
+[msgs-db.types.ts:223-231](../src-deno/types/msgs-db.types.ts#L223-L231).
+
+Кэш превью вложений. Построение превью требует **файла целиком**, а вложение входящего сообщения
+до первого чтения не лежит на устройстве — то есть открытие чата с десятью фото в сообщении тянуло
+с сервера все десять, и так при каждом прокруте виртуального списка. Видео вдобавок означает полную
+декодировку.
+
+| Колонка | Смысл |
+|---|---|
+| `groupChatId` / `otoPeerCAddr` | адресация чата, та же нормализация в `''`, что в `messages` |
+| `chatMessageId` | id сообщения; уникален только **внутри чата**, поэтому ключ четырёхчастный |
+| `fileName` | имя файла вложения (не `id`: он у `ChatMessageAttachmentsInfo` опционален) |
+| `dataUrl` | само превью, base64 data URL |
+
+Колонки названы как в `messages` намеренно: `WHERE` для них строит готовый `msgWhereParamsFor()`
+([dataset/utils.ts:223-241](../src-deno/dataset/utils.ts#L223-L241)) без единой правки.
+
+Живёт во **вспомогательной** БД, а не в главной: `saveToFile()` сериализует всю базу и переписывает
+файл целиком (§1.1.1), а главная БД пишется чаще всех — dataURL'ы в ней дорожали бы каждую её
+запись. Слишком большое превью не сохраняется вовсе: отсечка по `THUMBNAIL_CACHE_MAX_CHARS`
+(64 КБ) стоит в сервисе — [chat-service.ts](../src-deno/services/chat-service/chat-service.ts),
+метод `saveThumbnail`. Такое превью показывается, просто строится заново в следующий раз.
+
+Внешнего ключа нет: `PRAGMA foreign_keys` в проекте не включается, поэтому строки убирает тот, кто
+удаляет сообщение. Точек чистки ровно две, и обе — в самом слое БД:
+
+- [`deleteMessage()` (msgs-db.ts:585)](../src-deno/dataset/msgs-db.ts#L585) — сюда сходятся
+  одиночное удаление, пакетное, очистка по времени жизни и удаление, приехавшее от собеседника;
+- [`deleteMessagesInOneToOneChat()` / `deleteMessagesInGroupChat()` (msgs-db.ts:797-833)](../src-deno/dataset/msgs-db.ts#L797-L833)
+  — очистка истории чата и удаление чата целиком: там массовый `DELETE`, минуя `removeMsgBytes`.
+
+Синхронизации и бэкапа таблица не касается: обе БД лежат в local FS, а бэкап строит явный план из
+трёх источников, а не дамп таблиц ([08-backup-and-restore.md](08-backup-and-restore.md)). После
+восстановления превью просто строятся заново при первом показе.
 
 ## 4. БД чатов
 

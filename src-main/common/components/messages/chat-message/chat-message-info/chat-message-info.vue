@@ -113,7 +113,7 @@
   >
     <div :class="$style.toolbar">
       <ui3n-tooltip
-        content="Back to the message list"
+        :content="t('chat.message.info_panel.back')"
         position-strategy="fixed"
         placement="top-start"
       >

@@ -17,7 +17,6 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 import { computed, inject, nextTick, provide, ref, toRaw, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
-  NavigationGuardNext,
   RouteLocationNormalized,
   RouteLocationNormalizedLoaded,
   RouteLocationNormalizedLoadedGeneric,
@@ -51,6 +50,9 @@ import type { ChatRoute, ChatRouteType, ChatWithFwdMsgRef, ChatWithIncomingCall 
 import type { RouteChat } from '@main/mobile/types';
 import { fileLinkStoreSrv } from '@main/common/services/external-services';
 import { useTaskRunner } from '@main/common/composables/useTaskRunner';
+import { THUMBNAIL_CACHE_KEY, useThumbnailCache } from '@main/common/composables/useThumbnailCache';
+import { CHAT_STAGE_KEY, useChatStage } from '@main/common/composables/useChatStage';
+import { RECORDING_PLAYBACK_KEY, useRecordingPlayback } from '@main/common/composables/useRecordingPlayback';
 import { useAppStore } from '@main/common/store/app.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
@@ -63,7 +65,11 @@ import {
   prepareMessageBody,
   restoreRawMessage,
 } from '@main/common/utils/chats.helper';
+import { recordingExcerpt, recordingOfAttachments } from '@main/common/utils/chat-ui.helper';
 import MessageDeleteDialog from '@main/common/components/dialogs/message-delete-dialog.vue';
+import ChatMediaRecorderDialog from '@main/common/components/dialogs/chat-media-recorder/chat-media-recorder-dialog.vue';
+import type { MediaRecordingResult } from '@main/common/components/dialogs/chat-media-recorder/useMediaRecorder';
+import { nameForRecording } from '@shared/media-recording-format';
 import { makeLogger } from '@shared/logger';
 
 const log = makeLogger('ChatView');
@@ -118,6 +124,16 @@ interface NavigationUtils {
 export function useChatView(navigationUtils: () => NavigationUtils) {
   const { addTask, cancelTasks } = useTaskRunner();
   provide('task-runner', { addTask });
+  // Handed out here so that it lives exactly as long as this view: on a change
+  // of chat the map goes with it, and the previous chat's previews cannot show
+  // up in the next one.
+  provide(THUMBNAIL_CACHE_KEY, useThumbnailCache());
+  // The same reasoning for both of these: one recording of the open chat plays
+  // at a time, and a video message is shown over the area of this view.
+  const recordingPlayback = useRecordingPlayback();
+  provide(RECORDING_PLAYBACK_KEY, recordingPlayback);
+  const chatStage = useChatStage();
+  provide(CHAT_STAGE_KEY, chatStage);
 
   const { t } = useI18n();
   const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
@@ -220,6 +236,19 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   const sendBtnDisabled = computed<boolean>(() => {
     return !(msgText.value.trim() || attachmentsInfo.value) || disabled.value || readonly.value;
   });
+
+  /**
+   * Whether a recording can be started right now.
+   *
+   * A call in this chat holds the microphone and the camera in the call window,
+   * so a recording started here would fail with NotReadableError - refused
+   * before it is attempted rather than explained afterwards. Nothing here has
+   * to guard the "one recording per message" invariant the wire format relies
+   * on: a recording is a message of its own, carrying one attachment.
+   */
+  const recordBtnDisabled = computed<boolean>(
+    () => disabled.value || readonly.value || !!currentChat.value?.isCallActive,
+  );
 
   function hideSuggestions() {
     mention.value = {
@@ -390,14 +419,32 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     }
   }
 
+  /**
+   * The recording the message being replied to or forwarded consists of, so
+   * that the banner can show a frame of it rather than a line of text. Beside
+   * getTextOfEditableOrInitialMsg rather than inside it: that one answers with
+   * HTML, and a preview has to be read from the previews table.
+   */
+  const initialMsgRecording = computed(() =>
+    (initialMessage.value && !initialMessage.value.body)
+      ? recordingOfAttachments(initialMessage.value.attachments)
+      : undefined,
+  );
+
   function getTextOfEditableOrInitialMsg(msg: Nullable<RegularMsgView>) {
     if (!msg) {
       return '';
     }
 
     const { body, attachments } = msg;
+    // A recording being replied to or forwarded reads as what it is, rather
+    // than as the generated name it was attached under.
+    const recording = recordingOfAttachments(attachments);
+    if (!body && recording) {
+      return `<i>${recordingExcerpt(recording, t)}</i>`;
+    }
     const attachmentsText = (attachments || []).map(a => a.name).join(', ');
-    return body || `<i>${t('text.receive.file')}: ${attachmentsText}</i>`;
+    return body || `<i>${t('app.text.receive.file')}: ${attachmentsText}</i>`;
   }
 
   function onEmoticonSelect(emoticon: { id: string; value: string }) {
@@ -686,6 +733,103 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     return false;
   }
 
+  /**
+   * Opens the recorder and, if something was recorded and approved, sends it.
+   *
+   * A recording goes out as a message of its own, with no text: that is what a
+   * voice message is, and the composer is left exactly as it was - whatever is
+   * typed or attached there is still waiting to be sent. What keeps this from
+   * being an irreversible send on the release of a button is the recorder's own
+   * review step: nothing reaches here until the user has heard the recording
+   * and asked for it to be sent.
+   */
+  async function openMediaRecorder(): Promise<void> {
+    if (recordBtnDisabled.value) {
+      return;
+    }
+
+    const answer = await dialog?.$openDialog<MediaRecordingResult>(ChatMediaRecorderDialog, {
+      dialogProps: {
+        icon: 'outline-voice-chat',
+        title: t('chat.recording.dialogTitle'),
+        cssStyle: { width: '520px', maxWidth: '95%' },
+        confirmButton: false,
+        cancelButton: false,
+        // A stray click outside must not throw a recording away, and ESC is
+        // handled inside the dialog, where it can stop the device first.
+        closeOnClickOverlay: false,
+        closeOnEsc: false,
+      },
+    });
+
+    // `data` is only set when the dialog closed with a recording the user asked
+    // to send; every other way out of it - cancelled, re-recorded, or a device
+    // that would not start - leaves it undefined, and has already said so where
+    // it happened.
+    if (answer?.data) {
+      await sendRecordingAsMessage(answer.data);
+    }
+  }
+
+  /**
+   * Sends a recording as a message of its own, carrying nothing but itself.
+   *
+   * The bytes go through the same storage item a pasted file does, for the same
+   * reason: a recording has no existence outside this app. What differs from
+   * sendMessage() is what is *not* done - the composer's text, attachments,
+   * reply and edit modes are all left alone, because none of them is part of
+   * this message.
+   */
+  async function sendRecordingAsMessage(recorded: MediaRecordingResult): Promise<void> {
+    const { blob, mimeType, ext, kind, durationMs, preview } = recorded;
+    const chatId = currentChatId.value;
+    if (!chatId) {
+      return;
+    }
+
+    const name = nameForRecording(kind, dayjs().format('YY-MM-DD_HH-mm-ss'), ext);
+
+    let attachment: OutgoingAttachment | undefined;
+    try {
+      attachment = await fileTo3nFile(new File([blob], name, { type: mimeType }));
+    } catch (e) {
+      log.error(`Error storing the recording '${name}'.`, e);
+      notifications?.$createNotice({
+        type: 'error',
+        content: t('chat.attachment.attaching.error', { fileName: name }),
+      });
+      return;
+    }
+    if (!attachment) {
+      return;
+    }
+
+    attachment.recording = { kind, durationMs, ...(preview && { preview }) };
+    const storedId = attachment.storedId!;
+
+    // Not awaited, and the stored item is not discarded if it fails: the
+    // message record is written before the delivery is queued, so removing the
+    // item after a late failure would gut a message that exists.
+    sendMessageInChat({
+      chatId: toRaw(chatId),
+      text: '',
+      files: [attachment],
+      // A recording is never a reply: a reply is a text message, and the reply
+      // armed in the composer is still armed for it.
+      relatedMessage: undefined,
+    }).catch(e => {
+      log.error('Error sending the recording.', e);
+      notifications?.$createNotice({ type: 'error', content: t('chat.recording.error.sending') });
+    });
+
+    // This one item is handed over, and only it. sendMessage()'s blanket
+    // ownedStoredIds.clear() would hand over the pasted attachments waiting in
+    // the composer as well, and leaving the chat would then leak them.
+    ownedStoredIds.delete(storedId);
+
+    inputEl.value && inputEl.value.focus();
+  }
+
   async function sendMessage(ev?: Ui3nTextEnterEvent, force = false) {
     if (disabled.value || readonly.value || isMsgEmpty()) {
       return;
@@ -864,6 +1008,8 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   }
 
   function doBeforeUnMount() {
+    // Before anything else: an unmounted media element is not a stopped one.
+    recordingPlayback.stopCurrent();
     routeQueryWatching.stop();
     messageListElement.value!.removeEventListener('scroll', onMessageListScroll);
 
@@ -876,15 +1022,19 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     }
   }
 
-  async function doBeforeRouteUpdate(
-    to: RouteLocationNormalized,
-    from: RouteLocationNormalizedLoaded,
-    next: NavigationGuardNext,
-  ) {
+  /**
+   * Takes no `next`: the callback form is deprecated, and a guard that returns
+   * nothing lets the navigation through - which is all this one ever did with
+   * it.
+   */
+  async function doBeforeRouteUpdate(to: RouteLocationNormalized, from: RouteLocationNormalizedLoaded) {
     const chatIdFrom = getChatIdFromRoute(from.params as ChatRouteType['params']);
     const chatIdTo = getChatIdFromRoute(to.params as ChatRouteType['params']);
 
     if (chatIdTo && !areChatIdsEqual(chatIdFrom, chatIdTo)) {
+      // The bubbles of this chat are about to be replaced, and taking a playing
+      // element out of the DOM does not silence it.
+      recordingPlayback.stopCurrent();
       cancelTasks();
       clearSelectedMessages();
       await setChatAndFetchMessages(chatIdTo);
@@ -895,8 +1045,6 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
       onMessageListScroll();
       setMsgForWhichInfoIsDisplayed(null);
     }
-
-    next();
   }
 
   return {
@@ -914,11 +1062,13 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     inputEl,
     initialMessage,
     initialMessageType,
+    initialMsgRecording,
     editableMessage,
     files,
     attachmentsInfo,
     attachmentsTotal,
     sendBtnDisabled,
+    recordBtnDisabled,
     mention,
     filteredMembers,
     activeSuggestionIndex,
@@ -930,6 +1080,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     selectMention,
     hideSuggestions,
     onMessageListElementInit,
+    setChatStageEl: chatStage.setEl,
     scrollMessageListToEnd,
     setMsgForWhichInfoIsDisplayed,
     getTextOfEditableOrInitialMsg,
@@ -943,6 +1094,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     clearAttachments,
     finishEditMsgMode,
     deleteAttachment,
+    openMediaRecorder,
     sendMessage,
 
     doAfterMount,

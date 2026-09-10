@@ -16,6 +16,7 @@
 -->
 <script setup lang="ts">
 import { computed, ComputedRef, onBeforeMount, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import size from 'lodash/size';
 import { type Nullable, Ui3nButton, Ui3nClickOutside, Ui3nEmoji, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
 import { useAppStore } from '@main/common/store/app.store';
@@ -38,6 +39,7 @@ interface ReactionsDialogEmits {
 const props = defineProps<ReactionsDialogProps>();
 const emits = defineEmits<ReactionsDialogEmits>()
 
+const { t } = useI18n();
 const appStore = useAppStore();
 const { emoticonsByGroups, groups, getEmojiById } = useEmoticons();
 
@@ -136,7 +138,7 @@ watch(
         v-if="isExpanded"
         :class="$style.label"
       >
-        Recent:
+        {{ t('chat.message.reactions_dialog.recent') }}
       </div>
 
       <div :class="$style.recentBody">
@@ -153,7 +155,7 @@ watch(
 
         <div :class="$style.recentActions">
           <ui3n-tooltip
-            content="Remove reaction"
+            :content="t('chat.message.reactions_dialog.remove')"
             position-strategy="fixed"
             placement="top-end"
           >
@@ -169,7 +171,9 @@ watch(
           </ui3n-tooltip>
 
           <ui3n-tooltip
-            :content="isExpanded ? 'Less' : 'More'"
+            :content="isExpanded
+              ? t('chat.message.reactions_dialog.less')
+              : t('chat.message.reactions_dialog.more')"
             position-strategy="fixed"
             placement="top-end"
           >
@@ -191,7 +195,7 @@ watch(
       :class="[$style.block, $style.iconsBlock]"
     >
       <div :class="$style.label">
-        Icons:
+        {{ t('chat.message.reactions_dialog.icons') }}
       </div>
 
       <div :class="$style.icons">

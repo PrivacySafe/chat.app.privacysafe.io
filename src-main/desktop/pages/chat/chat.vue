@@ -17,6 +17,7 @@
 <script lang="ts" setup>
   import { onBeforeUnmount, onMounted } from 'vue';
   import { onBeforeRouteUpdate } from 'vue-router';
+  import { storeToRefs } from 'pinia';
   import isEmpty from 'lodash/isEmpty';
   import {
     Ui3nButton,
@@ -28,6 +29,7 @@
     Ui3nClickOutside,
   } from '@v1nt1248/3nclient-lib';
   import { useChatView } from '@main/common/composables/useChatView';
+  import { useAppStore } from '@main/common/store/app.store';
   import { useContactsStore } from '@main/common/store/contacts.store';
   import { useRouting } from '@main/desktop/composables/useRouting';
   import { formatFileSize } from '@v1nt1248/3nclient-lib/utils';
@@ -38,11 +40,13 @@
   import EmoticonsDialog from '@main/common/components/dialogs/emoticons-dialog.vue';
   import ChatMessageInfo from '@main/common/components/messages/chat-message/chat-message-info/chat-message-info.vue';
   import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
+  import RecordingQuote from '@main/common/components/messages/chat-message/chat-message-recording/recording-quote.vue';
 
   const vUi3nHtml = Ui3nHtml;
   const vUi3nClickOutside = Ui3nClickOutside;
 
   const { getContactName } = useContactsStore();
+  const { canRecord } = storeToRefs(useAppStore());
 
   const {
     t,
@@ -58,11 +62,13 @@
     inputEl,
     initialMessage,
     initialMessageType,
+    initialMsgRecording,
     editableMessage,
     files,
     attachmentsInfo,
     attachmentsTotal,
     sendBtnDisabled,
+    recordBtnDisabled,
     filteredMembers,
     activeSuggestionIndex,
     onInput,
@@ -71,6 +77,7 @@
     hideSuggestions,
     clearSelectedMessages,
     onMessageListElementInit,
+    setChatStageEl,
     deleteMessages,
     scrollMessageListToEnd,
     setMsgForWhichInfoIsDisplayed,
@@ -85,6 +92,7 @@
     clearAttachments,
     finishEditMsgMode,
     deleteAttachment,
+    openMediaRecorder,
     sendMessage,
     doAfterMount,
     doBeforeRouteUpdate,
@@ -189,6 +197,23 @@
                 />
               </div>
 
+              <ui3n-tooltip
+                v-if="canRecord"
+                :content="t('chat.recording.tooltip.record')"
+                placement="top"
+                position-strategy="fixed"
+              >
+                <ui3n-button
+                  type="icon"
+                  color="var(--color-bg-block-primary-default)"
+                  icon="outline-voice-chat"
+                  icon-size="24"
+                  icon-color="var(--color-icon-block-secondary-default)"
+                  :disabled="recordBtnDisabled"
+                  @click="openMediaRecorder"
+                />
+              </ui3n-tooltip>
+
               <ui3n-button
                 type="icon"
                 color="var(--color-bg-block-primary-default)"
@@ -222,7 +247,19 @@
                     <div :class="$style.inputAdditionalLabel">
                       {{ getContactName((initialMessage as RegularMsgView).sender) }}
                     </div>
+
+                    <recording-quote
+                      v-if="initialMsgRecording"
+                      :msg-id="{
+                        chatId: (initialMessage as RegularMsgView).chatId,
+                        chatMessageId: (initialMessage as RegularMsgView).chatMessageId,
+                      }"
+                      :attachment-name="(initialMessage as RegularMsgView).attachments![0].name"
+                      :recording="initialMsgRecording"
+                    />
+
                     <div
+                      v-else
                       v-ui3n-html:sanitize="getTextOfEditableOrInitialMsg(initialMessage)"
                       :class="$style.inputAdditionalText"
                     />
@@ -375,6 +412,14 @@
           </div>
         </div>
       </ui3n-drop-files>
+
+      <!-- Where a video message is played, so that it is bounded by the chat
+           rather than by the window. Transparent to clicks until something is
+           shown on it. -->
+      <div
+        :ref="setChatStageEl"
+        :class="$style.recordingStage"
+      />
     </div>
 
     <chat-message-info
@@ -402,6 +447,13 @@
     position: relative;
     width: 100%;
     height: calc(100% - 68px);
+  }
+
+  .recordingStage {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
   }
 
   .body {
@@ -513,9 +565,11 @@
     right: 4px;
   }
 
+  /* min-height rather than height: a quoted recording puts a 32px frame on the
+     second line, and a fixed height would clip it. */
   .inputAdditionalBlock {
     display: flex;
-    height: var(--spacing-xl);
+    min-height: var(--spacing-xl);
     padding: var(--spacing-xs) 2px var(--spacing-xs) var(--spacing-s);
     justify-content: flex-start;
     align-items: center;

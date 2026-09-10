@@ -35,8 +35,10 @@ import type {
   ChatMessageActionType,
   ChatMessageId,
   ChatMessageView,
+  OutgoingAttachment,
   RegularMsgView,
 } from '~/index';
+import { THUMBNAIL_CACHE_KEY, type ThumbnailCache } from '@main/common/composables/useThumbnailCache';
 import { copyMessageToClipboard, downloadAttachments } from '@main/common/utils/chat-message-actions.helpers';
 import { getMessageActions } from '@main/common/utils/chats.helper';
 import { capitalize } from '@v1nt1248/3nclient-lib/utils';
@@ -63,6 +65,7 @@ export default function useChatMessages(
   const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
   const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
+  const thumbnailCache = inject<ThumbnailCache>(THUMBNAIL_CACHE_KEY)!;
 
   const { user: ownAddr, isMobileMode, appDeviceId } = storeToRefs(useAppStore());
 
@@ -452,15 +455,33 @@ export default function useChatMessages(
         ? await getMessageAttachments(msg.attachments!, msg.incomingMsgId)
         : {};
 
+      // Named by the key rather than by the entity: the entity may be an item
+      // of this app's store, whose name is an id, and the forward has to carry
+      // the name the attachment had.
+      const files: OutgoingAttachment[] = [];
+      for (const [name, entity] of Object.entries(entities)) {
+        const recording = msg.attachments?.find(a => a.name === name)?.recording;
+        if (!recording) {
+          files.push({ entity, name });
+          continue;
+        }
+        // The marker travels with the file, or the copy would arrive as a file
+        // under a generated name instead of as the voice message it is. Its
+        // frame is not on the attachment - it lives in the previews table under
+        // the message it came with - so it is read from there and handed over,
+        // the way a fresh recording hands over the frame it just took.
+        const preview = (recording.kind === 'video')
+          ? await thumbnailCache
+              .get({ chatId: msg.chatId, chatMessageId: msg.chatMessageId }, name)
+              .catch(() => undefined)
+          : undefined;
+        files.push({ entity, name, recording: { ...recording, ...(preview && { preview }) } });
+      }
+
       await sendMessageInChat({
         chatId: chatId!,
         text: msg.body,
-        // Named by the key rather than by the entity: the entity may be an item
-        // of this app's store, whose name is an id, and the forward has to
-        // carry the name the attachment had.
-        files: isEmpty(entities)
-          ? undefined
-          : Object.entries(entities).map(([name, entity]) => ({ entity, name })),
+        files: isEmpty(files) ? undefined : files,
         relatedMessage: {
           forwardFrom: {
             sender: msg.sender || ownAddr.value,

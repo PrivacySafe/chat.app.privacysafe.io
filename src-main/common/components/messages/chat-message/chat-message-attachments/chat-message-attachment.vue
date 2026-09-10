@@ -17,11 +17,12 @@
 <script lang="ts" setup>
   import { computed, inject, ref } from 'vue';
   import { isFileAudio, isFileImage, isFileVideo } from '@v1nt1248/3nclient-lib/utils';
-  import { Ui3nIcon, Ui3nProgressCircular, type Nullable } from '@v1nt1248/3nclient-lib';
-  import type { Task } from '~/index';
-  import { createPdfThumbnail } from '@main/common/utils/create-thumbnail/create-pdf-thumbnail';
-  import { createImageThumbnail } from '@main/common/utils/create-thumbnail/create-image-thumbnail';
-  import { createVideoThumbnail } from '@main/common/utils/create-thumbnail/create-video-thumbnail';
+  import { Ui3nButton, Ui3nIcon, Ui3nProgressCircular, Ui3nTooltip, type Nullable } from '@v1nt1248/3nclient-lib';
+  import type { ChatIdObj, Task } from '~/index';
+  import { createThumbnail } from '@main/common/utils/create-thumbnail';
+  import { recordingLabelKey, timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
+  import { THUMBNAIL_AUTO_PREVIEW_LIMIT } from '@shared/constants/attachment-limits';
+  import { THUMBNAIL_CACHE_KEY, type ThumbnailCache } from '@main/common/composables/useThumbnailCache';
   import { useOpenAttachment } from './useOpenAttachment';
   import type { AttachmentViewInfo } from './types';
   import ChatMessageAttachmentView from './chat-message-attachment-view.vue';
@@ -33,6 +34,8 @@
 
   const props = defineProps<{
     item: AttachmentViewInfo;
+    chatId: ChatIdObj;
+    chatMessageId: string;
     incomingMsgId?: string;
     /**
      * Whether this message's files live only on the device that sent it. Decided
@@ -44,6 +47,7 @@
 
   const { t } = useI18n();
   const { addTask } = inject('task-runner') as { addTask: (task: Task) => void };
+  const thumbnailCache = inject<ThumbnailCache>(THUMBNAIL_CACHE_KEY)!;
 
   const { openEntity } = useOpenAttachment(props);
 
@@ -56,6 +60,26 @@
 
   const unavailableTooltip = computed(() =>
     props.blocked ? t('chat.message.attachment.not_available_on_this_device') : '',
+  );
+
+  /**
+   * A recording is attached under a generated name, so it is named by what it
+   * is and measured in seconds rather than in bytes. Driven by the marker and
+   * not by the extension: an audio file someone attached is not a voice
+   * message.
+   *
+   * Still reached, although a recording of its own is shown as a player now:
+   * this is what a message whose files are only on the sending device falls
+   * back to, and what the history's messages of "a recording plus other files"
+   * - which the composer used to allow - are shown as.
+   */
+  const recordingLabel = computed(() =>
+    props.item.recording ? t(recordingLabelKey(props.item.recording.kind)) : '',
+  );
+  const recordingDuration = computed(() =>
+    props.item.recording
+      ? timeInSecondsToString(Math.round(props.item.recording.durationMs / 1000))
+      : '',
   );
 
   const isThumbnailAvailable = computed(
@@ -90,25 +114,39 @@
     }
   }
 
-  async function makeThumbnailTask() {
-    const { ext } = props.item;
+  /**
+   * Whether the user is offered a button to make this preview.
+   *
+   * Making one needs the whole file, and an attachment of an incoming message is
+   * not on this device until something reads it - so a big one waits to be asked
+   * for, instead of a chat with ten photos pulling all ten from the server the
+   * moment it opens.
+   */
+  const isPreviewOnDemand = computed(
+    () =>
+      isThumbnailAvailable.value &&
+      !props.blocked &&
+      !thumbnail.value &&
+      !isThumbnailCreationProcessGoingOn.value &&
+      (props.item.size ?? 0) > THUMBNAIL_AUTO_PREVIEW_LIMIT,
+  );
 
+  function msgId() {
+    return { chatId: props.chatId, chatMessageId: props.chatMessageId };
+  }
+
+  async function makeThumbnailTask() {
     try {
-      if (isFileImage({ fullName: props.item.name })) {
-        thumbnail.value = await createImageThumbnail({
-          fileId: props.item.id!,
-          incomingMsgId: props.incomingMsgId,
-        });
-      } else if (isFileVideo({ fullName: props.item.name })) {
-        thumbnail.value = await createVideoThumbnail({
-          fileId: props.item.id!,
-          incomingMsgId: props.incomingMsgId,
-        });
-      } else if (ext === 'pdf') {
-        thumbnail.value = await createPdfThumbnail({
-          fileId: props.item.id!,
-          incomingMsgId: props.incomingMsgId,
-        });
+      const dataUrl = await createThumbnail({
+        fileName: props.item.name,
+        fileId: props.item.id,
+        incomingMsgId: props.incomingMsgId,
+      });
+      thumbnail.value = dataUrl;
+      if (dataUrl) {
+        // Kept, so that scrolling this message back into view - or opening the
+        // chat again tomorrow - does not read the file once more.
+        thumbnailCache.put(msgId(), props.item.name, dataUrl);
       }
     } catch (e) {
       log.error(`The thumbnail making error for the file ${props.item.name}.`, e);
@@ -117,7 +155,7 @@
     }
   }
 
-  async function makeThumbnail() {
+  function makeThumbnail() {
     if (!isThumbnailAvailable.value || props.blocked) {
       return;
     }
@@ -126,7 +164,30 @@
     addTask(makeThumbnailTask);
   }
 
-  makeThumbnail();
+  async function showThumbnail() {
+    if (!isThumbnailAvailable.value || props.blocked) {
+      return;
+    }
+
+    // Held up front, over the cache lookup as well: without it the square shows
+    // the "cannot be read" mark for as long as the lookup takes.
+    isThumbnailCreationProcessGoingOn.value = true;
+    // The cheapest case of all: a preview made before is shown without the file
+    // being read at all.
+    const cached = await thumbnailCache.get(msgId(), props.item.name).catch(() => undefined);
+    isThumbnailCreationProcessGoingOn.value = false;
+
+    if (cached) {
+      thumbnail.value = cached;
+      return;
+    }
+
+    if ((props.item.size ?? 0) <= THUMBNAIL_AUTO_PREVIEW_LIMIT) {
+      makeThumbnail();
+    }
+  }
+
+  showThumbnail();
 </script>
 
 <template>
@@ -136,6 +197,7 @@
       $style.chatMessageAttachment,
       item.isActionAvailable && $style.chatMessageAttachmentClickable,
       blocked && $style.chatMessageAttachmentBlocked,
+      item.recording && $style.chatMessageAttachmentRecording,
     ]"
     :title="unavailableTooltip"
     @click.stop.prevent="onAttachmentElementClick"
@@ -154,10 +216,37 @@
           :size="(attachmentsItemPreviewSize / 4) * 3"
         />
 
+        <!-- A big file's preview is not made until asked for, so an empty square
+             here means "not yet", not "the file is gone". -->
+        <ui3n-tooltip
+          v-else-if="isPreviewOnDemand"
+          :content="t('chat.message.attachment.make_preview')"
+          placement="top"
+          position-strategy="fixed"
+          max-content-width="180"
+        >
+          <ui3n-button
+            type="icon"
+            icon="outline-image"
+            icon-size="32"
+            @click.stop.prevent="makeThumbnail"
+          />
+        </ui3n-tooltip>
+
         <ui3n-icon
-          v-if="!isThumbnailCreationProcessGoingOn && !thumbnail"
+          v-else-if="!thumbnail"
           icon="file-remove-outline"
           :size="(attachmentsItemPreviewSize / 5) * 4"
+        />
+
+        <!-- Over the frame of a video message, so that a still frame is not
+             mistaken for a picture. -->
+        <ui3n-icon
+          v-if="item.recording && thumbnail"
+          :class="$style.playOverlay"
+          icon="round-play-arrow"
+          :size="attachmentsItemPreviewSize / 2"
+          color="var(--color-icon-button-primary-default)"
         />
       </div>
     </div>
@@ -199,11 +288,21 @@
     </div>
 
     <div :class="$style.chatMessageAttachmentName">
-      {{ item.isFolder ? item.name : item.filename }}
+      {{ item.recording ? recordingLabel : (item.isFolder ? item.name : item.filename) }}
+    </div>
+
+    <!-- Duration where an ordinary attachment shows its extension: seconds are
+         what one wants to know about a recording, and the container it happens
+         to be in is not. -->
+    <div
+      v-if="item.recording"
+      :class="$style.chatMessageAttachmentDuration"
+    >
+      {{ recordingDuration }}
     </div>
 
     <div
-      v-if="!item.isFolder"
+      v-else-if="!item.isFolder"
       :class="$style.chatMessageAttachmentExt"
     >
       .{{ item.ext }}
@@ -288,6 +387,29 @@
   .chatMessageAttachmentExt {
     flex-shrink: 0;
     line-height: var(--font-20);
+  }
+
+  .chatMessageAttachmentDuration {
+    flex-shrink: 0;
+    line-height: var(--font-20);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-chat-bubble-other-sub);
+  }
+
+  /* Enough to say "this was recorded here" without inventing a second kind of
+     bubble: the accent edge plus the label and the duration in place of a file
+     name and an extension. */
+  .chatMessageAttachmentRecording {
+    border-left: 2px solid var(--color-icon-block-accent-default);
+  }
+
+  .playOverlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px oklch(20% 0 0deg / 0.6));
   }
 
   .chatMessageAttachmentBlocked {

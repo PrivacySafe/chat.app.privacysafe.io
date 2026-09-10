@@ -28,12 +28,10 @@
   import type { ChatMessageAttachmentsInfo, Task } from '~/index';
   import { getEntityStat } from '@shared/get-stats-safely';
   import ChatAttachmentType from './chat-attachment-type.vue';
-  import { createImageThumbnail } from '@main/common/utils/create-thumbnail/create-image-thumbnail.ts';
-  import { createVideoThumbnail } from '@main/common/utils/create-thumbnail/create-video-thumbnail.ts';
+  import { createThumbnail } from '@main/common/utils/create-thumbnail';
   import { makeLogger } from '@shared/logger';
 
   const log = makeLogger('ChatAttachmentItem');
-  import { createPdfThumbnail } from '@main/common/utils/create-thumbnail/create-pdf-thumbnail.ts';
 
   const props = defineProps<{
     entity: web3n.files.ReadonlyFile | web3n.files.ReadonlyFS;
@@ -117,22 +115,11 @@
 
   async function makeThumbnailTask() {
     try {
-      if (isFileImage({ fullName: props.info.name.toLowerCase() })) {
-        thumbnail.value = await createImageThumbnail({
-          file3n: props.entity as web3n.files.ReadonlyFile,
-          targetSize: 84,
-        });
-      } else if (isFileVideo({ fullName: props.info.name.toLowerCase() })) {
-        thumbnail.value = await createVideoThumbnail({
-          file3n: props.entity as web3n.files.ReadonlyFile,
-          targetSize: 84,
-        });
-      } else if (ext.value === 'pdf') {
-        thumbnail.value = await createPdfThumbnail({
-          file3n: props.entity as web3n.files.ReadonlyFile,
-          targetSize: 84,
-        });
-      }
+      thumbnail.value = await createThumbnail({
+        fileName: props.info.name,
+        file3n: props.entity as web3n.files.ReadonlyFile,
+        targetSize: 84,
+      });
     } catch (e) {
       log.error(`Error making thumbnail for ${props.info.name} file.`, e);
     } finally {

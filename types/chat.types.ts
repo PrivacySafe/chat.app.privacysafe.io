@@ -24,6 +24,7 @@ import type {
 } from './asmail-msgs.types';
 import type { AddressCheckResult } from './services.types.ts';
 import type { ChatSettings } from '../src-deno/types/index.ts';
+import type { RecordingKind } from '../shared-libs/constants/media-recording.ts';
 
 export type ChatMenuAction =
   | 'chat:info'
@@ -129,6 +130,20 @@ export interface ChatMessageHistory {
   changes?: ChatMessageHistoryChange[];
 }
 
+/**
+ * What makes an attachment a recording made in this app rather than a file
+ * picked from somewhere.
+ *
+ * `durationMs` is carried rather than read off the file because it cannot be
+ * read off the file: WebM out of MediaRecorder has no Duration element, and
+ * under MediaSource an element reports `Infinity` until endOfStream() - see
+ * readDuration() in useAudioView.
+ */
+export interface AttachmentRecordingInfo {
+  kind: RecordingKind;
+  durationMs: number;
+}
+
 export interface ChatMessageAttachmentsInfo {
   id?: string;
   name: string;
@@ -136,6 +151,12 @@ export interface ChatMessageAttachmentsInfo {
   size: number;
   hasNoLocalSource?: boolean;
   originDeviceId?: string;
+  /**
+   * Set when this attachment was recorded in the app. Rides in the message
+   * record's JSON, so it needs no column of its own and reaches the user's own
+   * devices through the phantom's attachment list for free.
+   */
+  recording?: AttachmentRecordingInfo;
 }
 
 /**
@@ -164,6 +185,14 @@ export interface OutgoingAttachment {
    * stored item is named after its id, which is not a name to show anybody.
    */
   name?: string;
+  /**
+   * Set when this attachment was just recorded in the app.
+   *
+   * `preview` is here and not in AttachmentRecordingInfo because it does not
+   * belong in the message record: previews live in their own table, and the
+   * sending side puts this one there rather than into `attachments`.
+   */
+  recording?: AttachmentRecordingInfo & { preview?: string };
 }
 
 export interface ChatMessageViewBase {

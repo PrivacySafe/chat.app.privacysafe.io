@@ -247,7 +247,7 @@ export const useMessagesStore = defineStore('messages', () => {
         log.error(`${failed.length} of ${msgsToDelete.length} message(s) were not deleted.`);
         $createNotice({
           type: 'error',
-          content: t('chat.action_message.error.delete'),
+          content: t('chat.message.action_message.error.delete'),
         });
       }
       await chatsStore.refreshChatViewData(chatId);

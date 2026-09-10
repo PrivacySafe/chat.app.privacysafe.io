@@ -15,6 +15,7 @@ You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, inject, onBeforeMount, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import cloneDeep from 'lodash/cloneDeep';
 import isEqual from 'lodash/isEqual';
@@ -32,6 +33,7 @@ export function useChatInfo(
   props: ChatInfoDialogProps,
   emits: { (event: 'action', value: { event: Ui3nDialogEvent }): void },
 ) {
+  const { t } = useI18n();
   const { $createNotice } = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
   const { user: ownAddr } = storeToRefs(useAppStore());
 
@@ -269,7 +271,7 @@ export function useChatInfo(
         if (ind > -1) {
           $createNotice({
             type: 'error',
-            content: `The user ${user.mail} is already an admin in the chat ${props.chat.chatId}`,
+            content: t('chat.app_message.error.already_admin', { user: user.mail }),
           });
           return;
         }
@@ -279,7 +281,7 @@ export function useChatInfo(
         if (ind === -1) {
           $createNotice({
             type: 'error',
-            content: `The user ${user.mail} is already removed from admins in the chat ${props.chat.chatId}`,
+            content: t('chat.app_message.error.already_not_admin', { user: user.mail }),
           });
           return;
         }
@@ -287,7 +289,7 @@ export function useChatInfo(
         if (updatedAdmins.length === 1) {
           $createNotice({
             type: 'error',
-            content: `The user ${user.mail} is the only admin. We can't remove them from admins in the chat ${props.chat.chatId}`,
+            content: t('chat.app_message.error.only_admin', { user: user.mail }),
           });
           return;
         }

@@ -52,6 +52,7 @@ import { INBOX_SCAN_FLOOR_MS } from '../../../shared-libs/constants/inbox.ts';
 import { makeLogger } from '../../../shared-libs/logger.ts';
 import {
   applyRestoreSnapshot,
+  tombstoneVerdictForRestore,
   type RestoreSnapshotCtx,
 } from '../chat-service/utils/restore-snapshot.ts';
 import { attachmentsForPhantom } from '../chat-service/utils/_msgs-related-methods.ts';
@@ -186,6 +187,7 @@ export function chatBackupSrv({
                 size: item.size,
                 ...(item.isFolder && { isFolder: true }),
                 ...(item.originDeviceId && { originDeviceId: item.originDeviceId }),
+                ...(item.recording && { recording: item.recording }),
               };
               if ('planned' in verdict) {
                 attachmentsToRead.push(verdict.planned);
@@ -289,6 +291,7 @@ export function chatBackupSrv({
         name: item.fileName,
         size: item.size,
         ...(item.isFolder && { isFolder: true }),
+        ...(item.recording && { recording: item.recording }),
         ...(storedId
           ? { id: storedId }
           : {
@@ -355,6 +358,14 @@ export function chatBackupSrv({
         if (mode === 'replace') {
           messagesToUpdate += 1;
         }
+        // Tombstones asked in the SAME order the restore asks them in, and
+        // through the same function: before this, the preview counted every
+        // absent record as one that would come back, so in a chat whose history
+        // had been cleared the dialog promised messages the restore then
+        // refused - and it promised them for `merge`, the mode a user picks
+        // precisely because they want to know what it will do.
+      } else if (tombstoneVerdictForRestore(db, mode, msg).blocked) {
+        continue;
       } else if (isExpiredRecord(msg.record, now)) {
         expiredSkipped += 1;
       } else {
@@ -539,6 +550,14 @@ export function chatBackupSrv({
         // still untouched, and stamped with a FRESH token: the deletion has to
         // win on the neighbours over everything this same snapshot restores.
         const surplus = (mode === 'replace') ? computeSurplus(chats, msgs, snapshotTs) : undefined;
+        // Minted BEFORE the deletion token, and therefore strictly older than
+        // it: a `replace` brings records back over a clearing marker under this
+        // one, and the invariant above - a deletion wins over everything the
+        // same snapshot restores - has to survive that. Only a `replace` has
+        // one; `merge` resurrects nothing a tombstone forbids.
+        const restoreToken = (mode === 'replace')
+          ? { ts: await nextSyncStamp(), deviceId: getAppDeviceId() }
+          : undefined;
         const deletionToken = surplus && (surplus.chatIds.length || surplus.msgIds.length)
           ? { ts: await nextSyncStamp(), deviceId: getAppDeviceId() }
           : undefined;
@@ -577,6 +596,7 @@ export function chatBackupSrv({
             snapshotTs,
             chats: snapshotChats,
             msgs: snapshotMsgs,
+            ...(restoreToken && { restoreToken }),
             ...(deletionToken && surplus && {
               deleted: {
                 ...(surplus.chatIds.length && { chatIds: surplus.chatIds }),
@@ -597,6 +617,7 @@ export function chatBackupSrv({
         await announceRestore({
           mode,
           snapshotTs,
+          restoreToken,
           chats: snapshotChats,
           msgs: snapshotMsgs,
           deleted: deletionToken && surplus
@@ -664,12 +685,15 @@ export function chatBackupSrv({
   async function announceRestore({
     mode,
     snapshotTs,
+    restoreToken,
     chats,
     msgs,
     deleted,
   }: {
     mode: RestoreMode;
     snapshotTs: number;
+    /** Only a `replace` has one; it must reach every device unchanged. */
+    restoreToken?: { ts: number; deviceId: string };
     chats: SnapshotChatEntry[];
     msgs: SnapshotMsgEntry[];
     deleted?: {
@@ -727,6 +751,10 @@ export function chatBackupSrv({
             restoreId,
             part: index + 1,
             of: chunks.length,
+            // In EVERY chunk, not only where records sit: a neighbour applies
+            // the chunks independently and each one that restores a record has
+            // to stamp it with the same token.
+            ...(restoreToken && { restoreToken }),
             ...(chunk.chats && { chats: chunk.chats }),
             ...(chunk.msgs && { msgs: chunk.msgs }),
             ...(chunk.deleted && { deleted: chunk.deleted }),

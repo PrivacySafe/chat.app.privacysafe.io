@@ -16,6 +16,7 @@
 */
 import {
   createVideoThumbnail as makeVideoThumbnail,
+  resizeImage,
   schedulerYield,
   transformWeb3nFileToFile,
 } from '@v1nt1248/3nclient-lib/utils';
@@ -43,5 +44,16 @@ export async function createVideoThumbnail(
   }
   await schedulerYield();
 
-  return makeVideoThumbnail(file, targetSize, 5);
+  const frame = await makeVideoThumbnail(file, targetSize, 5);
+  if (!frame) {
+    return null;
+  }
+  await schedulerYield();
+
+  // The library takes targetSize and then ignores it (its own parameter is
+  // @ts-ignore'd and the canvas is sized to the frame), so what comes back is a
+  // full-resolution JPEG: hundreds of KB of base64 for 1080p, megabytes for 4K -
+  // far past what the preview cache will keep. resizeImage takes a base64 string
+  // as it is, so there is no Blob or File to build here.
+  return resizeImage(frame, targetSize);
 }

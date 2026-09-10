@@ -21,7 +21,6 @@
   import {
     Ui3nButton,
     Ui3nIcon,
-    Ui3nProgressCircular,
     Ui3nSlider,
     Ui3nSwitch,
     Ui3nTooltip,
@@ -29,10 +28,13 @@
   import { useAppStore } from '@main/common/store/app.store';
   import type { AttachmentViewInfo } from '@main/common/components/messages/chat-message/chat-message-attachments/types';
   import { timeInSecondsToString } from '@main/common/utils/chat-ui.helper';
+  import AttachmentLoading from '../attachment-loading.vue';
   import { useAudioView } from './useAudioView';
 
   export interface AttachmentAudioViewEmits {
     (event: 'error'): void;
+    (event: 'cancel'): void;
+    (event: 'unplayable'): void;
   }
 
   const props = defineProps<{
@@ -51,17 +53,31 @@
     isPlaying,
     canvasRef,
     audioPlayerRef,
-    duration,
     durationAsText,
+    seekMax,
     volume,
     currentTime,
     currentTimeAsText,
     currentAudioVisualization,
+    isLoading,
+    percent,
+    progress,
     updateVolume,
     updateCurrentTime,
     play,
     pause,
+    cancel,
   } = useAudioView({ item: props.item, incomingMsgId: props.incomingMsgId, emits });
+
+  /**
+   * Cancelling is not an error: the 'error' path shows "the file may have been
+   * deleted or moved", which about a read the user stopped themselves is simply
+   * untrue.
+   */
+  function onCancel() {
+    cancel();
+    emits('cancel');
+  }
 
   watch(appWindowSize, () => {
     canvasRef.value!.width = canvasRef.value!.clientWidth;
@@ -133,7 +149,7 @@
         </div>
 
         <div :class="$style.audioPlayerActionsAdditional">
-          <span>Mode 2</span>
+          <span>{{ t('chat.viewer.visualization.mode2') }}</span>
 
           <ui3n-tooltip
             :content="t('chat.viewer.tooltip.visual_setting')"
@@ -148,7 +164,7 @@
             />
           </ui3n-tooltip>
 
-          <span>Mode 1</span>
+          <span>{{ t('chat.viewer.visualization.mode1') }}</span>
         </div>
       </div>
 
@@ -159,7 +175,7 @@
 
         <ui3n-slider
           v-if="audioPlayerRef"
-          :max="duration"
+          :max="seekMax"
           :model-value="currentTime"
           :transform-value-method="timeInSecondsToString"
           :disabled="isProcessing || !audioPlayerRef?.src"
@@ -172,11 +188,12 @@
       </div>
     </div>
 
-    <ui3n-progress-circular
+    <attachment-loading
       v-if="isProcessing"
-      :class="$style.loader"
-      indeterminate
-      size="108"
+      :reading="isLoading"
+      :percent="percent"
+      :progress="progress"
+      @cancel="onCancel"
     />
   </div>
 </template>
@@ -262,11 +279,4 @@
     align-items: center;
   }
 
-  .loader {
-    position: absolute;
-    z-index: 5500;
-    left: calc(50% - 54px);
-    top: 50%;
-    transform: translateY(-50%);
-  }
 </style>

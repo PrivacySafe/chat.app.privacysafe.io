@@ -59,7 +59,6 @@ export const en = {
       delete: 'Delete',
       cancel: 'Cancel',
       save: 'Save',
-      dropzone_default: 'Upload',
       msg_sender: {
         you: 'You',
       },
@@ -112,8 +111,13 @@ export const en = {
       optional:
         'Without a passphrase the archive is only as private as the place you keep it in.',
     },
+    // Shown by the platform's file dialogs in their file-type dropdown, so it
+    // reaches the user like any other label. One key for both of them.
+    zipFilterName: 'ZIP Archive',
     create: {
       dialogTitle: 'Creating backup',
+      noticesTitle: 'What the archive will hold',
+      noticesBtn: 'Continue',
       fileDialogTitle: 'Save backup',
       fileDialogBtn: 'Save',
       text: {
@@ -215,10 +219,6 @@ export const en = {
     },
   },
 
-  contacts: {
-    list: { empty: 'Contact not found' },
-  },
-
   chat: {
     months: 'months',
     days: 'days',
@@ -245,6 +245,56 @@ export const en = {
       },
       attaching: {
         error: 'Error attaching the file {fileName}',
+      },
+    },
+    recording: {
+      dialogTitle: 'Record a message',
+      label: {
+        voice: 'Voice message',
+        video: 'Video message',
+      },
+      limit: {
+        voice: '15 minutes',
+        video: '10 minutes',
+      },
+      hint: {
+        choose: 'Record straight into the chat. Pick what to record - the device '
+          + 'is only turned on once you do.',
+        sent_at_once: 'A recording is sent as a message of its own - you get to hear it '
+          + 'first, and nothing you have typed is touched.',
+        preparing: 'Turning the device on…',
+        recording: 'Recording. Press Stop when you are done - it also stops on its own at the limit.',
+        review: 'Listen to it, then send it or record again.',
+        tap_to_unmute: 'Playing without sound - tap again to unmute.',
+      },
+      note: {
+        limit: 'up to {limit}',
+        no_microphone: 'No microphone found',
+        no_camera: 'No camera found',
+      },
+      btn: {
+        cancel: 'Cancel',
+        stop: 'Stop',
+        send: 'Send',
+        rerecord: 'Record again',
+      },
+      stopped: {
+        duration: 'The recording reached its time limit and stopped.',
+        size: 'The recording reached its size limit and stopped, so that it still plays '
+          + 'without being downloaded in full first.',
+      },
+      error: {
+        access_denied: 'Access to the microphone or camera is not allowed. '
+          + 'Allow it in the system settings and try again.',
+        no_device: 'No microphone or camera was found on this device.',
+        device_busy: 'The microphone or camera is in use by another application. '
+          + 'A call in progress is the usual reason.',
+        unsupported: 'Recording is not supported in this runtime.',
+        failed: 'The recording failed.',
+        sending: 'The recording could not be sent.',
+      },
+      tooltip: {
+        record: 'Record a voice or video message',
       },
     },
     action: {
@@ -285,6 +335,7 @@ export const en = {
     },
     contact: {
       add: {
+        btn: 'Add {addr}',
         error: {
           exists: 'Contact {addr} already exists',
           check_failed: '{addr} is unknown address or is not present at the domain',
@@ -362,7 +413,13 @@ export const en = {
       error: {
         export: 'Error on saving file {file}.',
         members_update: 'Error while editing chat member list',
-        load_file: 'The file you are downloading may have been deleted or moved.',
+        create_oto_chat: 'Error creating a one to one chat.',
+        create_group_chat: 'Error creating a group chat.',
+        // The chat is the one open in front of the user, so these name the
+        // person and not the chat: its id said nothing to anybody.
+        already_admin: '{user} is already an admin in this chat',
+        already_not_admin: '{user} is not an admin in this chat',
+        only_admin: '{user} is the only admin of this chat and cannot be removed from admins',
       },
     },
     notification: {
@@ -384,7 +441,6 @@ export const en = {
           title: 'Delete Message',
           text: 'Delete selected message?',
           additional_text: 'Delete for everyone?',
-          error: 'An error occurred while deleting the selected message',
         },
         forward: {
           title: 'Forward Message',
@@ -392,10 +448,6 @@ export const en = {
             chats: {
               title: 'Chats',
               empty: 'No chats to choose from',
-            },
-            contacts: {
-              title: 'Contacts',
-              empty: 'No contacts to choose from',
             },
           },
         },
@@ -435,6 +487,16 @@ export const en = {
         changed: 'changed',
         sending_from_other_device: 'Sending from another device...',
       },
+      reactions_dialog: {
+        recent: 'Recent:',
+        icons: 'Icons:',
+        remove: 'Remove reaction',
+        more: 'More',
+        less: 'Less',
+      },
+      info_panel: {
+        back: 'Back to the message list',
+      },
       forward: {
         warning: {
           no_attachments: 'Attachments will not be forwarded: the original message is on another device',
@@ -443,6 +505,7 @@ export const en = {
       attachment: {
         not_available_on_this_device: 'Attachment is only available on the sending device',
         only_on_sending_device: 'Files are only on the sending device',
+        make_preview: 'Show preview',
       },
       action_message: {
         success: {
@@ -561,6 +624,7 @@ export const en = {
       btn: {
         download: 'Download file',
         exit: 'Exit viewing',
+        cancel_loading: 'Cancel',
         pdf: {
           prev: 'Previous page',
           next: 'Next page',
@@ -568,19 +632,25 @@ export const en = {
       },
       label: {
         page: 'Page',
+        loading: '{done} of {total}',
+      },
+      error: {
+        cannot_play: 'This file cannot be played',
       },
       tooltip: {
         play: 'Play',
         pause: 'Pause',
         visual_setting: 'Visualization setting',
       },
+      // Either side of the switch that picks how the sound is drawn.
+      visualization: {
+        mode1: 'Mode 1',
+        mode2: 'Mode 2',
+      },
     },
   },
 
   dialog: {
-    title: {
-      default: '',
-    },
     button: {
       default: {
         cancel: 'Cancel',
@@ -588,6 +658,11 @@ export const en = {
     },
     text: {
       confirmation: 'Are you sure?',
+    },
+    // The file-type name the platform's open-file dialog shows in its dropdown,
+    // asked for by selectImageFilesWithDialog (image-files.ts).
+    'open-file': {
+      'image-type': 'Images',
     },
   },
 
@@ -612,10 +687,8 @@ export const en = {
     text: {
       call_is_active: 'A call is active. Tap to rejoin',
       call_in_progress: 'The call is on since',
-      call_started: 'The call has started',
       incoming_call: 'The incoming call from {sender}',
       incoming_call_cancelled: 'The incoming call from {sender} was cancelled',
-      incoming_call_cancelled_by: 'The incoming call from {sender} was cancelled by {user}',
       incoming_call_not_accepted: `{user} hasn't accepted the current call`,
       missed_incoming_call: 'The missed incoming call from {sender}',
       outgoing_call: 'The outgoing call',
@@ -625,7 +698,6 @@ export const en = {
       participants: 'Participants',
       call_full: 'The call is full ({current}/{max} participants). Please try again later.',
       user_stopped_sharing: '[{user}] stopped sharing "{screen}"',
-      connection_lost: 'Connection lost. Please close the call window to continue.',
       peer_app_closed:
         '{user} closed the application. The call will end in a few seconds.',
       host_unreachable:
@@ -634,6 +706,9 @@ export const en = {
         'Could not connect with {user}. The call window will close.',
       invite_not_delivered:
         'The invitation could not be delivered to {user}. They have not been called.',
+      // The reason itself goes to the log: a JS error message is not something
+      // to read in a notice.
+      call_start_failed: 'The call could not be started.',
       group_call_unanswered:
         'Nobody joined the call. The call window will close.',
     },
@@ -659,11 +734,6 @@ export const en = {
         join: 'Join',
         decline: 'Decline',
       },
-    },
-    connection: {
-      process: 'Connecting to participants',
-      result: '{count} out of {total} participants are connected',
-      fail: 'Unable to connect to participants',
     },
   },
 

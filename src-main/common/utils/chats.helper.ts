@@ -173,7 +173,7 @@ export async function exportChatMessages({
   if (w3n.shell?.fileDialogs?.saveFileDialog) {
     const outFile = await w3n.shell?.fileDialogs?.saveFileDialog(
       t('chat.dialog.export.title'),
-      '',
+      t('app.text.save'),
       `${chatName}.txt`,
     );
     if (outFile) {
