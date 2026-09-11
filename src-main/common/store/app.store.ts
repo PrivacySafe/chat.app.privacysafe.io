@@ -23,6 +23,11 @@ import { useConnectivityStatus } from './app/connectivity';
 import { useMediaRecordingSupport } from './app/media-recording';
 import { useSyncState } from './app/sync-state';
 import { chatService } from '@main/common/services/external-services';
+import {
+  callBackend,
+  describeStartingStatus,
+  isBackendUnreachable,
+} from '@main/common/services/backend-availability';
 import { type Ui3nResizeCbArg } from '@v1nt1248/3nclient-lib';
 
 export interface AppStoreState {
@@ -44,10 +49,23 @@ export interface AppWindowSize {
   height: number;
 }
 
+/**
+ * How the window sees its background component.
+ *
+ * 'starting' covers both "we have not asked yet" and "it says it is still
+ * opening its databases", which are the same thing to a screen that has to
+ * keep waiting. The other two are ends: 'unreachable' is a component that
+ * answers no ping, 'failed' one that answers and says its start-up threw.
+ */
+export type BackendState = 'starting' | 'ready' | 'unreachable' | 'failed';
+
 export const useAppStore = defineStore('app', () => {
   const commonLoading = ref(false);
   const isMobileMode = ref<boolean>(false);
   const appDeviceId = ref<string>('');
+  const backendState = ref<BackendState>('starting');
+  /** What the component says it is doing, for a caption while it starts. */
+  const backendStage = ref<string>('');
   const appWindowSize = ref<{ width: number; height: number }>({
     width: 0,
     height: 0,
@@ -80,15 +98,36 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function initialize() {
+    // The three local ones first, and separately: they touch no IPC, and
+    // nothing about them should share a fate with the call below.
     await Promise.all([
       connectivity.initialize(),
       commonAppConfs.initialize(),
       mediaRecording.initialize(),
-      (async () => {
-        const id = await chatService.getAppDeviceId();
-        appDeviceId.value = id;
-      })(),
     ]);
+    // The window's first real call into the background component, and
+    // therefore the place where "connected to something that never answers"
+    // is found out. Through callBackend, so that it ends in a verdict rather
+    // than in a wait with no end (2026-09-10).
+    try {
+      appDeviceId.value = await callBackend(
+        'getAppDeviceId',
+        // Declared as returning a string, though over IPC it is a promise -
+        // hence the async wrapper rather than a bare reference.
+        async () => chatService.getAppDeviceId(),
+        {
+          onStillStarting: status => {
+            backendState.value = 'starting';
+            backendStage.value = describeStartingStatus(status);
+          },
+        },
+      );
+      backendState.value = 'ready';
+      backendStage.value = '';
+    } catch (err) {
+      backendState.value = isBackendUnreachable(err) ? 'unreachable' : 'failed';
+      throw err;
+    }
   }
 
   function stopWatching() {
@@ -101,6 +140,8 @@ export const useAppStore = defineStore('app', () => {
     commonLoading,
     isMobileMode,
     appDeviceId,
+    backendState,
+    backendStage,
     appVersion,
     appWindowSize,
     user,

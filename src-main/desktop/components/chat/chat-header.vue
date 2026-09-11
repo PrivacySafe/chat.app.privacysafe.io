@@ -51,6 +51,7 @@
     joinIncomingCall,
     dismissIncomingCall,
     startCall,
+    isStartingCall,
     endCall,
     rejoinCall,
   } = useChatHeader({
@@ -153,7 +154,7 @@
       icon="round-phone"
       icon-color="var(--color-icon-button-tritery-default)"
       :class="$style.videoCallBtn"
-      :disabled="readonly"
+      :disabled="readonly || isStartingCall"
       @click.stop.prevent="startCall(currentChatObjId)"
     />
 

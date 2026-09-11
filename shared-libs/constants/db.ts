@@ -48,6 +48,30 @@ export const DB_FLUSH_DELAY_MS = 250;
 export const DB_FLUSH_MAX_PENDING = 64;
 
 /**
+ * A healthy write of even a large database takes seconds; past this we say so
+ * in the log, while still waiting.
+ */
+export const DB_WRITE_WARN_MS = 10000;
+
+/**
+ * How long we are willing to wait for the file system before calling a write
+ * stuck and letting the write queue go.
+ *
+ * Generous on purpose: the point is not to cut a slow write short but to keep
+ * one that will never finish from holding the queue forever - and behind that
+ * queue sit the inbox dispatcher and the watermark commit, which is how a
+ * frozen write turns into a component that has stopped doing anything at all.
+ */
+export const DB_WRITE_TIMEOUT_MS = 60000;
+
+/**
+ * Pause before the next attempt after a write timed out, so that a stuck file
+ * system collects one abandoned write per half-minute instead of one per
+ * mutation.
+ */
+export const DB_WRITE_STALL_RETRY_MS = 30000;
+
+/**
  * How many inbox messages are processed before their changes are flushed and
  * the inbox watermark is advanced.
  */

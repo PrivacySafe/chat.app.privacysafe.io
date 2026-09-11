@@ -29,6 +29,8 @@
  * regular VA (camera/mic) streams.
  */
 
+import { sameAddress } from '@shared/address-utils';
+
 /**
  * Builds a screen share address from a mailer ID and source ID.
  *
@@ -79,6 +81,33 @@ export function extractSrcIdFromScreenAddr(screenAddr: string): string {
 export function extractMailerIdFromScreenAddr(screenAddr: string): string {
   const parts = screenAddr.split(':');
   return parts.length >= 2 ? parts[1] : '';
+}
+
+/**
+ * May a signal that arrived on `channelAddr`'s channel name `actorAddr`?
+ *
+ * A participant speaks for itself and for its own `screen:<its addr>:<srcId>`
+ * pseudo-participants - those are the only two actors it ever names (see
+ * addScreenTrack / removeScreenTrack in client-channel, which are what put a
+ * screen address into a `stream-sender-info` or a `participant-left`). Anything
+ * else is a claim about a participant the sender has no standing to make.
+ *
+ * The address of a screen share carries its owner, which is what makes this
+ * decidable at all: `screen:${mailerId}:${srcId}`.
+ *
+ * Written after a report (2026-09-09) about `fromAddr` being taken on trust:
+ * fixing that field alone would have left these payload-borne addresses, where
+ * a participant could still hand the host somebody else's name - claiming
+ * another participant's video stream, or announcing their departure.
+ */
+export function mayActFor(channelAddr: string, actorAddr: unknown): boolean {
+  if (!actorAddr || (typeof actorAddr !== 'string')) {
+    return false;
+  }
+  const claimedOwner = isScreenShareAddr(actorAddr)
+    ? extractMailerIdFromScreenAddr(actorAddr)
+    : actorAddr;
+  return sameAddress(claimedOwner, channelAddr);
 }
 
 /**

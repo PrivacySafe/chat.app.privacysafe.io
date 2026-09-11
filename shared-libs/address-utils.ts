@@ -61,3 +61,29 @@ export function includesAddress(arr: string[], address: string): boolean {
   const canonAddr = toCanonicalAddress(address);
   return arr.map(toCanonicalAddress).includes(canonAddr);
 }
+
+/**
+ * areAddressesEqual() for values that came off the wire.
+ *
+ * The difference is that this one cannot throw. `areAddressesEqual` canonicalizes
+ * through `ensureIsAddressString`, which throws on anything without an '@' - so
+ * its own `if (!canonicalA)` guards are unreachable, and an empty string, a
+ * `screen:x:y` pseudo-address or a non-string all raise instead of answering.
+ *
+ * That matters wherever the compared value is chosen by whoever sent the
+ * message: for a signal handler on the host, "this is not an address" is an
+ * answer (no, it does not match), not an exceptional condition. On the
+ * DataChannel path the throw would be swallowed by the JSON parse's catch and
+ * read as a malformed message; on the ASMail path it would escape as an
+ * unhandled rejection.
+ */
+export function sameAddress(a: unknown, b: unknown): boolean {
+  if (!a || !b || (typeof a !== 'string') || (typeof b !== 'string')) {
+    return false;
+  }
+  try {
+    return areAddressesEqual(a, b);
+  } catch {
+    return false;
+  }
+}

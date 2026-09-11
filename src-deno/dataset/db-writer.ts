@@ -18,7 +18,15 @@
 // @deno-types="../../shared-libs/sqlite-on-3nstorage/index.d.ts"
 import { SQLiteOn3NStorage } from '../../shared-libs/sqlite-on-3nstorage/index.js';
 import { SingleProc } from '../../shared-libs/processes/single.ts';
-import { DB_FLUSH_DELAY_MS, DB_FLUSH_MAX_PENDING } from '../../shared-libs/constants/index.ts';
+import {
+  DB_FLUSH_DELAY_MS,
+  DB_FLUSH_MAX_PENDING,
+  DB_WRITE_STALL_RETRY_MS,
+  DB_WRITE_TIMEOUT_MS,
+  DB_WRITE_WARN_MS,
+} from '../../shared-libs/constants/index.ts';
+import { wrapWithTimeout } from '../../shared-libs/processes/timeouts.ts';
+import { addHeartbeatDetail } from '../utils/component-heartbeat.ts';
 
 /**
  * Batches writes of a database file.
@@ -57,6 +65,17 @@ export function makeDbWriter(sqlite: SQLiteOn3NStorage, label: string): DbWriter
   let dirty = false;
   let pending = 0;
   let timer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /**
+   * Writes that timed out in a row. Read by the heartbeat, so that a file
+   * system going quiet is visible in the log before anything visibly breaks,
+   * and used to space out further attempts.
+   */
+  let consecutiveTimeouts = 0;
+
+  addHeartbeatDetail(
+    `db-writes(${label})`,
+    () => ((consecutiveTimeouts > 0) ? `stalled x${consecutiveTimeouts}` : ''),
+  );
 
   function cancelTimer(): void {
     if (timer !== undefined) {
@@ -80,12 +99,35 @@ export function makeDbWriter(sqlite: SQLiteOn3NStorage, label: string): DbWriter
       // flight marks the database dirty again and gets its own write.
       dirty = false;
       pending = 0;
+      const warnTimer = setTimeout(() => w3n.log(
+        'warning',
+        `Writing ${label} database file is taking over ${DB_WRITE_WARN_MS / 1000}s`,
+      ).catch(() => {}), DB_WRITE_WARN_MS);
       try {
-        await sqlite.saveToFile({ skipUpload: true });
+        // Timed out rather than awaited outright: a write that never returns
+        // holds this SingleProc forever, and behind it every flush() caller -
+        // the inbox dispatcher and the watermark commit among them. The
+        // timeout does not stop the write, it lets the queue go.
+        await wrapWithTimeout(
+          sqlite.saveToFile({ skipUpload: true }),
+          DB_WRITE_TIMEOUT_MS,
+          () => Object.assign(
+            Error(`Writing ${label} database file did not finish in ${DB_WRITE_TIMEOUT_MS}ms`),
+            { dbWriteTimeout: true },
+          ),
+        );
+        consecutiveTimeouts = 0;
       } catch (err) {
         // Otherwise the change is dropped silently and never reaches the file.
+        // The in-memory database stays the source of truth either way; what a
+        // failed write costs is the file lagging behind until the next one.
         dirty = true;
+        if ((err as { dbWriteTimeout?: boolean })?.dbWriteTimeout) {
+          consecutiveTimeouts += 1;
+        }
         throw err;
+      } finally {
+        clearTimeout(warnTimer);
       }
     });
   }
@@ -93,7 +135,11 @@ export function makeDbWriter(sqlite: SQLiteOn3NStorage, label: string): DbWriter
   function scheduleSave(): void {
     dirty = true;
     pending += 1;
-    if (pending >= DB_FLUSH_MAX_PENDING) {
+    // After a write that never came back, attempts are spaced out instead of
+    // following every mutation: a file system that has stopped answering
+    // should collect one abandoned write per half-minute, not hundreds.
+    const delay = (consecutiveTimeouts > 0) ? DB_WRITE_STALL_RETRY_MS : DB_FLUSH_DELAY_MS;
+    if ((pending >= DB_FLUSH_MAX_PENDING) && (consecutiveTimeouts === 0)) {
       flushInBackground();
       return;
     }
@@ -101,7 +147,7 @@ export function makeDbWriter(sqlite: SQLiteOn3NStorage, label: string): DbWriter
       timer = setTimeout(() => {
         timer = undefined;
         flushInBackground();
-      }, DB_FLUSH_DELAY_MS);
+      }, delay);
     }
   }
 

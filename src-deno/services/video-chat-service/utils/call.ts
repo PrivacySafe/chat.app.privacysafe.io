@@ -174,6 +174,12 @@ export function callInChat({
   }) => Promise<void>;
 }): CallInChat {
   let guiInstance: VideoComponentInstance | undefined = undefined;
+  /**
+   * Set while a call window is being opened, so that a second startCall()
+   * waits for that one instead of opening a window of its own. Opening takes
+   * seconds - long enough for an impatient second click (2026-09-11).
+   */
+  let guiOpening: Promise<void> | undefined = undefined;
   let callStage: 'not-started' | 'calling' | 'done' = 'not-started';
 
   // Heartbeat interval for re-join feature
@@ -621,12 +627,31 @@ export function callInChat({
 
     if (guiInstance) {
       await guiInstance.focusWindow();
+    } else if (guiOpening) {
+      // A second click while the first window is still opening. `guiInstance`
+      // is only assigned after the await below, so without this the second
+      // call took the `else` branch too and opened a SECOND window - which is
+      // exactly what a user does when the window takes seconds to appear and
+      // nothing on screen says the click was heard.
+      log.info(`[${info.ownAddr}] Call window for chat ${info.chatId.chatId} is already opening`);
+      await guiOpening;
     } else {
-      const { instance, startProc } = await videoComponentInstance(info, {
+      const opening = videoComponentInstance(info, {
         next: onRequestCallFromVideoGUI,
         complete: onGUIComplete,
         error: onGUIError,
       });
+      // Claimed before the first await, and cleared in the finally below: the
+      // window between "asked the platform for a window" and "have an
+      // instance" is precisely what needs covering.
+      guiOpening = opening.then(() => {}, () => {});
+      let instance: VideoComponentInstance;
+      let startProc: Promise<void>;
+      try {
+        ({ instance, startProc } = await opening);
+      } finally {
+        guiOpening = undefined;
+      }
       guiInstance = instance;
 
       // Register signal handler to forward WebRTC signals to GUI
@@ -828,6 +853,23 @@ export function callInChat({
     role = null;
     hostAddr = null;
     callDirection = null;
+
+    // The window this pointed at is gone, and holding on to it is not free:
+    // startCall() takes the `if (guiInstance)` branch and calls focusWindow()
+    // over an IPC connection to a closed window - which either throws where
+    // nothing catches it, or, if the connection is only half dead, never
+    // returns at all and takes the whole start of the next call with it.
+    // Dropping the connection too, because nothing else ever did: one leaked
+    // per call (see videoComponentInstance).
+    if (guiInstance) {
+      const closingInstance = guiInstance;
+      guiInstance = undefined;
+      try {
+        closingInstance.close();
+      } catch (err) {
+        log.debug(`[${info.ownAddr}] Closing the call window's IPC connection threw`, err);
+      }
+    }
 
     callStage = 'done';
     detachFromParent(endState);

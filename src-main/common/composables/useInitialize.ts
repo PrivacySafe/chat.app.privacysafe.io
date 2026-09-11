@@ -223,6 +223,15 @@ export function useInitialize() {
       error: err =>
         log.error('Error occurred in observation of video call events from VideoOpenerService. ', err),
     });
+
+    // After the subscription, for the same reason refreshSyncState() is (see
+    // above): subscribe first, then ask, so nothing falls into the gap.
+    //
+    // This is what a window that missed the events catches up with - one
+    // opened in the middle of a call, which never knew about it at all, and
+    // one whose background component went quiet mid-call and left call state
+    // that no event was ever going to clear.
+    await chatsStore.reconcileCallsState();
   }
 
   return {

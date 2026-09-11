@@ -70,7 +70,14 @@ export function useChatHeader({
 
   const { user } = storeToRefs(useAppStore());
 
-  const { joinIncomingCall, dismissIncomingCall, startCall, endCall, rejoinCall } = useUiIncomingStore();
+  const uiIncomingStore = useUiIncomingStore();
+  const { joinIncomingCall, dismissIncomingCall, startCall, endCall, rejoinCall } = uiIncomingStore;
+  /**
+   * True from the click until the call window exists. The window takes
+   * seconds to appear, and a button that looks untouched for that long gets
+   * pressed again (2026-09-11).
+   */
+  const isStartingCall = computed(() => uiIncomingStore.isStartingCall(chat.value));
   const { refreshChatList } = useChatsStore();
 
   const chatStore = useChatStore();
@@ -280,6 +287,7 @@ export function useChatHeader({
     joinIncomingCall,
     dismissIncomingCall,
     startCall,
+    isStartingCall,
     endCall,
     rejoinCall,
   };

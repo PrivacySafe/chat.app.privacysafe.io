@@ -17,7 +17,7 @@
 
 /**
  * WebRTC Mocks for Star Architecture Testing
- * 
+ *
  * Provides mock implementations of:
  * - RTCPeerConnection
  * - MediaStream
@@ -25,6 +25,9 @@
  * - RTCRtpSender
  * - Signaling Channels
  */
+
+import { attributeIncomingHostSignal } from '@video/common/services/signaling-channel-core';
+import type { StarSignalMessage } from '@video/common/types/star.types';
 
 // =============================================================================
 // Mock RTCRtpSender
@@ -439,8 +442,12 @@ export function createMockClientSignalingChannel() {
  * Create a mock HostSignalingChannel for testing
  */
 export function createMockHostSignalingChannel() {
-  const clientHandlers = new Map<string, (signal: unknown) => void>();
-  let globalHandler: ((signal: unknown) => void) | null = null;
+  const clientHandlers = new Map<string, StarSignalHandlerForMock>();
+  let globalHandler: StarSignalHandlerForMock | null = null;
+  // Signals whose body named a participant other than the channel's owner, and
+  // which were therefore re-attributed. Kept so a spec can assert on the fact
+  // itself rather than on "nothing happened".
+  const reattributedSignals: { clientAddr: string; claimedFrom: string }[] = [];
   // The host channel registers every client it accepts an offer from, and the
   // real implementation broadcasts to exactly this set. Omitting these methods
   // made handleClientOffer() throw "addClient is not a function", which is not
@@ -465,7 +472,7 @@ export function createMockHostSignalingChannel() {
     handleIncomingSignal: jasmine.createSpy('handleIncomingSignal'),
     handleWebRTCMsg: jasmine.createSpy('handleWebRTCMsg'),
     registerClientHandler: jasmine.createSpy('registerClientHandler').and.callFake(
-      (clientAddr: string, handler: (signal: unknown) => void) => {
+      (clientAddr: string, handler: StarSignalHandlerForMock) => {
         if (clientAddr === '*') {
           globalHandler = handler;
         } else {
@@ -483,20 +490,39 @@ export function createMockHostSignalingChannel() {
     close: jasmine.createSpy('close').and.callFake(() => {
       clientHandlers.clear();
       knownClients.clear();
+      reattributedSignals.length = 0;
       globalHandler = null;
     }),
-    // Helper to trigger signal from client
+    /**
+     * Delivers a signal as if it had arrived on `clientAddr`'s channel.
+     *
+     * Runs the same attribution the real HostSignalingChannel runs before any
+     * handler sees a signal. It used to hand the handler the raw body and drop
+     * `clientAddr` — reproducing, in the harness, the very defect that was
+     * reported: a spec exercising a spoofed `fromAddr` would have passed no
+     * matter what the production code did.
+     */
     _triggerClientSignal: (clientAddr: string, signal: unknown) => {
-      const handler = clientHandlers.get(clientAddr);
-      if (handler) {
-        handler(signal);
+      const { signal: authentic, overridden } = attributeIncomingHostSignal(
+        clientAddr, signal as StarSignalMessage,
+      );
+      if (overridden) {
+        reattributedSignals.push({
+          clientAddr,
+          claimedFrom: (signal as StarSignalMessage).fromAddr,
+        });
       }
-      if (globalHandler) {
-        globalHandler(signal);
-      }
+      clientHandlers.get(clientAddr)?.(authentic, clientAddr);
+      globalHandler?.(authentic, clientAddr);
     },
+    /** Signals whose claimed sender was overridden; see _triggerClientSignal. */
+    getReattributedSignals: () => reattributedSignals.slice(),
   };
 }
+
+type StarSignalHandlerForMock = (
+  signal: StarSignalMessage, authenticatedFrom: string,
+) => void;
 
 // =============================================================================
 // Type for mock signaling channels

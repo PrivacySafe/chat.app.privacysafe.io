@@ -17,14 +17,14 @@
 import { fileStoreService } from '@deno/services/file-store-service/file-store-service.ts';
 import { makeServiceCaller } from '@shared/ipc/ipc-service-caller';
 import { sleep } from '@shared/processes/sleep';
-import type { ChatSrv, FileStoreService } from '@deno/types/index.ts';
+import type { ChatSrvOverIPC, FileStoreService } from '@deno/types/index.ts';
 import type { ContactsService, VideoGUIOpener } from '~/index.ts';
 import { makeLogger } from '@shared/logger';
 
 const log = makeLogger('ExternalServices');
 
 export let fileLinkStoreSrv: FileStoreService;
-export let chatService: ChatSrv;
+export let chatService: ChatSrvOverIPC;
 export let videoOpenerSrv: VideoGUIOpener;
 
 /**
@@ -102,9 +102,13 @@ export async function initializeServices() {
 
       w3n.rpc!.thisApp!('AppChatsInternal').then(
         srvConn =>
-          makeServiceCaller<ChatSrv>(
+          makeServiceCaller<ChatSrvOverIPC>(
             srvConn,
             [
+              // Answered from the component's own state rather than from the
+              // service (see ipc-expose.ts), which is what makes it the one
+              // call able to say whether the component is alive at all.
+              'ping',
               'getAppDeviceId',
               'logFromGui',
               'createOneToOneChat',
@@ -150,14 +154,19 @@ export async function initializeServices() {
               'handleIncomingMsg',
             ],
             ['watch'],
-          ) as ChatSrv,
+          ) as ChatSrvOverIPC,
       ),
 
       w3n.rpc!.thisApp!('VideoGUIOpener').then(
         srvConn =>
           makeServiceCaller<VideoGUIOpener>(
             srvConn,
-            ['startVideoCallForChatRoom', 'joinOrDismissCallInRoom', 'endVideoCallInChatRoom'],
+            [
+              'startVideoCallForChatRoom',
+              'joinOrDismissCallInRoom',
+              'endVideoCallInChatRoom',
+              'getCallsState',
+            ],
             ['watchVideoChats'],
           ) as VideoGUIOpener,
       ),

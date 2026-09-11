@@ -137,6 +137,30 @@ sequenceDiagram
 Пропущенное за время старта догоняется явным сканированием
 ([inbox-dispatcher.ts:108-151](../src-deno/services/mail-service/inbox-dispatcher.ts#L108-L151)).
 
+### 2.1. Что старт о себе сообщает
+
+Каждый шаг последовательности обёрнут в `startupStage()`
+([src-deno/utils/startup-progress.ts](../src-deno/utils/startup-progress.ts)): строка о начале,
+строка о завершении с длительностью и — **пока шаг не завершился** — повторяющееся предупреждение
+каждые 10–30 с. Ничего не прерывается: медленный старт (открытие БД на synced-хранилище у свежего
+пользователя) законен, а таймаут превратил бы медленный старт в сломанный.
+
+Отдельно размечены шаги внутри открытия БД (`dataset/synced-fs`, `msgs-db/legacy-check-on-synced`,
+`msgs-db/open-main`, `chats-db/open` и т. д.): они обращаются к synced-хранилищу и в инциденте
+2026-09-10 были главным подозреваемым.
+
+Первая строка пишется **до всего** — сразу после установки глобального обработчика ошибок, ещё до
+чтения флага диагностики. До этого первым, что печатал запуск, была строка `app device id` уже
+после открытия баз, поэтому старт, зависший на хранилище, выглядел неотличимо от компонента,
+который вообще не запускали.
+
+Тогда же поднимается сердцебиение
+([component-heartbeat.ts](../src-deno/utils/component-heartbeat.ts)) — строка раз в 15 с, пока
+компонент стартует, и раз в 60 с после: uptime, RSS/heap, число живых звонков, очередь фантомов,
+состояние записи БД. Смысл — датировать молчаливую смерть компонента: до этого единственными
+периодическими строками были «Holding N sync phantom(s)», которые пишутся только во время звонка с
+удержанным журналом.
+
 ## 3. IPC-сервисы
 
 Приложение поднимает три сервиса. Обёртки — `MultiConnectionIPCWrap` (сторона сервиса) и
@@ -174,8 +198,28 @@ flowchart LR
 | Чаты | `createOneToOneChat`, `createGroupChat`, `acceptChatInvitation`, `getChatList`, `getChat`, `findChatEntry`, `renameChat`, `chatSetUp`, `deleteChat`, `updateGroupMembers`, `updateGroupAdmins` |
 | Сообщения | `sendRegularMessage`, `cancelSendingMessage`, `getMessage`, `getMessagesByChat`, `getMessagesPageByChat`, `updateEarlySentMessage`, `changeMessageReaction`, `markMessageAsReadNotifyingSender`, `makeAndSaveMsgToDb`, `saveAndSyncLocalSystemMsg`, `deleteMessage(s)`, `deleteMessagesInChat` |
 | Обслуживание | `deleteExpiredMessages`, `collectGarbageInAuxiliaryDB`, `removeExpiredInboxMessages`, `resolveStuckSyncingSelfMessages`, `collectGarbageInSyncVersions`, `releasePendingSyncPhantoms`, `countPendingSyncPhantoms` |
-| Прочее | `getAppDeviceId`, `getRecentReactions`, `getIncomingMessage`, `checkAddressExistenceForASMail`, `sendSystemDeletableMessage`, `syncLocallyMadeSystemEvent`, `handleIncomingMsg`, `logFromGui` (см. §3.4) |
+| Прочее | `getAppDeviceId`, `getRecentReactions`, `getIncomingMessage`, `checkAddressExistenceForASMail`, `sendSystemDeletableMessage`, `syncLocallyMadeSystemEvent`, `handleIncomingMsg`, `logFromGui` (см. §3.4), `ping` (см. ниже) |
 | Observable | `watch(obs)` — поток `UpdateEvent` |
+
+##### `ping()` — единственный метод мимо фасада
+
+Все методы выше публикуются через `facadeOver`: он отвечает на рукопожатие мгновенно (у платформы
+10 с от запроса сервиса до `exposeService()`, а построение сервиса открывает базы и в этот срок не
+укладывается), но каждый вызов затем ждёт готовности реального сервиса. Из-за этого **успешное
+подключение не значит ничего**: соединение так же успешно устанавливается с компонентом, который
+перестал отвечать несколько часов назад, — ровно это произошло 2026-09-10, и окно показывало
+бесконечный спиннер.
+
+`ping(): Promise<ComponentStatus>` собирается отдельно и отвечает из состояния процесса
+([startup-progress.ts](../src-deno/utils/startup-progress.ts)), не дожидаясь сервиса. Поэтому он —
+единственный способ отличить «ещё открывает базы» от «уже не ответит». Тип `ChatSrvOverIPC` в
+[chat-srv.types.ts](../src-deno/types/chat-srv.types.ts) выражает это разделение: `ping` —
+свойство канала, а не сервиса.
+
+Со стороны GUI на нём построен
+[backend-availability.ts](../src-main/common/services/backend-availability.ts): вызов, не
+вернувшийся за окно (~20 с), не отменяется, а сопровождается пингом — компонент отвечает «ещё
+стартую» → GUI показывает стадию и ждёт дальше; не отвечает → отказ и экран с «Повторить».
 
 Расхождение, которое стоит знать: `ipc-expose` публикует больше методов, чем перечисляет клиент в
 [external-services.ts:43-79](../src-main/common/services/external-services.ts#L43-L79) (клиент не
@@ -224,7 +268,14 @@ flowchart LR
 | `startVideoCallForChatRoom(chatId)` | начать звонок или переподключиться к активному |
 | `endVideoCallInChatRoom(chatId)` | завершить звонок (закрыть окно) |
 | `joinOrDismissCallInRoom(chatId, join, sender?)` | принять или отклонить входящий звонок |
+| `getCallsState()` | снимок состояния всех звонков (`CallStateForGui[]`) |
 | `watchVideoChats(obs)` | поток `VideoChatEvent` |
+
+`getCallsState()` — способ догнать события, которых окно не слышало. Push-события остаются
+основным путём, но их два раза оказалось недостаточно: окно, открытое посреди звонка, о звонке не
+знало вовсе, а 2026-09-10 замолчавший компонент оставил кнопку End Call, которую нечему было
+снять. Снимок берётся сразу после подписки в `useInitialize`, по клику End Call и раз в минуту
+([05-video-calls.md §8](05-video-calls.md)).
 
 `VideoChatEvent` ([types/services.types.ts:130-155](../types/services.types.ts#L130-L155)):
 `gui-closed`, `gui-opened`, `call-started`, `call-ended`, `call-ended-by-host`,

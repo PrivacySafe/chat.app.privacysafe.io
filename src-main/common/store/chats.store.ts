@@ -36,9 +36,11 @@ import type {
   ChatSummary,
   ChatSystemMessageData,
   ChatWebRTCCallEvent,
+  CallStateForGui,
 } from '~/index';
 import { getChatName } from '@main/common/utils/chat-ui.helper';
-import { chatService } from '@main/common/services/external-services';
+import { chatService, videoOpenerSrv } from '@main/common/services/external-services';
+import { callBackend, isBackendUnreachable } from '@main/common/services/backend-availability';
 import { areChatIdsEqual, chatMessageIdForCallEvent, generateChatMessageId } from '@shared/chat-ids';
 import { makeLogger } from '@shared/logger';
 
@@ -73,6 +75,10 @@ export const useChatsStore = defineStore('chats', () => {
   // cold start takes seconds - an empty sidebar for that whole time reads as a
   // hang (or as an account with no chats).
   const chatListLoaded = ref(false);
+  // Set when the list could not be fetched at all. Without it the sidebar had
+  // only "loading" and "empty", so a background component that never answers
+  // showed a spinner with no end and no explanation (2026-09-10).
+  const chatListError = ref<unknown>(undefined);
   const incomingCalls = ref<IncomingCallCmdArg[]>([]);
 
   const chatListSortedByTime = computed<ChatListItemUiView[]>(() => {
@@ -316,9 +322,35 @@ export const useChatsStore = defineStore('chats', () => {
     }
   }
 
+  /**
+   * Marks the background component unreachable when a call says so.
+   *
+   * Otherwise the "service is not responding" overlay could only ever appear
+   * at start-up: a window that was working when the component froze had no
+   * path to that state at all, and simply went quiet - which is how the
+   * incident looked from the user's side.
+   */
+  function noteBackendVerdict(err: unknown): void {
+    if (isBackendUnreachable(err)) {
+      appStore.backendState = 'unreachable';
+    }
+  }
+
   async function refreshChatList() {
     const previousList = chatList.value;
-    const freshList = await chatService.getChatList();
+    let freshList: ChatListItemView[];
+    try {
+      freshList = await callBackend('getChatList', () => chatService.getChatList());
+    } catch (err) {
+      // Kept, rather than thrown on: this used to reach onBeforeMount, get
+      // re-thrown and end as an unhandled rejection, with the spinner still
+      // turning. The list is now allowed to say it failed.
+      chatListError.value = err;
+      noteBackendVerdict(err);
+      log.error(`Failed to load the chat list`, err);
+      return;
+    }
+    chatListError.value = undefined;
     // Re-apply in-memory call state: getChatList() returns DB data only, so an
     // unrelated refresh (chat added/removed) would otherwise wipe the ongoing
     // call state of every chat in the list.
@@ -372,6 +404,68 @@ export const useChatsStore = defineStore('chats', () => {
       ...value,
     };
     return true;
+  }
+
+  /**
+   * Turns a snapshot from the background component into the three in-memory
+   * call fields of the chat list.
+   *
+   * The mapping is the same one the push events make (see useInitialize):
+   *   in a call here, and it is running   -> callStart, i.e. an End Call button
+   *   rejoinable                          -> isCallActive, i.e. "Join call"
+   *   ringing and not ours                -> incomingCall
+   * A chat absent from the snapshot loses all three: the snapshot is the
+   * authority, and clearing state nobody will ever clear otherwise is the
+   * reason this exists.
+   */
+  function applyCallsState(snapshot: CallStateForGui[]): void {
+    const byChat = new Map(snapshot.map(s => [chatIdAsKey(s.chatId), s]));
+    chatList.value = chatList.value.map(item => {
+      const state = byChat.get(chatIdAsKey(item));
+      if (!state) {
+        return { ...item, callStart: undefined, isCallActive: false, incomingCall: undefined };
+      }
+      const runningHere = state.inCallHere
+        && ['dialing', 'connecting', 'active', 'winding-down'].includes(state.state);
+      return {
+        ...item,
+        callStart: runningHere ? (item.callStart ?? state.since) : undefined,
+        isCallActive: (state.state === 'rejoinable'),
+        incomingCall: ((state.state === 'ringing') && !state.inCallHere)
+          ? item.incomingCall
+          : undefined,
+      };
+    });
+  }
+
+  function chatIdAsKey({ isGroupChat, chatId }: ChatIdObj): string {
+    return `${isGroupChat ? 'g' : 's'}/${chatId}`;
+  }
+
+  /**
+   * Asks the background component what it thinks is going on, and makes the
+   * list agree with it.
+   *
+   * When the component cannot be reached, the call fields are cleared anyway:
+   * an End Call button armed by a service that no longer answers does nothing
+   * when pressed, and a button that does nothing is worse than none.
+   */
+  async function reconcileCallsState(): Promise<void> {
+    try {
+      const snapshot = await callBackend(
+        'getCallsState', () => videoOpenerSrv.getCallsState(), { windowMillis: 5000 },
+      );
+      applyCallsState(snapshot);
+      if (appStore.backendState === 'unreachable') {
+        // It answers again. The minute-by-minute reconcile is the only thing
+        // that runs on its own, so it is also the only thing that can notice.
+        appStore.backendState = 'ready';
+      }
+    } catch (err) {
+      noteBackendVerdict(err);
+      log.error(`Failed to get the state of calls; clearing call state of the chat list`, err);
+      applyCallsState([]);
+    }
   }
 
   async function handleBackgroundChatEvents(event: ChatEvent): Promise<void> {
@@ -498,8 +592,10 @@ export const useChatsStore = defineStore('chats', () => {
   return {
     chatList,
     chatListLoaded,
+    chatListError,
     chatListSortedByTime,
     refreshChatList,
+    reconcileCallsState,
     findIndexOfChatInCurrentList,
     getChatView,
     refreshChatViewData,

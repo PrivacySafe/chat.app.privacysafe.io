@@ -64,14 +64,17 @@ import {
 } from '@video/common/services/relay-slots.ts';
 import {
   STREAM_INFO_BATCH_WINDOW_MS,
+  attributeIncomingHostSignal,
   parseStarSignalFromWebRTCMsg,
 } from '@video/common/services/signaling-channel-core.ts';
+import { mayActFor } from '@video/common/services/shared-screen-share.ts';
 import { sleep } from '@shared/processes/sleep';
 import type {
   ClientSignalingChannel,
   HostSignalingChannel,
   OfferSignalPayload,
   RelaySlotDeclaration,
+  StarSignalType,
   StreamSenderInfosBatchPayload,
 } from '@video/common/types/star.types.ts';
 import type { ChatIdObj } from '~/asmail-msgs.types';
@@ -4803,6 +4806,251 @@ describe(`Video Chat Star Architecture`, () => {
       // 'drop-in-call', and their host's 'disconnect' would later reach us as
       // 'drop-foreign-session'.
     }, 5000);
+
+  });
+
+  // ===========================================================================
+  // Test Suite 28: attribution of a signal to the channel it arrived on
+  // ===========================================================================
+
+  /**
+   * A participant may speak for itself, and for nobody else.
+   *
+   * Reported 2026-09-09: the host read the author of an incoming signal out of
+   * the message body (`fromAddr`), while the authenticated address of the
+   * channel it arrived on was thrown away. A connected participant could name
+   * another one and have the host apply its SDP to that participant's live
+   * connection, hang it up, or take over its media attribution.
+   *
+   * The rule is one-sided on purpose: on the HOST an incoming signal always
+   * belongs to the channel's owner (the host never relays an incoming signal),
+   * whereas a CLIENT legitimately hears about other participants from the host.
+   * These specs pin the host side.
+   */
+  describe(`Test Suite 28: attribution of a signal to the channel it arrived on`, () => {
+
+    const SPOOFABLE_TYPES: StarSignalType[] = [
+      'offer', 'answer', 'candidate', 'candidates', 'disconnect',
+      'stream-state-changed', 'stream-sender-info', 'participant-left',
+      'request-stream-info',
+    ];
+
+    itCond(`a body that agrees with its channel is passed through untouched`, async () => {
+      const msg = { type: 'offer' as const, fromAddr: CLIENT_A_ADDR, data: {} };
+      const { signal, overridden } = attributeIncomingHostSignal(CLIENT_A_ADDR, msg);
+      expect(signal)
+        .withContext(`the common path must not even copy the message`)
+        .toBe(msg);
+      expect(overridden).toBeFalse();
+    }, 5000);
+
+    itCond(`an address written in another form is not a foreign sender`, async () => {
+      // Case and spaces in the user part are the same address, and a peer that
+      // writes it differently is not making a claim about anyone else.
+      const { signal, overridden } = attributeIncomingHostSignal(
+        CLIENT_A_ADDR, { type: 'candidate', fromAddr: ' Client A@3NSoft.net ', data: {} },
+      );
+      expect(signal.fromAddr)
+        .withContext(`normalised to the form the channel uses, since maps are keyed on it`)
+        .toBe(CLIENT_A_ADDR);
+      expect(overridden)
+        .withContext(`no warning is warranted for a mere difference in form`)
+        .toBeFalse();
+    }, 5000);
+
+    itCond(`a body naming another participant is re-attributed, for every signal type`, async () => {
+      for (const type of SPOOFABLE_TYPES) {
+        const { signal, overridden } = attributeIncomingHostSignal(
+          CLIENT_A_ADDR, { type, fromAddr: CLIENT_B_ADDR, data: {} },
+        );
+        expect(signal.fromAddr)
+          .withContext(`'${type}' arriving on A's channel is A's, whatever it claims`)
+          .toBe(CLIENT_A_ADDR);
+        expect(overridden)
+          .withContext(`'${type}' claimed a foreign sender and must be reported`)
+          .toBeTrue();
+      }
+    }, 5000);
+
+    itCond(`a body with no sender is filled in, and not reported`, async () => {
+      // An older build, and the legacy starSignal wrapper, send no sender at
+      // all; that is not a claim about anybody.
+      for (const fromAddr of ['', undefined as unknown as string]) {
+        const { signal, overridden } = attributeIncomingHostSignal(
+          CLIENT_A_ADDR, { type: 'disconnect', fromAddr, data: {} },
+        );
+        expect(signal.fromAddr).toBe(CLIENT_A_ADDR);
+        expect(overridden).toBeFalse();
+      }
+    }, 5000);
+
+    itCond(`junk in the sender field is answered, never thrown on`, async () => {
+      // The value is chosen by whoever sent the message, and areAddressesEqual
+      // throws on anything without an '@' — on the ASMail path that would have
+      // escaped as an unhandled rejection.
+      const junk = ['not-an-address', 'screen:a@b:1', '   ', 42 as unknown as string];
+      for (const fromAddr of junk) {
+        let thrown: unknown;
+        let overridden = false;
+        try {
+          ({ overridden } = attributeIncomingHostSignal(
+            CLIENT_A_ADDR, { type: 'offer', fromAddr, data: {} },
+          ));
+        } catch (err) {
+          thrown = err;
+        }
+        expect(thrown)
+          .withContext(`attribution must not throw on '${String(fromAddr)}'`)
+          .toBeUndefined();
+        expect(overridden)
+          .withContext(`'${String(fromAddr)}' is not this channel's address`)
+          .toBeTrue();
+      }
+    }, 5000);
+
+    itCond(`mayActFor: a participant owns itself and its own screen shares`, async () => {
+      expect(mayActFor(CLIENT_A_ADDR, CLIENT_A_ADDR)).toBeTrue();
+      expect(mayActFor(CLIENT_A_ADDR, `screen:${CLIENT_A_ADDR}:src-1`))
+        .withContext(`a screen address carries its owner`)
+        .toBeTrue();
+      expect(mayActFor(CLIENT_A_ADDR, 'ClientA@3NSoft.net'))
+        .withContext(`compared canonically, not by ===`)
+        .toBeTrue();
+      expect(mayActFor(CLIENT_A_ADDR, CLIENT_B_ADDR)).toBeFalse();
+      expect(mayActFor(CLIENT_A_ADDR, `screen:${CLIENT_B_ADDR}:src-1`))
+        .withContext(`somebody else's screen share is somebody else`)
+        .toBeFalse();
+      for (const junk of ['', 'screen:', 'not-an-address', undefined, 7]) {
+        let thrown: unknown;
+        let verdict = true;
+        try {
+          verdict = mayActFor(CLIENT_A_ADDR, junk);
+        } catch (err) {
+          thrown = err;
+        }
+        expect(thrown).toBeUndefined();
+        expect(verdict)
+          .withContext(`'${String(junk)}' is nobody this channel may speak for`)
+          .toBeFalse();
+      }
+    }, 5000);
+
+    itCond(`a spoofed disconnect does not hang up another participant`, async () => {
+      const mockSignaling = createMockHostSignalingChannel();
+      const hostChannel = createHostChannel({
+        ownAddr: HOST_ADDR,
+        rtcConfig: {},
+        localStream: createRealMediaStreamForTesting(),
+        signalingChannel: mockSignaling as unknown as HostSignalingChannel,
+        onClientConnected: () => {},
+        onClientDisconnected: () => {},
+        onClientTrack: () => {},
+      });
+      await hostChannel.handleClientOffer(CLIENT_A_ADDR, { type: 'offer', sdp: VALID_SDP });
+      await hostChannel.handleClientOffer(CLIENT_B_ADDR, { type: 'offer', sdp: VALID_SDP });
+      expect(hostChannel.getClientCount()).toBe(2);
+
+      // A, over its own channel, claims to be B and hangs up.
+      mockSignaling._triggerClientSignal(CLIENT_A_ADDR, {
+        type: 'disconnect', fromAddr: CLIENT_B_ADDR,
+      });
+      await sleep(50);
+
+      expect(mockSignaling.getKnownClients())
+        .withContext(`B was hung up by a signal that never came from B`)
+        .toContain(CLIENT_B_ADDR);
+      expect(mockSignaling.getReattributedSignals().length)
+        .withContext(`the attempt is recorded rather than silently accepted`)
+        .toBe(1);
+
+      // Positive control: A's honest disconnect does remove A.
+      mockSignaling._triggerClientSignal(CLIENT_A_ADDR, {
+        type: 'disconnect', fromAddr: CLIENT_A_ADDR,
+      });
+      await sleep(50);
+      expect(mockSignaling.getKnownClients())
+        .withContext(`an honest disconnect still works`)
+        .not.toContain(CLIENT_A_ADDR);
+    }, 15000);
+
+    itCond(`a spoofed participant-left does not remove another participant`, async () => {
+      const mockSignaling = createMockHostSignalingChannel();
+      const departed: string[] = [];
+      const hostChannel = createHostChannel({
+        ownAddr: HOST_ADDR,
+        rtcConfig: {},
+        localStream: createRealMediaStreamForTesting(),
+        signalingChannel: mockSignaling as unknown as HostSignalingChannel,
+        onClientConnected: () => {},
+        onClientDisconnected: () => {},
+        onClientTrack: () => {},
+        onParticipantLeft: addr => departed.push(addr),
+      });
+      await hostChannel.handleClientOffer(CLIENT_A_ADDR, { type: 'offer', sdp: VALID_SDP });
+      await hostChannel.handleClientOffer(CLIENT_B_ADDR, { type: 'offer', sdp: VALID_SDP });
+
+      // The actor is in the payload here, so re-attributing fromAddr alone
+      // would not have stopped this one.
+      mockSignaling._triggerClientSignal(CLIENT_A_ADDR, {
+        type: 'participant-left',
+        fromAddr: CLIENT_A_ADDR,
+        data: { addr: CLIENT_B_ADDR, name: 'B' },
+      });
+      await sleep(50);
+      expect(departed)
+        .withContext(`A may not announce B's departure`)
+        .not.toContain(CLIENT_B_ADDR);
+
+      // Positive control: its own screen share may leave.
+      const ownScreen = `screen:${CLIENT_A_ADDR}:src-1`;
+      mockSignaling._triggerClientSignal(CLIENT_A_ADDR, {
+        type: 'participant-left',
+        fromAddr: CLIENT_A_ADDR,
+        data: { addr: ownScreen, name: 'A screen' },
+      });
+      await sleep(50);
+      expect(departed)
+        .withContext(`a participant's own screen share is its own to end`)
+        .toContain(ownScreen);
+    }, 15000);
+
+    itCond(`a spoofed stream-sender-info does not claim another participant's stream`, async () => {
+      const mockSignaling = createMockHostSignalingChannel();
+      const mappings: string[] = [];
+      const hostChannel = createHostChannel({
+        ownAddr: HOST_ADDR,
+        rtcConfig: {},
+        localStream: createRealMediaStreamForTesting(),
+        signalingChannel: mockSignaling as unknown as HostSignalingChannel,
+        onClientConnected: () => {},
+        onClientDisconnected: () => {},
+        onClientTrack: () => {},
+        onStreamSenderInfo: (_streamId, senderAddr) => mappings.push(senderAddr),
+      });
+      await hostChannel.handleClientOffer(CLIENT_A_ADDR, { type: 'offer', sdp: VALID_SDP });
+      await hostChannel.handleClientOffer(CLIENT_B_ADDR, { type: 'offer', sdp: VALID_SDP });
+
+      mockSignaling._triggerClientSignal(CLIENT_A_ADDR, {
+        type: 'stream-sender-info',
+        fromAddr: CLIENT_A_ADDR,
+        data: { streamId: 'stream-1', senderAddr: CLIENT_B_ADDR },
+      });
+      await sleep(50);
+      expect(mappings)
+        .withContext(`A's stream may not be attributed to B — that is B's tile`)
+        .not.toContain(CLIENT_B_ADDR);
+
+      const ownScreen = `screen:${CLIENT_A_ADDR}:src-1`;
+      mockSignaling._triggerClientSignal(CLIENT_A_ADDR, {
+        type: 'stream-sender-info',
+        fromAddr: CLIENT_A_ADDR,
+        data: { streamId: 'stream-2', senderAddr: ownScreen },
+      });
+      await sleep(50);
+      expect(mappings)
+        .withContext(`its own screen share is a legitimate sender`)
+        .toContain(ownScreen);
+    }, 15000);
 
   });
 

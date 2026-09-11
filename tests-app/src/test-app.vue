@@ -40,6 +40,7 @@
         addMsgToPage(`1️⃣  Main test user '${userId}'`);
         document.getElementById('cancel-autoclose')!.hidden = false;
         await import('./tests/app-device-id.js');
+        await import('./tests/backend-availability.js');
         await import('./tests/gui-log-relay.js');
         await import('./tests/app-view.js');
         await import('./tests/contacts-store.js');
@@ -53,6 +54,7 @@
         await import('./tests/group-members.js');
         await import('./tests/invitations.js');
         await import('./tests/video-chat.js');
+        await import('./tests/call-state-recovery.js');
         await import('./tests/ice-config.js');
         await import('./tests/codec-preferences.js');
         await import('./tests/media-recording.js');

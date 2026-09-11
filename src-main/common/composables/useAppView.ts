@@ -20,6 +20,7 @@ import { storeToRefs } from 'pinia';
 import { useCommandHandler } from '@main/common/composables/useCommandHandler';
 import { useAppStore } from '@main/common/store/app.store';
 import { useContactsStore } from '@main/common/store/contacts.store';
+import { useChatsStore } from '@main/common/store/chats.store';
 import { useInitialize } from '@main/common/composables/useInitialize';
 import { useBackupRestore } from '@main/common/composables/useBackupRestore';
 import { chatService } from '@main/common/services/external-services.ts';
@@ -37,6 +38,7 @@ export function useAppView() {
 
   const appStore = useAppStore();
   const contactsStore = useContactsStore();
+  const chatsStore = useChatsStore();
 
   const {
     commonLoading, appVersion, user: me, connectivityStatus, customLogoSrc,
@@ -109,10 +111,16 @@ export function useAppView() {
         deleteExpiredMessages();
         collectOrphanedMessagesGarbage();
         removeExpiredInboxMessages();
+        // Cheap - a walk of a map in memory on the other side - and it bounds
+        // how long a missed call event can misinform this window to a minute.
+        chatsStore.reconcileCallsState();
       }, 60000);
     } catch (e) {
+      // Not re-thrown: this runs in onBeforeMount, where a throw becomes an
+      // unhandled rejection and nothing on screen changes. What the user sees
+      // is driven by appStore.backendState and the chat list's own error
+      // state, both set by whatever failed here.
       log.error('Error while the app component mounting.', e);
-      throw e;
     }
   });
 

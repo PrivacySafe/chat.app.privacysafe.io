@@ -28,6 +28,7 @@ export const en = {
     sync: {
       label: 'Synchronizing…',
       labelWithCount: 'Synchronizing… ({count})',
+      catchUp: 'Catching up on messages…',
       stalled: 'Changes are waiting to be sent',
       stalledTooltip: 'Changes made here have not reached your other devices yet; '
         + 'they are kept and will be sent again',
@@ -43,6 +44,17 @@ export const en = {
     },
     orientation: {
       rotateBack: 'Please rotate your phone back to portrait orientation',
+    },
+    startup: {
+      starting: 'Starting…',
+      stillStarting: 'The chat background service is still starting ({stage})…',
+      unreachableTitle: 'The chat background service is not responding',
+      unreachableText: 'The app cannot reach the service it keeps your chats in. '
+        + 'Restarting the app usually fixes this.',
+      failedTitle: 'The chat background service failed to start',
+      retry: 'Retry',
+      closeApp: 'Close the app',
+      listNotLoaded: 'The chat list could not be loaded.',
     },
     menu: {
       makeBackup: 'Create a backup',
@@ -351,6 +363,12 @@ export const en = {
       item: {
         created_at: 'created {date}',
       },
+    },
+    call: {
+      startFailed: 'Could not reach the background service to start the call. '
+        + 'Try again; if it keeps failing, restart the app.',
+      endFailed: 'Could not reach the background service to end the call. '
+        + 'The call state shown here may be out of date; restart the app if it persists.',
     },
     header: {
       info: 'Last post on {date}',

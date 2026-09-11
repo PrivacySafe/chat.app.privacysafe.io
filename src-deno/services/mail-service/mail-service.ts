@@ -19,6 +19,7 @@ import type { SyncActivityTracker } from '../../utils/sync-activity.ts';
 import { inboxDispatcher } from './inbox-dispatcher.ts';
 import { deliveryMonitor } from './delivery-monitor.ts';
 import { startDeliveryReconcile } from './delivery-reconcile.ts';
+import { startupStage } from '../../utils/startup-progress.ts';
 
 /**
  * Mail Service
@@ -44,23 +45,38 @@ export async function mailService({
 }) {
   const appDeviceId = localDataStoreSrv.getAppDeviceId();
 
+  // Each part named and timed separately. This whole service used to be one
+  // stage taking anywhere from 15 to 88 seconds, and with a single pair of log
+  // lines around all of it there was no way to say which of the three parts
+  // the time belonged to (2026-09-11). `startDeliveryReconcile` below gets no
+  // stage of its own: it arms a timer and returns, so any time unaccounted for
+  // by these stages is between them, not in it.
+
   // Start inbox dispatcher for handling incoming messages
-  const inbox = await inboxDispatcher({
-    chatsSrv,
-    videoChatSrv,
-    localDataStoreSrv,
-    db,
-    syncActivity,
-  });
+  const inbox = await startupStage(
+    'mail/inbox-dispatcher',
+    () => inboxDispatcher({
+      chatsSrv,
+      videoChatSrv,
+      localDataStoreSrv,
+      db,
+      syncActivity,
+    }),
+    15000,
+  );
 
   // Start delivery monitor for tracking outgoing message progress
-  const delivery = await deliveryMonitor({
-    ownAddr,
-    appDeviceId,
-    db,
-    chatsSrv,
-    nextSyncStamp: () => localDataStoreSrv.nextSyncStamp(),
-  });
+  const delivery = await startupStage(
+    'mail/delivery-monitor',
+    () => deliveryMonitor({
+      ownAddr,
+      appDeviceId,
+      db,
+      chatsSrv,
+      nextSyncStamp: () => localDataStoreSrv.nextSyncStamp(),
+    }),
+    15000,
+  );
 
   // Start the reconcile sweep for deliveries the platform never finishes
   // (stuck 'sending' messages, blocked delivery queue) - see the module doc.

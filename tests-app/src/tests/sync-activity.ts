@@ -698,4 +698,39 @@ describe(`Synchronization activity, a device that has nobody to synchronize with
     }
   });
 
+  itCond(`the inbox catch-up is shown to a user with a single device too`, async () => {
+    // The one thing that silence must not cover. Everything else this tracker
+    // watches is traffic between the user's own devices, of which this user has
+    // none - but the catch-up scan is the shared inbox being read for what
+    // arrived while the app was closed, and it was measured taking up to 91
+    // seconds (2026-09-11). During it the chat list is short of messages and the
+    // app looks perfectly idle.
+    const tracker = makeSyncActivityTracker({
+      countOutboundPending: () => 3,
+      isReportable: () => false,
+      gate: { showDelayMillis: 0 },
+    });
+    try {
+      tracker.inboundEnqueued(2);
+      expect(tracker.snapshot().syncing)
+        .withContext(`phantom traffic stays silent: there is no other device`)
+        .toBe(false);
+
+      tracker.beginCatchUpScan();
+      const scanning = tracker.snapshot();
+      expect(scanning.syncing).toBe(true);
+      expect(scanning.phase).toBe('catch-up');
+      expect(scanning.pending)
+        .withContext(`a count here would be phantoms - the very thing not to report`)
+        .toBe(0);
+
+      tracker.endCatchUpScan();
+      expect(tracker.snapshot().phase)
+        .withContext(`and the silence comes back with the end of the scan`)
+        .toBe('idle');
+    } finally {
+      tracker.stop();
+    }
+  });
+
 });

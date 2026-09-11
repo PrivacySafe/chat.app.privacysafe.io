@@ -21,6 +21,7 @@
   import { useAppStore } from '@main/common/store/app.store';
   import OrientationNotice from '@main/common/components/app-shell/orientation-notice.vue';
   import AppMenu from '@main/mobile/components/app-shell/app-menu.vue';
+  import BackendUnreachable from '@main/common/components/app-shell/backend-unreachable.vue';
 
   const {
     t,
@@ -114,6 +115,8 @@
       not be greyed out or made inert by the drawer's overlay.
     -->
     <div id="notification" />
+
+    <backend-unreachable />
 
     <ui3n-dialog-provider />
 

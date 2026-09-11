@@ -14,7 +14,7 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { inject } from 'vue';
+import { inject, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { useI18n } from 'vue-i18n';
 import cloneDeep from 'lodash/cloneDeep';
@@ -25,7 +25,8 @@ import { chatService, videoOpenerSrv } from '@main/common/services/external-serv
 import { useAppStore } from '@main/common/store/app.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
-import { chatMessageIdForCallEvent, generateChatMessageId } from '@shared/chat-ids';
+import { chatIdToString, chatMessageIdForCallEvent, generateChatMessageId } from '@shared/chat-ids';
+import { wrapWithTimeout } from '@shared/processes/timeouts';
 import type { ChatIdObj } from '~/asmail-msgs.types';
 import { makeLogger } from '@shared/logger';
 
@@ -222,12 +223,75 @@ export const useUiIncomingStore = defineStore('ui-incoming', () => {
     });
   }
 
-  async function startCall(chatObjId: ChatIdObj): Promise<void> {
-    await videoOpenerSrv.startVideoCallForChatRoom(chatObjId);
+  /**
+   * Chats whose call window has been asked for and has not appeared yet.
+   *
+   * Opening that window takes seconds, and until it does the chat header
+   * looks exactly as it did before the click - so the user presses again.
+   * The background component now ignores the repeat (see guiOpening in
+   * call.ts), but the button has to say so too, which is what this drives.
+   */
+  const callsBeingStarted = ref<string[]>([]);
+
+  function isStartingCall(chatObjId: ChatIdObj): boolean {
+    return callsBeingStarted.value.includes(chatIdToString(chatObjId));
   }
 
-  async function endCall(chatObjId: ChatIdObj) {
-    videoOpenerSrv.endVideoCallInChatRoom(chatObjId);
+  async function startCall(chatObjId: ChatIdObj): Promise<void> {
+    const key = chatIdToString(chatObjId);
+    if (callsBeingStarted.value.includes(key)) {
+      return;
+    }
+    callsBeingStarted.value = [...callsBeingStarted.value, key];
+    try {
+      await videoOpenerSrv.startVideoCallForChatRoom(chatObjId);
+    } catch (err) {
+      log.error(`Failed to start a call in chat ${chatObjId.chatId}`, err);
+      $createNotice({
+        type: 'error',
+        content: t('chat.call.startFailed'),
+      });
+    } finally {
+      callsBeingStarted.value = callsBeingStarted.value.filter(k => (k !== key));
+    }
+  }
+
+  /**
+   * How long the End Call button waits on the background component.
+   *
+   * The work behind the call is local - close the window, send a 'disconnect'
+   * out of queue - so anything past this is not slowness but a component that
+   * is not answering.
+   */
+  const END_CALL_TIMEOUT_MILLIS = 15_000;
+
+  /**
+   * Ends the call, and makes sure the button goes away either way.
+   *
+   * It used to be one unawaited line whose failure was swallowed. That is how
+   * a button that did nothing at all survived a whole incident: the component
+   * had stopped answering, the click went nowhere, and nothing was ever going
+   * to arrive that would clear the button (2026-09-10). Now the outcome is
+   * awaited, a failure is told to the user, and the state is reconciled
+   * regardless - if the service cannot say whether a call is on, an End Call
+   * button that does nothing is the worse of the two options.
+   */
+  async function endCall(chatObjId: ChatIdObj): Promise<void> {
+    try {
+      await wrapWithTimeout(
+        videoOpenerSrv.endVideoCallInChatRoom(chatObjId),
+        END_CALL_TIMEOUT_MILLIS,
+        () => Error(`Asking the background service to end the call timed out`),
+      );
+    } catch (err) {
+      log.error(`Failed to end the call in chat ${chatObjId.chatId}`, err);
+      $createNotice({
+        type: 'error',
+        content: t('chat.call.endFailed'),
+      });
+    } finally {
+      await chatsStore.reconcileCallsState();
+    }
   }
 
   /**
@@ -247,6 +311,8 @@ export const useUiIncomingStore = defineStore('ui-incoming', () => {
     joinIncomingCall,
     dismissIncomingCall,
     startCall,
+    isStartingCall,
+    callsBeingStarted,
     endCall,
     rejoinCall,
   };

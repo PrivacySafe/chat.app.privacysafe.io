@@ -6211,6 +6211,28 @@ class ConnectionState {
   }
 }
 
+/**
+ * Reports an IPC failure where it can actually be read.
+ *
+ * These paths used to report through `console.error` alone. In the background
+ * component that is nothing at all: the production bundle is built with
+ * `drop: ['console']` (ci/build-deno.js), so every one of those catch blocks
+ * ends up empty and an IPC failure leaves no trace whatsoever. Windows keep
+ * their console, so both are written to.
+ */
+function reportIpcFailure(msg, err) {
+  try {
+    console.error(msg, err);
+  } catch {
+    // no console in this build
+  }
+  try {
+    w3n?.log?.('error', msg, err)?.catch?.(() => {});
+  } catch {
+    // logging must never be the thing that throws here
+  }
+}
+
 class IPCWrap {
   constructor(srvName) {
     this.srvName = srvName;
@@ -6267,7 +6289,7 @@ class IPCWrap {
               callNum, callStatus: 'error', err: `Method ${method} not found`,
             });
           } catch (sendErr) {
-            console.error(`Failed to send 'Method not found' error for ${method} on ${this.srvName}:`, sendErr);
+            reportIpcFailure(`Failed to send 'Method not found' error for ${method} on ${this.srvName}:`, sendErr);
           }
           return;
         }
@@ -6284,7 +6306,7 @@ class IPCWrap {
         connectionState.cancelCall(callNum);
       }
     } catch (err) {
-      console.error(`Error in IPC onMsg for service ${this.srvName}:`, err);
+      reportIpcFailure(`Error in IPC onMsg for service ${this.srvName}:`, err);
     }
   }
 
@@ -6300,7 +6322,7 @@ class IPCWrap {
         callNum, callStatus: 'error', err,
       };
       // DEBUG
-      console.error(`Exposed service ${this.srvName} throws exception within a remote call to method ${method}`, err);
+      reportIpcFailure(`Exposed service ${this.srvName} throws exception within a remote call to method ${method}`, err);
     }
     if (!connectionState.hasCall(callNum)) {
       return;
@@ -6309,7 +6331,7 @@ class IPCWrap {
     try {
       await connection.send(reply);
     } catch (sendErr) {
-      console.error(`Failed to send reply for call ${callNum} in method ${method} on ${this.srvName}:`, sendErr);
+      reportIpcFailure(`Failed to send reply for call ${callNum} in method ${method} on ${this.srvName}:`, sendErr);
     }
   }
 
@@ -6322,11 +6344,11 @@ class IPCWrap {
           });
           if (res && typeof res.catch === 'function') {
             res.catch(err => {
-              console.error(`Failed to send interim data for call ${callNum} on ${this.srvName}:`, err);
+              reportIpcFailure(`Failed to send interim data for call ${callNum} on ${this.srvName}:`, err);
             });
           }
         } catch (err) {
-          console.error(`Failed to send interim data for call ${callNum} on ${this.srvName}:`, err);
+          reportIpcFailure(`Failed to send interim data for call ${callNum} on ${this.srvName}:`, err);
         }
       },
       complete: async () => {
@@ -6339,7 +6361,7 @@ class IPCWrap {
             callNum, callStatus: 'end',
           });
         } catch (err) {
-          console.error(`Failed to send end status for call ${callNum} on ${this.srvName}:`, err);
+          reportIpcFailure(`Failed to send end status for call ${callNum} on ${this.srvName}:`, err);
         }
       },
       error: async err => {
@@ -6352,9 +6374,9 @@ class IPCWrap {
             callNum, callStatus: 'error', err,
           });
         } catch (sendErr) {
-          console.error(`Failed to send error status for call ${callNum} on ${this.srvName}:`, sendErr);
+          reportIpcFailure(`Failed to send error status for call ${callNum} on ${this.srvName}:`, sendErr);
         }
-        console.error(`Exposed service ${this.srvName} throws exception into a remote observer from a method ${method}`, err);
+        reportIpcFailure(`Exposed service ${this.srvName} throws exception into a remote observer from a method ${method}`, err);
       },
     });
   }
@@ -6381,11 +6403,11 @@ class IPCWrap {
           const res = this.onMsg(connection, connectionState, msg);
           if (res && typeof res.catch === 'function') {
             res.catch(err => {
-              console.error(`Error in IPC onMsg async for service ${this.srvName}:`, err);
+              reportIpcFailure(`Error in IPC onMsg async for service ${this.srvName}:`, err);
             });
           }
         } catch (err) {
-          console.error(`Error in IPC watch next for service ${this.srvName}:`, err);
+          reportIpcFailure(`Error in IPC watch next for service ${this.srvName}:`, err);
         }
       },
       complete: () => this.onConnectionCompletion(connection, connectionState),
@@ -6441,6 +6463,19 @@ class MultiConnectionIPCWrap extends IPCWrap {
   }
 
   async onListeningCompletion() {
+    // Was empty, and that silence cost a whole app: when the core ends the
+    // observable of incoming connections, this component stops accepting them
+    // forever - with no line anywhere, no closeSelf, and no re-exposure, so
+    // every later window connects to something that will never answer.
+    // SingleConnectionIPCWrap closes itself here, and that is the right move:
+    // a closed component can be started again, a mute one cannot.
+    if (w3n.log) {
+      await w3n.log(
+        'error',
+        `Listening for incoming connections to service '${this.srvName}' has ended; closing the component so that it can be started again.`,
+      ).catch(() => {});
+    }
+    w3n.closeSelf?.();
   }
 
   async onListeningError(err) {

@@ -42,6 +42,7 @@ import type {
 import type { ChatIdObj, WebRTCMsg } from '~/asmail-msgs.types';
 import { sendWebRTCSignal } from '@shared/webrtc-signalling';
 import { makeLogger } from '@shared/logger';
+import { sameAddress } from '@shared/address-utils';
 import { streamInfoKey } from './relay-slots';
 
 const log = makeLogger('SignalingChannel');
@@ -388,6 +389,78 @@ export async function sendSignalViaAsmail(opts: SendAsmailSignalOptions): Promis
 }
 
 // =============================================================================
+// Attribution
+// =============================================================================
+
+/**
+ * Signal types that carry SDP/ICE, and therefore always belong to whoever
+ * actually sent the message rather than to whoever the body names.
+ */
+const SDP_SIGNAL_TYPES: ReadonlySet<string> = new Set([
+  'offer', 'answer', 'candidate', 'candidates',
+]);
+
+/**
+ * Who a signal is *about*, as far as the transport can tell.
+ *
+ * SDP/ICE always belongs to the envelope sender: nothing legitimate relays
+ * somebody else's offer, so trusting the body there is a spoof waiting to
+ * happen. Application-level star signals are the opposite case - the host
+ * genuinely relays a peer's logical actor (it forwards a peer's mute with
+ * `fromAddr = peer` while the envelope is its own), and overwriting that made
+ * clients apply peer mute onto the host tile.
+ *
+ * Both branches of the parser below go through this, because they used to
+ * disagree: the `signalType` branch had the rule and the legacy `starSignal`
+ * branch had nothing at all.
+ */
+function logicalFromOf(
+  signalType: string, bodyFrom: string | undefined, senderAddr: string,
+): string {
+  return (!SDP_SIGNAL_TYPES.has(signalType) && bodyFrom) ? bodyFrom : senderAddr;
+}
+
+/**
+ * Attributes a signal that arrived at the HOST to the channel it arrived on.
+ *
+ * The host never relays an incoming signal: everything that reaches it on a
+ * client's channel - that client's signalling DataChannel, or an ASMail
+ * envelope it sent - is that client acting for itself, and a client only ever
+ * writes its own address (see client-signaling-channel). So on the host the
+ * authenticated channel address is the only admissible author, for every
+ * signal type and not just for SDP/ICE.
+ *
+ * A body naming somebody else is therefore either a foreign build or an
+ * attempt to act as another participant; either way the signal is treated as
+ * belonging to the channel's owner. That is not a loss of information: the
+ * sender is entitled to send exactly this signal about itself, so re-attributing
+ * it grants nothing the sender did not already have - while accepting the claim
+ * let one participant reach into another's connection (reported 2026-09-09).
+ *
+ * The reverse direction is genuinely different and stays as it is: see
+ * logicalFromOf above.
+ *
+ * Returns the signal unchanged when the body already agrees, so the common path
+ * allocates nothing; the boolean says whether the claim had to be overridden,
+ * which is what the caller logs.
+ */
+export function attributeIncomingHostSignal(
+  channelAddr: string, msg: StarSignalMessage,
+): { signal: StarSignalMessage; overridden: boolean } {
+  const claimed = msg.fromAddr;
+  if (claimed === channelAddr) {
+    return { signal: msg, overridden: false };
+  }
+  // An address the sender simply left out, or wrote in another form (case,
+  // spaces in the user part) - neither is a claim about anyone else.
+  const isSameParty = !claimed || sameAddress(claimed, channelAddr);
+  return {
+    signal: { ...msg, fromAddr: channelAddr },
+    overridden: !isSameParty,
+  };
+}
+
+// =============================================================================
 // WebRTCMsg → StarSignalMessage Parsing
 // =============================================================================
 
@@ -451,7 +524,14 @@ export function parseStarSignalFromWebRTCMsg(
       const parsed = JSON.parse(sdpStr);
       const starSignal = parsed.starSignal as StarSignalMessage;
       log.debug(`${logLabel}: Parsed starSignal: type=${starSignal.type}, from=${starSignal.fromAddr}`);
-      return { ...starSignal, msgTs: starSignal.msgTs ?? msgTs };
+      return {
+        ...starSignal,
+        // Through the same rule as the branch below: this one used to return
+        // the body as it came, so the two formats of the same parser
+        // disagreed about whether a self-reported sender is to be trusted.
+        fromAddr: logicalFromOf(starSignal.type, starSignal.fromAddr, senderAddr),
+        msgTs: starSignal.msgTs ?? msgTs,
+      };
     }
 
     // Check for signalType format (used for offer/answer/candidate and all star signals)
@@ -462,20 +542,9 @@ export function parseStarSignalFromWebRTCMsg(
         `${logLabel}: Parsed StarSignalData: type=${signalData.signalType}, from=${signalData.fromAddr}, hasPayload=${!!signalData.payload}`,
       );
 
-      // SDP/ICE: always trust the ASMail envelope sender (anti-spoof).
-      // App-level star signals (stream-state-changed, etc.) carry the *logical*
-      // actor in signalData.fromAddr (e.g. host relays peer mute with
-      // fromAddr=peer while the envelope sender is the host). Overwriting
-      // those with senderAddr made clients apply peer mute onto the host tile.
-      const sdpSignalTypes = new Set(['offer', 'answer', 'candidate', 'candidates']);
-      const logicalFrom =
-        !sdpSignalTypes.has(signalData.signalType) && signalData.fromAddr
-          ? signalData.fromAddr
-          : senderAddr;
-
       return {
         type: signalData.signalType,
-        fromAddr: logicalFrom,
+        fromAddr: logicalFromOf(signalData.signalType, signalData.fromAddr, senderAddr),
         toAddr: signalData.toAddr,
         data: signalData.payload as RTCSessionDescriptionInit | RTCIceCandidateInit,
         msgTs,

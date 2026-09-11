@@ -216,6 +216,58 @@ export type AddressCheckResult =
   | 'not-valid-public-key';
 
 /**
+ * What the background component answers `ping()` with: where it is in its own
+ * start-up, and how long it has been there.
+ *
+ * The reason a status type exists at all: the IPC facade answers a connection
+ * handshake immediately, long before the real service is built (see facadeOver
+ * in chat-service/ipc-expose.ts), so a successful connection says nothing
+ * about whether the component works. `ping()` is answered from the process's
+ * own state rather than from the service, and so is the one call that tells a
+ * slow start apart from a component that will never answer again.
+ */
+export interface ComponentStatus {
+  /** When the component's process started, by its own clock. */
+  startedAt: number;
+  uptimeMillis: number;
+  /** True once the whole start-up chain has finished. */
+  ready: boolean;
+  /** Set instead of `ready` when the start-up chain threw. */
+  failed?: string;
+  /** Name of the start-up stage that has not finished yet. */
+  stage?: string;
+  /** How long that stage has been running. */
+  stageMillis?: number;
+}
+
+/**
+ * A call as the background component currently sees it, for a GUI that needs
+ * to catch up rather than wait for the next event.
+ *
+ * Call state reaches the GUI as push events ('call-started', 'call-ended',
+ * 'call-active'), and that remains the main path. This is how a window that
+ * missed them catches up: one opened in the middle of a call, or one whose
+ * background component stopped answering while a call was on and left an End
+ * Call button that no event would ever clear (2026-09-10).
+ */
+export interface CallStateForGui {
+  chatId: ChatIdObj;
+  /** Live state of the session; 'ended' never appears here. */
+  state: 'dialing' | 'ringing' | 'connecting' | 'active' | 'winding-down' | 'rejoinable';
+  /** When the call entered this state. */
+  since: number;
+  hostAddr?: string;
+  callSessionId?: string;
+  role?: 'host' | 'client';
+  /**
+   * Whether this device serves the call - i.e. whether a call window of ours
+   * belongs to it. Exactly the condition that makes an End Call button here
+   * mean anything.
+   */
+  inCallHere: boolean;
+}
+
+/**
  * This app's service.
  * It is a singleton in "background instance" component.
  * This service manages video chat windows: opens them, keeps track of them,
@@ -225,6 +277,13 @@ export interface VideoGUIOpener {
   startVideoCallForChatRoom(chatId: ChatIdObj): Promise<void>;
 
   endVideoCallInChatRoom(chatId: ChatIdObj): Promise<void>;
+
+  /**
+   * Snapshot of every call this component knows of. See CallStateForGui: the
+   * push events stay the main path, and this is how a GUI catches up with what
+   * it never heard.
+   */
+  getCallsState(): Promise<CallStateForGui[]>;
 
   /**
    * Resolves to the id of the call session that was answered or declined; the

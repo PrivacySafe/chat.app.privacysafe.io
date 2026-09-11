@@ -45,7 +45,14 @@ export async function videoComponentInstance(
   chat: ChatInfoForCall,
   obs: web3n.Observer<CallFromVideoGUI>,
 ): Promise<{ instance: VideoComponentInstance; startProc: Promise<void> }> {
+  // Timed, because opening the window is what the user waits through after
+  // pressing Call, and nothing used to say how long it took or which half of
+  // it was slow: the platform bringing the window up, or the window's own
+  // start-up answering us. Without these two numbers the only available
+  // answer to "the window opens with a pause" was a guess (2026-09-11).
+  const askedAt = Date.now();
   const srvConn = await w3n.rpc!.thisApp!('VideoChatComponent');
+  log.info(`call window answered the platform in ${Date.now() - askedAt}ms`);
   const guiSrv = makeServiceCaller<VideoChatComponent>(
     srvConn,
     VIDEO_WINDOW_METHODS_CALLED_HERE,
@@ -68,9 +75,22 @@ export async function videoComponentInstance(
     };
   }
 
+  /**
+   * Drops the RPC connection to the call window.
+   *
+   * Nothing used to: one connection leaked per call, and - worse than the
+   * leak - the caller kept a usable-looking handle to a window that had
+   * closed, on which focusWindow() either throws or never returns (see the
+   * end of end() in utils/call.ts).
+   */
+  function close(): void {
+    srvConn.close?.();
+  }
+
   const instance: VideoComponentInstance = {
     focusWindow,
     endCall,
+    close,
     getListenerForChannelTo,
     notifyOfUndeliveredSignal: (peer, stage) => guiSrv.notifyOfUndeliveredSignal(peer, stage),
     notifyOfRejoiningPeer: peer => guiSrv.notifyOfRejoiningPeer(peer),
@@ -78,7 +98,9 @@ export async function videoComponentInstance(
 
   guiSrv.watchRequests(obs);
 
-  const startProc = guiSrv.startVideoCallComponentForChat(chat);
+  const startProc = guiSrv.startVideoCallComponentForChat(chat).then(() => {
+    log.info(`call window ready ${Date.now() - askedAt}ms after it was asked for`);
+  });
 
   return {
     instance,

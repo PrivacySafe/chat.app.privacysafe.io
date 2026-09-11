@@ -48,6 +48,7 @@
     joinIncomingCall,
     dismissIncomingCall,
     startCall,
+    isStartingCall,
     endCall,
     rejoinCall,
   } = useChatHeader({
@@ -142,7 +143,7 @@
       color="var(--color-bg-block-primary-default)"
       icon="round-phone"
       icon-color="var(--color-icon-block-primary-default)"
-      :disabled="readonly"
+      :disabled="readonly || isStartingCall"
       @click.stop.prevent="startCall(currentChatObjId)"
     />
 

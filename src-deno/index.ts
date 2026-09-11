@@ -20,6 +20,13 @@ import { initDebugLogging, makeLogger, setLogUserAddress } from '../shared-libs/
 import { defer } from '../shared-libs/processes/deferred.ts';
 import { MAX_ATTACHMENT_SIZE } from '../shared-libs/constants/attachment-limits.ts';
 import { ensureDefaultAnonSenderMaxMsgSize } from './utils/workarounds.ts';
+import { startComponentHeartbeat } from './utils/component-heartbeat.ts';
+import {
+  currentStageName,
+  markComponentFailed,
+  markComponentReady,
+  startupStage,
+} from './utils/startup-progress.ts';
 import { dataset } from './dataset/index.ts';
 import { localDataStore } from './services/local-data-store/local-data-store.ts';
 import { chatService } from './services/chat-service/chat-service.ts';
@@ -35,6 +42,13 @@ import type { ChatSrv, VideoChatSrv } from './types/index.ts';
 setupGlobalReportingOfUnhandledErrors(true);
 
 const log = makeLogger('ChatBackend');
+
+// Before any capability is touched, and before the facades below: until this
+// line existed, the first thing a run printed came after the databases were
+// open, so a start that hung on storage looked exactly like a component that
+// had never been asked to run at all (2026-09-10).
+log.info(`chat background component process started`);
+startComponentHeartbeat();
 
 // IPC services are exposed before anything else, and before any storage is
 // touched. The platform gives a caller 10 seconds from asking for a service to
@@ -58,17 +72,27 @@ try {
   // Diagnostic logging is off unless the launcher's app configuration turns it
   // on; the production bundle has no console at all (see ci/build-deno.js), so
   // everything worth seeing goes through the logger.
-  await initDebugLogging();
+  // Every step of the start is named, timed, and - while it is running - says
+  // so again every so often. The stage that stops reporting "done" is the one
+  // that hung; without this the log simply ended and named nothing.
+  await startupStage('debug-logging-config', () => initDebugLogging(), 10000);
 
-  const ownAddr = await w3n.mailerid!.getUserId();
+  const ownAddr = await startupStage(
+    'own-address', () => w3n.mailerid!.getUserId(), 10000,
+  );
   // Explicit, not waiting on initDebugLogging's own lazy fetch: every line
   // from here on carries the address (util/logs mixes several test accounts).
   setLogUserAddress(ownAddr);
 
-  const db = await dataset();
+  // The most suspect step of them all: it opens SQLite files on synced
+  // storage, and the platform log of the incident was full of fs-sync errors
+  // at the very time this runs.
+  const db = await startupStage('dataset', () => dataset(), 20000);
   const latestIncomingMsgTS = db.getLatestIncomingMsgTimestamp();
 
-  const localDataStoreSrv = await localDataStore();
+  const localDataStoreSrv = await startupStage(
+    'local-data-store', () => localDataStore(), 15000,
+  );
   const appDeviceId = localDataStoreSrv.getAppDeviceId();
   // At `info`, not `debug`: synchronization between the user's devices is
   // decided by this id, so a run in which two devices share one (two instances
@@ -77,7 +101,9 @@ try {
   log.info(`app device id is ${appDeviceId}`);
   await localDataStoreSrv.setLastReceivedMessageTimestamp(latestIncomingMsgTS || 0);
 
-  const { chatsSrv, syncActivity } = await chatService(ownAddr, localDataStoreSrv, db);
+  const { chatsSrv, syncActivity } = await startupStage(
+    'chat-service', () => chatService(ownAddr, localDataStoreSrv, db), 30000,
+  );
   // From here on the GUI's queued calls can run.
   chatSrvDeferred.resolve(chatsSrv);
 
@@ -89,7 +115,7 @@ try {
   // database is not masked: the very next calls below still hit the outer catch.
   const maintenancePass = async (name: string, pass: () => Promise<unknown>) => {
     try {
-      await pass();
+      await startupStage(`maintenance:${name}`, pass, 30000);
     } catch (err) {
       log.error(`start-up maintenance pass '${name}' failed:`, err);
       await w3n.log(
@@ -124,8 +150,12 @@ try {
   // the user's other devices forever (see mail-sending-service/sync-phantoms.ts).
   await chatsSrv.releasePendingSyncPhantoms();
 
-  const { videoChatSrv } = await videoChatService(
-    ownAddr, chatsSrv, db, chatsSrv.emitEventsOutward, localDataStoreSrv,
+  const { videoChatSrv } = await startupStage(
+    'video-chat-service',
+    () => videoChatService(
+      ownAddr, chatsSrv, db, chatsSrv.emitEventsOutward, localDataStoreSrv,
+    ),
+    20000,
   );
   videoSrvDeferred.resolve(videoChatSrv);
 
@@ -177,19 +207,29 @@ try {
     event: 'duplicate-device-instance',
   }));
 
-  const stopDeliveryService = await mailService({
-    ownAddr,
-    db,
-    localDataStoreSrv,
-    chatsSrv,
-    videoChatSrv,
-    syncActivity,
-  });
+  const stopDeliveryService = await startupStage(
+    'mail-service',
+    () => mailService({
+      ownAddr,
+      db,
+      localDataStoreSrv,
+      chatsSrv,
+      videoChatSrv,
+      syncActivity,
+    }),
+    20000,
+  );
+  // Before the line below, so that a ping arriving with it reads 'ready'.
+  markComponentReady();
   log.debug(`all background services of the chat app have started`);
 } catch (err) {
   // Calls queued behind the facades must fail rather than hang forever.
+  markComponentFailed(err);
   chatSrvDeferred.reject(err);
   videoSrvDeferred.reject(err);
+  // Which stage it died at, in a line of its own: the exception below carries
+  // a message, not a place, and the two are rarely the same question.
+  log.error(`start-up failed at stage '${currentStageName()}'; closing the component`);
   w3n.log(
     'error',
     `Error in a startup of instance with main services for chat. Can't proceed, and will close the whole component.`,

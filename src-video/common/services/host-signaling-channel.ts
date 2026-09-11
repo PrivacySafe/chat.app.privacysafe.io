@@ -33,6 +33,7 @@ import type {
   AnswerSignalPayload,
   HostSignalingChannel,
   HostSignalingChannelParams,
+  StarSignalHandler,
   StarSignalMessage,
   StarSignalType,
 } from '@video/common/types/star.types';
@@ -43,12 +44,19 @@ import {
   sendSignalViaAsmail,
   parseStarSignalFromWebRTCMsg,
   createCandidateBatcher,
+  attributeIncomingHostSignal,
 } from './signaling-channel-core';
 import { makeLogger } from '@shared/logger';
 
 const log = makeLogger('HostSignalingChannel');
 
 const LOG_LABEL = '[HostSignaling]';
+
+/**
+ * How often a client whose signals name somebody else is reported. See
+ * warnOfForeignSender.
+ */
+const FOREIGN_SENDER_WARN_INTERVAL_MS = 5000;
 
 /**
  * Creates a host-side signaling channel implementation.
@@ -65,10 +73,16 @@ export function createHostSignalingChannel(
   const { ownAddr, chatId, callSessionId } = params;
 
   // Map of client-specific signal handlers
-  const clientHandlers = new Map<string, (signal: StarSignalMessage) => void>();
+  const clientHandlers = new Map<string, StarSignalHandler>();
 
   // Wildcard handler for all clients
-  let wildcardHandler: ((signal: StarSignalMessage) => void) | null = null;
+  let wildcardHandler: StarSignalHandler | null = null;
+
+  // Per-client throttle for the "body names another participant" warning; see
+  // warnOfForeignSender.
+  const foreignSenderWarnings = new Map<
+    string, { lastWarnedAt: number; suppressed: number }
+  >();
 
   // Set of known client addresses (for broadcastSignal)
   // This is separate from clientHandlers because handlers are only registered
@@ -240,18 +254,61 @@ export function createHostSignalingChannel(
       return;
     }
 
-    log.debug(`${LOG_LABEL}: Received signal '${msg.type}' from client ${clientAddr}`);
+    // Everything below this line sees the channel's own address as the author,
+    // whatever the body claims. `clientAddr` is authenticated on both paths -
+    // the closure of the client's signalling DataChannel, or the sender of an
+    // ASMail envelope - and until this existed it went no further than the log
+    // line: the only registered handler is a wildcard one, and it read the
+    // author out of the message body. A connected participant could therefore
+    // name another and have the host apply its SDP to that participant's live
+    // connection, or hang it up (reported 2026-09-09).
+    //
+    // Safe precisely here, and only here: the host never relays an INCOMING
+    // signal, so nothing arriving on a client's channel legitimately speaks for
+    // anyone else. The outgoing direction does relay a peer's logical actor,
+    // which is why attribution on the client side stays as it is.
+    const { signal, overridden } = attributeIncomingHostSignal(clientAddr, msg);
+    if (overridden) {
+      warnOfForeignSender(clientAddr, msg);
+    }
+
+    log.debug(`${LOG_LABEL}: Received signal '${signal.type}' from client ${clientAddr}`);
 
     // Route to client-specific handler
     const handler = clientHandlers.get(clientAddr);
     if (handler) {
-      handler(msg);
+      handler(signal, clientAddr);
     }
 
     // Route to wildcard handler
     if (wildcardHandler) {
-      wildcardHandler(msg);
+      wildcardHandler(signal, clientAddr);
     }
+  }
+
+  /**
+   * Reports a signal whose body named a different participant.
+   *
+   * Throttled per client, because the path is reachable at DataChannel rate:
+   * an unthrottled line here would let the sender flood the log it is meant to
+   * be visible in. The suppressed count goes out with the next line, so a
+   * burst stays countable.
+   */
+  function warnOfForeignSender(clientAddr: string, msg: StarSignalMessage): void {
+    const now = Date.now();
+    const state = foreignSenderWarnings.get(clientAddr);
+    if (state && ((now - state.lastWarnedAt) < FOREIGN_SENDER_WARN_INTERVAL_MS)) {
+      state.suppressed += 1;
+      return;
+    }
+    const suppressed = state?.suppressed ?? 0;
+    foreignSenderWarnings.set(clientAddr, { lastWarnedAt: now, suppressed: 0 });
+    log.warn(
+      `${LOG_LABEL}: signal '${msg.type}' arrived on ${clientAddr}'s channel but claims `
+        + `to come from ${msg.fromAddr}; treating it as ${clientAddr}'s own — a participant `
+        + `never speaks for another one here`
+        + ((suppressed > 0) ? ` (${suppressed} more such signal(s) since the last line)` : ''),
+    );
   }
 
   /**
@@ -276,7 +333,7 @@ export function createHostSignalingChannel(
    */
   function registerClientHandler(
     clientAddr: string,
-    handler: (signal: StarSignalMessage) => void,
+    handler: StarSignalHandler,
   ): () => void {
     if (clientAddr === '*') {
       wildcardHandler = handler;
@@ -308,6 +365,7 @@ export function createHostSignalingChannel(
     knownClients.delete(clientAddr);
     candidateBatchers.get(clientAddr)?.clear();
     candidateBatchers.delete(clientAddr);
+    foreignSenderWarnings.delete(clientAddr);
     // Close and drop the DataChannel for this client.
     const dc = clientDataChannels.get(clientAddr);
     if (dc) {
@@ -341,6 +399,7 @@ export function createHostSignalingChannel(
     isClosed = true;
     clientHandlers.clear();
     knownClients.clear();
+    foreignSenderWarnings.clear();
     for (const batcher of candidateBatchers.values()) {
       batcher.clear();
     }

@@ -22,24 +22,23 @@ import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
 import '@main/common/assets/styles/main.css';
 
-import { initializeServices } from '@main/common/services/external-services';
+import { startMainWindow } from '@main/common/services/bootstrap';
 import { startMainWindowLogRelay } from '@main/common/services/gui-log-relay';
 import { installConsoleTimestamps } from '@shared/console-timestamps';
-import { initDebugLogging, makeLogger } from '@shared/logger';
+import { initDebugLogging } from '@shared/logger';
 import { router } from './router';
 import i18n from '@main/common/data/i18';
 
 import App from '@main/mobile/pages/app.vue';
 import { createPinia } from 'pinia';
 
-const log = makeLogger('MainWindow');
-
 // Before the services start logging: without a time on them, main-window lines
 // cannot be lined up with the call window's or the background's (see
 // shared-libs/console-timestamps.ts).
 installConsoleTimestamps();
 
-initializeServices().then(async () => {
+// Shared with the desktop entry point: see startMainWindow.
+startMainWindow('mobile', () => {
   // Both need the services: the relay's channel is chatService, and the
   // diagnostic switch is read through the shell. Started before the app is
   // mounted, so that what the stores do on their way up is relayed too.
@@ -57,10 +56,4 @@ initializeServices().then(async () => {
   };
 
   app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#mobile');
-})
-.catch(err => {
-  // Without this the failure is an unhandled rejection and a blank window: the
-  // app is never mounted, and nothing on screen says why. initializeServices()
-  // logs the error itself, so this only has to make the silence deliberate.
-  log.error(`App is not started, as its services could not be reached`, err);
 });

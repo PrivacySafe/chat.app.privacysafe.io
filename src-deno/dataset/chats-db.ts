@@ -27,6 +27,7 @@ import { CHATS_DB_FNAME, CHATS_DB_META_ATTR, DATASET_META_ATTR } from '../../sha
 // @deno-types="../../shared-libs/sqlite-on-3nstorage/index.d.ts"
 import { SQLiteOn3NStorage } from '../../shared-libs/sqlite-on-3nstorage/index.js';
 import { makeDbWriter } from './db-writer.ts';
+import { startupStage } from '../utils/startup-progress.ts';
 import {
   otoChatTabFields,
   otoChatWhereParamsFor,
@@ -142,15 +143,24 @@ async function getSqliteDb({
 }): Promise<SQLiteOn3NStorage> {
   const chatsDbFile = await fsLocal.writableFile(CHATS_DB_FNAME);
 
-  if (await fs.checkFilePresence(CHATS_DB_FNAME)) {
-    const chatsBdFileData = await fs.readBytes(CHATS_DB_FNAME);
-    if (chatsBdFileData) {
-      await chatsDbFile.writeBytes(chatsBdFileData);
-      await fs.deleteFile(CHATS_DB_FNAME);
-    }
+  // On synced storage, and therefore named: see the same three steps in
+  // msgs-db.ts for why a start-up hanging here used to be invisible.
+  const hasLegacyFileOnSynced = await startupStage(
+    'chats-db/legacy-check-on-synced', () => fs.checkFilePresence(CHATS_DB_FNAME), 10000,
+  );
+  if (hasLegacyFileOnSynced) {
+    await startupStage('chats-db/legacy-move', async () => {
+      const chatsBdFileData = await fs.readBytes(CHATS_DB_FNAME);
+      if (chatsBdFileData) {
+        await chatsDbFile.writeBytes(chatsBdFileData);
+        await fs.deleteFile(CHATS_DB_FNAME);
+      }
+    }, 10000);
   }
 
-  const sqlite = await SQLiteOn3NStorage.makeAndStart(chatsDbFile);
+  const sqlite = await startupStage(
+    'chats-db/open', () => SQLiteOn3NStorage.makeAndStart(chatsDbFile), 10000,
+  );
 
   const res = sqlite.db.exec(`PRAGMA table_info(group_chats)`);
   if (res.length === 0) {

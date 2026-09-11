@@ -64,6 +64,14 @@ export function useSyncState() {
     if (syncStalled.value) {
       return 'app.sync.stalled';
     }
+    // The catch-up scan gets its own words, and needs them: it is the one phase
+    // that is not about the user's other devices - it is the inbox being read
+    // for everything that arrived while the app was closed. "Synchronizing…" is
+    // simply untrue for a user who has a single device, and they are shown this
+    // phase and no other (see currentView in sync-activity.ts).
+    if (syncPhase.value === 'catch-up') {
+      return 'app.sync.catchUp';
+    }
     // A count of one adds noise without information: "Synchronizing… (1)" says
     // no more than "Synchronizing…".
     return (syncPending.value > 1) ? 'app.sync.labelWithCount' : 'app.sync.label';

@@ -16,7 +16,7 @@
 */
 import type { ChatIdObj, ChatIncomingMessage, ChatSystemMessageData, WebRTCMsg, WebRTCOffBandMessage } from '../../../types/asmail-msgs.types.ts';
 import type { IncomingCallCmdArg, OpenChatCmdArg } from '../../../types/chat-commands.types.ts';
-import type { ChatInfoForCall, VideoChatEvent } from '../../../types/services.types.ts';
+import type { CallStateForGui, ChatInfoForCall, VideoChatEvent } from '../../../types/services.types.ts';
 import type { CallInChat, ChatDbEntry, ChatSrv, ChatSrvEmit, DB, LocalDataStore, MsgDbEntry, VideoChatSrv } from '../../types/index.ts';
 import { MultiConnectionIPCWrap } from '../../../shared-libs/ipc/ipc-service.js';
 import { facadeOver } from '../chat-service/ipc-expose.ts';
@@ -103,6 +103,7 @@ export function exposeVideoGUIOpenerOnIPC(videoSrv: Promise<VideoChatSrv>): () =
     'startVideoCallForChatRoom',
     'joinOrDismissCallInRoom',
     'endVideoCallInChatRoom',
+    'getCallsState',
   ];
   const observableMethods: (keyof VideoChatSrv)[] = ['watchVideoChats'];
   const facade = facadeOver(videoSrv, reqReplyMethods, observableMethods);
@@ -1911,6 +1912,23 @@ export async function videoChatService(
   async function endVideoCallInChatRoom(chatId: ChatIdObj): Promise<void> {
     const call = calls.get(chatIdToString(chatId));
     if (!call) {
+      // The button was armed by a call this device no longer has. Returning
+      // silently left it armed until the next push event - and when the click
+      // happens precisely because no event is coming, that is never (the End
+      // Call button that survived the whole incident of 2026-09-10). So: put
+      // the session record to rest if it is still standing, and tell the GUI
+      // what the ordinary end of a call would have told it.
+      log.info(
+        `[${ownAddr}] End of call asked for chat ${chatId.chatId} with no call object here`,
+      );
+      const record = sessions.get(chatId);
+      if (record && (record.state !== 'ended')) {
+        sessions.transit(chatId, 'ended', Date.now(), { endedBy: 'self' });
+      }
+      sinkGUIEvents({
+        type: 'call-ended',
+        chatId,
+      });
       return;
     }
     await call.endCallInGUI();
@@ -2086,10 +2104,40 @@ export async function videoChatService(
     return sessions.all().some(({ state }) => isSignallingState(state));
   }
 
+  /**
+   * What this component currently believes about every chat's call.
+   *
+   * The push events ('call-started', 'call-ended', 'call-active') stay the way
+   * call state reaches the GUI; this is how a window catches up with events it
+   * never heard - one opened in the middle of a call, and, after 2026-09-10,
+   * one whose background component stopped answering mid-call and left an End
+   * Call button that nothing would ever clear.
+   *
+   * Everything but `ended`, rather than isLiveState(): the GUI needs
+   * 'winding-down' (its End Call button is still up) and 'rejoinable' (it
+   * offers "Join call"), neither of which counts as live here.
+   */
+  function getCallsState(): Promise<CallStateForGui[]> {
+    return Promise.resolve(sessions.all()
+      .filter(({ state }) => (state !== 'ended'))
+      .map(({ chatId, state, since, hostAddr, callSessionId, role }) => ({
+        chatId,
+        state: state as CallStateForGui['state'],
+        since,
+        hostAddr,
+        callSessionId,
+        role,
+        // From `calls`, not from the record: the record says a call exists,
+        // this says we are the ones in it.
+        inCallHere: calls.has(chatIdToString(chatId)),
+      })));
+  }
+
   const methods: VideoChatSrv = {
     handleIncomingWebRTCMsg,
     startVideoCallForChatRoom,
     endVideoCallInChatRoom,
+    getCallsState,
     joinOrDismissCallInRoom,
     watchVideoChats,
     hasAnyCallInProgress,

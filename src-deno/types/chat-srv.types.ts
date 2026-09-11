@@ -36,7 +36,12 @@ import type {
   OutgoingAttachment,
   SingleChatView,
 } from '../../types/chat.types.ts';
-import type { AddressCheckResult, SyncActivityView, UpdateEvent } from '../../types/services.types.ts';
+import type {
+  AddressCheckResult,
+  ComponentStatus,
+  SyncActivityView,
+  UpdateEvent,
+} from '../../types/services.types.ts';
 import type {
   BackupPlan,
   BackupRecordFiles,
@@ -373,4 +378,30 @@ export interface ChatSrv {
     chatSystemData: ChatSystemMessageData,
     msgData: Partial<MsgDbEntry>,
   ): Promise<ChatMessageView>;
+}
+
+/**
+ * What a window actually talks to: the service, plus `ping()`.
+ *
+ * `ping()` is a property of the channel rather than of the service, and the
+ * split is the point. Every method of ChatSrv reaches the GUI through a facade
+ * that awaits the real service (facadeOver in chat-service/ipc-expose.ts), so
+ * none of them can answer while the service is still being built - or ever
+ * again, if the component has stopped. `ping()` is answered from the
+ * component's own state, which is what lets the GUI tell those two apart
+ * instead of showing a spinner forever (2026-09-10).
+ */
+export interface ChatSrvOverIPC extends ChatSrv {
+  ping(): Promise<ComponentStatus>;
+  /**
+   * Test stand only (see the guard in ipc-expose.ts): occupies a call for the
+   * given time, so a spec can check that `ping` still answers while an
+   * ordinary call is pending - the property the whole split rests on.
+   */
+  hangForTest?(millis: number): Promise<void>;
+  /**
+   * Test stand only: makes `ping` never answer, which is what a component
+   * that has stopped looks like from a window.
+   */
+  stopPingForTest?(silenced: boolean): Promise<void>;
 }

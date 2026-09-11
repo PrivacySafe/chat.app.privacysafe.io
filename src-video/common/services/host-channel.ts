@@ -78,6 +78,7 @@ import {
   isScreenShareAddr,
   extractSrcIdFromScreenAddr,
   extractMailerIdFromScreenAddr,
+  mayActFor,
 } from './shared-screen-share';
 
 /**
@@ -3338,10 +3339,10 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
     const owned = new Set<string>();
 
     const consider = (sourceAddr: string) => {
-      if (
-        isScreenShareAddr(sourceAddr) &&
-        extractMailerIdFromScreenAddr(sourceAddr) === clientAddr
-      ) {
+      // Through mayActFor, so ownership of a screen address is decided in one
+      // place - and compared canonically: `===` here missed an owner whose
+      // address differed only in case.
+      if (isScreenShareAddr(sourceAddr) && mayActFor(clientAddr, sourceAddr)) {
         owned.add(sourceAddr);
       }
     };
@@ -3809,10 +3810,17 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
   }
 
   // Register handler for incoming signals from clients
-  signalingChannel.registerClientHandler('*', signal => {
+  signalingChannel.registerClientHandler('*', (signal, authenticatedFrom) => {
     if (isClosed) return;
 
-    const clientAddr = signal.fromAddr;
+    // The channel the signal arrived on, never `signal.fromAddr`. The body is
+    // written by the sender, and reading the actor out of it let a connected
+    // participant name another one and have every branch below act on that
+    // participant's connection (reported 2026-09-09). The channel reconciles
+    // the two before calling us, so this is also what the field now holds -
+    // taking the argument is what keeps the next branch from copying the old
+    // pattern back in.
+    const clientAddr = authenticatedFrom;
 
     switch (signal.type) {
       // Offers and answers of ONE client run through that client's serial
@@ -3894,6 +3902,19 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
             senderAddr: string;
             screenName?: string;
           };
+          // The actor is in the payload here, so fixing the envelope is not
+          // enough: a client claiming somebody else's address for its own
+          // stream would have its camera shown as that participant's tile,
+          // here and on every other client (applyClientTrack →
+          // broadcastTrackToOtherClients). A client may name itself and its
+          // own screen shares, and nothing else.
+          if (!mayActFor(clientAddr, senderInfo?.senderAddr)) {
+            console.warn(
+              `[Host] ${clientAddr} claims stream ${senderInfo?.streamId} belongs to `
+                + `${senderInfo?.senderAddr}; ignoring`,
+            );
+            break;
+          }
           handleClientStreamSenderInfo(
             clientAddr,
             senderInfo.streamId,
@@ -3905,6 +3926,17 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
       case 'participant-left':
         {
           const participantInfo = signal.data as { addr: string; name: string };
+          // Same payload-borne actor as in 'stream-sender-info' above: without
+          // this a participant could announce another one's departure and have
+          // the host relay it to everyone, clearing the victim's tile for the
+          // whole call. Its own screen shares are the one other thing it may
+          // legitimately report leaving.
+          if (!mayActFor(clientAddr, participantInfo?.addr)) {
+            console.warn(
+              `[Host] ${clientAddr} reports ${participantInfo?.addr} as left; ignoring`,
+            );
+            break;
+          }
           console.log(`[Host] Received participant-left from ${clientAddr}: ${participantInfo.addr}`);
           // Notify the app layer so the participant (incl. screen: pseudo-
           // participants) is removed from the host's store/UI.

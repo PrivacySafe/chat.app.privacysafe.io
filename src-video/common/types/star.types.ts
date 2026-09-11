@@ -482,6 +482,20 @@ export interface ClientSignalingChannel {
 }
 
 /**
+ * Handler of a signal that reached the host from one of its clients.
+ *
+ * `authenticatedFrom` is the address of the channel the signal arrived on, and
+ * it is the only trustworthy statement of who sent it: `signal.fromAddr` is
+ * whatever the sender wrote. The channel already reconciles the two before
+ * calling a handler (see attributeIncomingHostSignal), so the two agree here -
+ * the parameter exists so that a handler reads the authenticated value on
+ * purpose rather than by the good fortune of the field having been rewritten.
+ */
+export type StarSignalHandler = (
+  signal: StarSignalMessage, authenticatedFrom: string,
+) => void;
+
+/**
  * Interface for host-side signaling channel.
  * Manages signal routing between clients.
  */
@@ -513,7 +527,7 @@ export interface HostSignalingChannel {
   /** Register handler for signals from a specific client */
   registerClientHandler(
     clientAddr: string,
-    handler: (signal: StarSignalMessage) => void
+    handler: StarSignalHandler
   ): () => void;
   /** Add a client to the known clients list (for broadcastSignal) */
   addClient(clientAddr: string): void;

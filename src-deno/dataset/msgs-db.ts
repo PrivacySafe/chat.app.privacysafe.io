@@ -27,6 +27,7 @@ import {
 } from '../../shared-libs/constants/index.ts';
 import { msgsOrphanedTabFiels, msgsTabFields, msgWhereParamsFor } from './utils.ts';
 import { makeDbWriter } from './db-writer.ts';
+import { startupStage } from '../utils/startup-progress.ts';
 import type { ChatIdObj, ChatMessageId } from '../../types/asmail-msgs.types.ts';
 import type { ChatMessageReaction, MessageStatus, MsgPageCursor } from '../../types/chat.types.ts';
 import type { ParamsObject } from '../../shared-libs/sqlite-on-3nstorage/sqljs.d.ts';
@@ -302,17 +303,28 @@ async function getSqliteDb({
   const msgsDbFileName = `${MSGS_DB_FNAME_PREFIX}0`;
   const msgsDbFilePath = `${MSGS_DBS_DIR_NAME}/${msgsDbFileName}`;
 
-  if (await fs.checkFilePresence(msgsDbFilePath)) {
-    const msgsBdFileData = await fs.readBytes(msgsDbFilePath);
-    if (msgsBdFileData) {
-      await fsLocal.makeFolder(MSGS_DBS_DIR_NAME);
-      await fsLocal.writeBytes(msgsDbFilePath, msgsBdFileData);
-      await fs.deleteFile(msgsDbFilePath);
-    }
+  // These three touch SYNCED storage, and are the calls a start-up is most
+  // likely to be stuck in: on the day this logging was written, the platform
+  // log was full of fs-sync failures at exactly the times the component went
+  // quiet. Each is named so that the log says which one has not returned.
+  const hasLegacyFileOnSynced = await startupStage(
+    'msgs-db/legacy-check-on-synced', () => fs.checkFilePresence(msgsDbFilePath), 10000,
+  );
+  if (hasLegacyFileOnSynced) {
+    await startupStage('msgs-db/legacy-move', async () => {
+      const msgsBdFileData = await fs.readBytes(msgsDbFilePath);
+      if (msgsBdFileData) {
+        await fsLocal.makeFolder(MSGS_DBS_DIR_NAME);
+        await fsLocal.writeBytes(msgsDbFilePath, msgsBdFileData);
+        await fs.deleteFile(msgsDbFilePath);
+      }
+    }, 10000);
   }
 
   const msgsDbFile = await fsLocal.writableFile(msgsDbFilePath);
-  const sqlite = await SQLiteOn3NStorage.makeAndStart(msgsDbFile);
+  const sqlite = await startupStage(
+    'msgs-db/open-main', () => SQLiteOn3NStorage.makeAndStart(msgsDbFile), 10000,
+  );
 
   const res = sqlite.db.exec(`PRAGMA table_info(messages)`);
   if (res.length === 0) {
@@ -330,7 +342,9 @@ async function getSqliteDb({
   }
 
   const msgsOrphanedDbFile = await fsLocal.writableFile(`${MSGS_DBS_DIR_NAME}/${ORPHANED_MSGS_DBS_DIR_NAME}`);
-  const auxiliarySqlite = await SQLiteOn3NStorage.makeAndStart(msgsOrphanedDbFile);
+  const auxiliarySqlite = await startupStage(
+    'msgs-db/open-auxiliary', () => SQLiteOn3NStorage.makeAndStart(msgsOrphanedDbFile), 10000,
+  );
 
   if (auxiliarySqlite.db.exec(`PRAGMA table_info(orphaned_messages)`).length > 0) {
     // Schema V2 made every INSERT fail (incomingMsgId/targetMessageId NOT NULL), so a table

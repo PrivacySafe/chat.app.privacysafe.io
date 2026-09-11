@@ -17,14 +17,21 @@
 import { msgsDb } from './msgs-db.ts';
 import { chatsDb } from './chats-db.ts';
 import { setDbFlush } from './db-flush.ts';
+import { startupStage } from '../utils/startup-progress.ts';
 import type { DB } from '../types/index.ts';
 
 export async function dataset(): Promise<DB> {
-  const fs = await w3n.storage!.getAppSyncedFS();
-  const fsLocal = await w3n.storage!.getAppLocalFS();
+  // Named steps, because this is where a start-up that never finishes is most
+  // likely to be standing: both database files live on storage the platform
+  // synchronizes, and a run whose log stops here used to name nothing at all
+  // (see startup-progress.ts).
+  const fs = await startupStage('dataset/synced-fs', () => w3n.storage!.getAppSyncedFS(), 10000);
+  const fsLocal = await startupStage('dataset/local-fs', () => w3n.storage!.getAppLocalFS(), 10000);
 
-  const msgsBdSrv = await msgsDb({ fs, fsLocal });
-  const chatsBdSrv = await chatsDb({ fs, fsLocal, msgsBdSrv });
+  const msgsBdSrv = await startupStage('dataset/msgs-db', () => msgsDb({ fs, fsLocal }), 10000);
+  const chatsBdSrv = await startupStage(
+    'dataset/chats-db', () => chatsDb({ fs, fsLocal, msgsBdSrv }), 10000,
+  );
 
   /**
    * Covers all three database files: the messages one, its auxiliary, and

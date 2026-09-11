@@ -13,6 +13,7 @@
     "bench:db": "deno run -A ci/bench-db-writes.ts",
     "test:db-migration": "deno test -A --no-check ci/db-migration.test.ts",
     "test:backup-restore": "deno test -A --no-check ci/backup-restore.test.ts",
+    "test:db-writer": "deno test -A --no-check ci/db-writer-timeout.test.ts",
     "test:i18n-keys": "deno test -A --no-check ci/i18n-keys.test.ts",
     "run:mac:1": "bash ./run-test-mac.sh /Applications/privacysafe.app",
     "run:mac:2": "bash ./run-test-mac1.sh /Applications/privacysafe.app",

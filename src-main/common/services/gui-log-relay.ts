@@ -17,6 +17,10 @@
 import { chatService } from '@main/common/services/external-services';
 import { makeBatchingLogRelay } from '@shared/log-relay';
 import { setLogRelay } from '@shared/logger';
+import { wrapWithTimeout } from '@shared/processes/timeouts';
+
+/** Long enough never to fire on a working component, short enough to matter. */
+const LOG_RELAY_TIMEOUT_MILLIS = 10_000;
 
 /**
  * Sends this window's log lines to the background component, which prints them
@@ -33,7 +37,15 @@ export function startMainWindowLogRelay(): void {
         // Not awaited, and its failure is swallowed: this is the log path, and
         // making the code that logs wait on IPC would change the timing of
         // exactly what is being observed.
-        chatService.logFromGui(lines).catch(() => {});
+        //
+        // Timed out all the same: against a background component that has
+        // stopped answering, every batch would otherwise leave a promise
+        // pending for the life of the window.
+        wrapWithTimeout(
+          chatService.logFromGui(lines),
+          LOG_RELAY_TIMEOUT_MILLIS,
+          () => Error(`Relaying log lines to the background component timed out`),
+        ).catch(() => {});
       }
       : undefined
   ));

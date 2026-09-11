@@ -27,6 +27,7 @@ import { startStageFirst } from '../video-chat-service/utils/_common.ts';
 import { MAX_SIGNAL_AGE_MILLIS } from '../video-chat-service/utils/call-state.ts';
 import { INBOX_COMMIT_BATCH, INBOX_SCAN_FLOOR_MS, MAX_WATERMARK_LAG } from '../../../shared-libs/constants/index.ts';
 import { makeLogger } from '../../../shared-libs/logger.ts';
+import { startupStage } from '../../utils/startup-progress.ts';
 
 const log = makeLogger('InboxDispatcher');
 
@@ -314,9 +315,18 @@ export async function inboxDispatcher({
     // a fresh install, which is precisely the state that needs the scan most -
     // used to pick up nothing at all from the shared inbox.
     const scanFrom = Math.max(watermark - 60 * 1000, INBOX_SCAN_FLOOR_MS);
-    const listMessages = await w3n
-      .mail!.inbox.listMsgs(scanFrom)
-      .catch(err => w3n.log('error', `Fail to list messages`, err));
+    // Timed on its own, and loudly: this one call is where whole minutes of a
+    // start used to disappear with nothing in the log between the scan's first
+    // line and its last (2026-09-11). It is a request to the ASMail server,
+    // and the platform puts no timeout on it, so "how long did the listing
+    // take" is a question only we can answer.
+    const listMessages = await startupStage(
+      'mail/catch-up-list',
+      () => w3n
+        .mail!.inbox.listMsgs(scanFrom)
+        .catch(err => w3n.log('error', `Fail to list messages`, err)),
+      15000,
+    );
 
     if (!listMessages) {
       // An error, not info: a refused listing is not "nothing to list", and it
@@ -331,6 +341,14 @@ export async function inboxDispatcher({
         + `returned ${listMessages.length} message(s)`,
     );
 
+    await startupStage(
+      'mail/catch-up-handle', () => handleListedInboxMessages(listMessages), 15000,
+    );
+  }
+
+  async function handleListedInboxMessages(
+    listMessages: web3n.asmail.MsgInfo[],
+  ): Promise<void> {
     const now = Date.now();
     const webrtcCandidates: Array<{ msg: ChatIncomingMessage; webrtcMsg: WebRTCMsg }> = [];
     let queuedChat = 0;
@@ -470,18 +488,44 @@ export async function inboxDispatcher({
     }
   }
 
-  const stopInboxWatching = w3n.mail!.inbox.subscribe('message', {
-    next: msg => {
-      try {
-        handleIncomingMessage(msg);
-      } catch (err) {
-        log.error(`Error in inbox message subscriber callback:`, err);
-      }
-    },
-    error: err => w3n.log('error', `Inbox subscribe error: `, err),
-  });
+  const stopInboxWatching = await startupStage(
+    'mail/inbox-subscribe',
+    async () => w3n.mail!.inbox.subscribe('message', {
+      next: msg => {
+        try {
+          handleIncomingMessage(msg);
+        } catch (err) {
+          log.error(`Error in inbox message subscriber callback:`, err);
+        }
+      },
+      error: err => w3n.log('error', `Inbox subscribe error: `, err),
+    }),
+    15000,
+  );
 
-  await handleMissedInboxMessages();
+  // Not awaited, and that is the point. The scan is a request to the ASMail
+  // server with no timeout on it, and it was measured taking between 15 and 88
+  // seconds on ordinary starts (2026-09-11); until it came back, this function
+  // did not return, `mailService` did not return, and the component did not
+  // count as ready - while the user looked at a working app whose incoming
+  // side was not up yet.
+  //
+  // Safe to overlap with live traffic, and for reasons that predate this
+  // change rather than being assumed by it: the subscription above is already
+  // installed before the scan starts, so the two have always been able to
+  // produce the same message, and `seenMsgIds` in handleIncomingMessage() is
+  // what makes the second copy a no-op. The watermark tolerates the overlap
+  // too - it is read once at the top of the scan, only successfully processed
+  // messages move it, and it never moves down (see makeWatermarkCommitter).
+  //
+  // What the scan still owes the start is ordering within itself ('start'
+  // before the signalling of the same call), and that is unchanged: the sort
+  // is over the scan's own batch.
+  startupStage('mail/catch-up', () => handleMissedInboxMessages(), 15000)
+    .catch(err => {
+      log.error(`Catch-up scan of the inbox failed:`, err);
+      w3n.log('error', `Catch-up scan of the inbox failed`, err).catch(() => {});
+    });
 
   return {
     stop: () => {

@@ -333,9 +333,11 @@ export function makeSyncActivityTracker({
   /**
    * Whether there is anybody to synchronize with, i.e. whether this device has
    * ever seen a phantom from another device of this user. While it says no,
-   * nothing is reported to the GUI at all: a user with a single device has no
-   * synchronization to be told about, and the phantoms in their inbox are their
-   * own copies coming back (see hasSeenOtherDevice in local-data-store.ts).
+   * nothing but the inbox catch-up is reported to the GUI: a user with a single
+   * device has no synchronization to be told about, and the phantoms in their
+   * inbox are their own copies coming back (see hasSeenOtherDevice in
+   * local-data-store.ts). The catch-up is the exception because it is not about
+   * their devices at all - see currentView() below.
    *
    * Counters are kept all the same, so the moment this turns true the indicator
    * shows the real state without waiting for a restart.
@@ -386,9 +388,24 @@ export function makeSyncActivityTracker({
    * phantom, on top of the chat and message events it already generates.
    */
   function currentView(atSeq: number, at: number): SyncActivityView {
-    return ((isReportable && !isReportable())
-      ? idleViewOf(atSeq)
-      : viewOf(counters, gate, atSeq, at, params));
+    const view = viewOf(counters, gate, atSeq, at, params);
+    if (!isReportable || isReportable()) {
+      return view;
+    }
+    // The one thing a user with a single device is still told about: the
+    // catch-up scan of the inbox. Everything else this tracker watches is
+    // traffic between the user's devices, and there is none - but the inbox
+    // holds messages from other people, sent while the app was closed, and
+    // until the scan comes back they are missing from the chat list. That scan
+    // was measured taking from 15 to 88 seconds (2026-09-11), which is a long
+    // time to look at an app that appears to be fully up and simply has
+    // nothing new to show.
+    //
+    // Counts are dropped with it: `pending` here would be phantoms and journal
+    // rows, which is the very thing not to report to this user.
+    return (view.phase === 'catch-up')
+      ? { ...view, pending: 0, stalled: false }
+      : idleViewOf(atSeq);
   }
 
   function publish(): void {

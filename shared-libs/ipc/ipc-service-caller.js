@@ -6087,6 +6087,31 @@ function argsToPassedDatum(args, pack) {
         return serializeArgs(args);
     }
 }
+/**
+ * Reports a failure of an observer callback where it can actually be read.
+ *
+ * `console.error` alone meant nothing in the background component: its
+ * production bundle is built with `drop: ['console']` (ci/build-deno.js), so
+ * an exception thrown out of `observer.complete` - the callback that ends a
+ * call when its window closes - disappeared without trace.
+ */
+function reportObserverFailure(msg, err) {
+    try {
+        console.error(msg, err);
+    }
+    catch (e) {
+        // no console in this build
+    }
+    try {
+        var logged = w3n && w3n.log && w3n.log('error', msg, err);
+        if (logged && logged.catch) {
+            logged.catch(function () { });
+        }
+    }
+    catch (e) {
+        // logging must never be the thing that throws here
+    }
+}
 function makeReqRepMethodCaller(connection, method, transforms) {
     return (async (...args) => {
         const req = argsToPassedDatum(args, transforms === null || transforms === void 0 ? void 0 : transforms.packRequest);
@@ -6107,11 +6132,11 @@ function makeObservableMethodCaller(connection, method, transforms) {
                     const res = obs.next(ev);
                     if (res && typeof res.catch === 'function') {
                         res.catch(err => {
-                            console.error(`Error in observer.next async for method ${method}:`, err);
+                            reportObserverFailure(`Error in observer.next async for method ${method}:`, err);
                         });
                     }
                 } catch (err) {
-                    console.error(`Error in observer.next for method ${method}:`, err);
+                    reportObserverFailure(`Error in observer.next for method ${method}:`, err);
                 }
             },
             complete: () => {
@@ -6122,11 +6147,11 @@ function makeObservableMethodCaller(connection, method, transforms) {
                     const res = obs.complete();
                     if (res && typeof res.catch === 'function') {
                         res.catch(err => {
-                            console.error(`Error in observer.complete async for method ${method}:`, err);
+                            reportObserverFailure(`Error in observer.complete async for method ${method}:`, err);
                         });
                     }
                 } catch (err) {
-                    console.error(`Error in observer.complete for method ${method}:`, err);
+                    reportObserverFailure(`Error in observer.complete for method ${method}:`, err);
                 }
             },
             error: err => {
@@ -6137,11 +6162,11 @@ function makeObservableMethodCaller(connection, method, transforms) {
                     const res = obs.error(err);
                     if (res && typeof res.catch === 'function') {
                         res.catch(asyncErr => {
-                            console.error(`Error in observer.error async for method ${method}:`, asyncErr);
+                            reportObserverFailure(`Error in observer.error async for method ${method}:`, asyncErr);
                         });
                     }
                 } catch (syncErr) {
-                    console.error(`Error in observer.error for method ${method}:`, syncErr);
+                    reportObserverFailure(`Error in observer.error for method ${method}:`, syncErr);
                 }
             }
         };

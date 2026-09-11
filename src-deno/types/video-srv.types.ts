@@ -20,7 +20,7 @@ import type {
   WebRTCMsg,
   WebRTCOffBandMessage,
 } from '../../types/asmail-msgs.types.ts';
-import type { VideoChatEvent } from '../../types/services.types.ts';
+import type { CallStateForGui, VideoChatEvent } from '../../types/services.types.ts';
 import type { ChatDbEntry } from '../types/index.ts';
 
 export type WebRTCSignalHandler = (msg: ChatIncomingMessage) => Promise<void>;
@@ -52,6 +52,12 @@ export type MakePeerChannelsInChat = (chatId: ChatIdObj, peer: string) => WebRTC
 export interface VideoComponentInstance {
   focusWindow(): Promise<void>;
   endCall(): Promise<void>;
+  /**
+   * Drops the RPC connection to the window, once the call it served is over.
+   * Called from end(), which also forgets the instance: a handle to a closed
+   * window is worse than no handle, because it looks usable.
+   */
+  close(): void;
   getListenerForChannelTo(peer: string): WebRTCSignalListener;
   /**
    * Reports a signal that the platform failed to deliver to `peer`, so the window
@@ -165,6 +171,11 @@ export interface VideoChatSrv {
     chatId: ChatIdObj, join: boolean, sender?: string, expectedCallSessionId?: string,
   ): Promise<{ handled: boolean; callSessionId?: string }>;
   endVideoCallInChatRoom(chatId: ChatIdObj): Promise<void>;
+  /**
+   * Snapshot of every call known here, for a GUI catching up on events it
+   * never heard. See CallStateForGui.
+   */
+  getCallsState(): Promise<CallStateForGui[]>;
   watchVideoChats(obs: web3n.Observer<VideoChatEvent>): () => void;
   /**
    * Whether any call is going on (or ringing) right now, in any chat. Lets

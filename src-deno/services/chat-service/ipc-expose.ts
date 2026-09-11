@@ -14,8 +14,10 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import type { ChatSrv } from '../../types/chat-srv.types.ts';
+import type { ChatSrv, ChatSrvOverIPC } from '../../types/chat-srv.types.ts';
+import type { ComponentStatus } from '../../../types/services.types.ts';
 import { MultiConnectionIPCWrap } from '../../../shared-libs/ipc/ipc-service.js';
+import { componentStatus } from '../../utils/startup-progress.ts';
 
 const REQ_REPLY_METHODS: (keyof ChatSrv)[] = [
   'getAppDeviceId',
@@ -130,12 +132,47 @@ function facadeOver<T>(
  */
 export function exposeChatServiceOnIPC(chats: Promise<ChatSrv>): () => void {
   const srvWrapInternal = new MultiConnectionIPCWrap('AppChatsInternal');
-  const facade = facadeOver(chats, REQ_REPLY_METHODS, OBSERVABLE_METHODS);
+  const facade = facadeOver(chats, REQ_REPLY_METHODS, OBSERVABLE_METHODS) as ChatSrvOverIPC;
 
-  srvWrapInternal.exposeReqReplyMethods(facade, REQ_REPLY_METHODS);
+  // Deliberately NOT behind facadeOver: every method there awaits the real
+  // service, and a call that waits forever is exactly the state this one has
+  // to be able to report on. Answering from the process's own state is what
+  // lets the GUI tell "still opening its databases" from "will never answer"
+  // - a distinction it had no way to make on 2026-09-10, when a connection
+  // handshake succeeded against a component that had stopped hours earlier.
+  facade.ping = async () => (pingSilenced ? neverAnswers<ComponentStatus>() : componentStatus());
+
+  const exposed: (keyof ChatSrvOverIPC)[] = [...REQ_REPLY_METHODS, 'ping'];
+
+  // Only on the test stand, and only because the property this file exists for
+  // cannot be checked any other way: that `ping` answers while an ordinary
+  // call is stuck. The platform gives no `testStand` to a production run, so
+  // these never reach one.
+  if ((w3n as { testStand?: unknown }).testStand) {
+    facade.hangForTest = (millis: number) => new Promise<void>(
+      resolve => setTimeout(resolve, millis),
+    );
+    facade.stopPingForTest = async (silenced: boolean) => {
+      pingSilenced = silenced;
+    };
+    exposed.push('hangForTest', 'stopPingForTest');
+  }
+
+  srvWrapInternal.exposeReqReplyMethods(facade, exposed);
   srvWrapInternal.exposeObservableMethods(facade, OBSERVABLE_METHODS);
 
   return srvWrapInternal.startIPC();
+}
+
+/**
+ * Test stand only: makes `ping` behave like a component that has stopped -
+ * the call is accepted and never answered, which is exactly what a frozen
+ * component looks like from the window (2026-09-10).
+ */
+let pingSilenced = false;
+
+function neverAnswers<T>(): Promise<T> {
+  return new Promise<T>(() => {});
 }
 
 export { facadeOver };

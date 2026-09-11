@@ -25,6 +25,7 @@
   import { useAppStore } from '@main/common/store/app.store';
   import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
   import AppMenu from '@main/desktop/components/app-shell/app-menu.vue';
+  import BackendUnreachable from '@main/common/components/app-shell/backend-unreachable.vue';
 
   const {
     me,
@@ -121,6 +122,8 @@
     </div>
 
     <div id="notification" />
+
+    <backend-unreachable />
 
     <ui3n-dialog-provider />
   </div>
