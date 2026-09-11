@@ -33,7 +33,7 @@
 import { shallowRef, watch } from 'vue';
 import { useStreamsStore } from '@video/common/store/streams.store';
 import { makeLogger, setLogRelay } from '@shared/logger';
-import { makeBatchingLogRelay } from '@shared/log-relay';
+import { makeBatchingLogRelay, shouldRelayLogs } from '@shared/log-relay';
 import type {
   CallFromVideoGUI,
   ChatInfoForCall,
@@ -66,8 +66,17 @@ let flushLogRelay: (() => void) | undefined;
  * no outgoing RPC of its own - so lines written before that subscription (the
  * whole of the window's start-up) wait in the relay's buffer and go out with
  * the first batch after.
+ *
+ * Does nothing outside the test stand - see shouldRelayLogs() for why. In a
+ * production run this window's own `w3n.log` already puts every one of these
+ * lines into the platform's log file; what is lost with the relay is the
+ * `[GUI:video]` prefix, which is how the moment a frozen background component
+ * stopped answering was pinned down to the second.
  */
 export function startCallWindowLogRelay(): void {
+  if (!shouldRelayLogs(w3n as { testStand?: unknown })) {
+    return;
+  }
   const { relay, flush } = makeBatchingLogRelay(() => (
     guiRequestSink
       ? lines => guiRequestSink!({ type: 'gui-log', lines })

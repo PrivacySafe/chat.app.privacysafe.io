@@ -35,6 +35,31 @@
 
 export type LogLevel = 'error' | 'info' | 'warning';
 
+/**
+ * Whether this run should relay a window's lines to the background at all.
+ *
+ * Only on the test stand, and the reason is in the header above: the relay is
+ * there to put the three parts of the app into one readable stream, and that
+ * stream exists only on the stand. In a production run every window has
+ * `logToPlatform` of its own, so both copies of a line land in the same file -
+ * proven on 2026-09-11, where each call-window line appears twice, once plain
+ * and once as `[GUI:video] ...`.
+ *
+ * The duplicate is not just noise. It travels through the background component,
+ * which writes it out with one awaited `w3n.log` per line into the same channel
+ * to the core that the component's main thread was found blocked in when it
+ * froze mid-call. Diagnostics must not be among the things loading the thing
+ * they are there to explain.
+ *
+ * Takes w3n rather than reading the global, so that a spec can state both
+ * answers without a platform under it.
+ */
+export function shouldRelayLogs(
+  w3nLike: { testStand?: unknown } | undefined,
+): boolean {
+  return !!w3nLike?.testStand;
+}
+
 /** One relayed line. Everything in it is already a string, and so sendable. */
 export interface GuiLogLine {
   level: LogLevel;

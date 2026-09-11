@@ -346,25 +346,48 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
       startIndex: -1,
       member: null,
     };
-    inputEl.value!.focus();
+    inputEl.value?.focus();
   }
 
   function setMessageListElementRect(el: Nullable<HTMLDivElement>) {
     messageListElementRect.value = el ? el.getBoundingClientRect() : undefined;
   }
 
+  /**
+   * The list element is replaced whenever chat-messages is remounted, so the
+   * listener comes off the old one before it goes onto the new: without that,
+   * every remount left one more subscription on a detached element, all of them
+   * still firing into this composable.
+   */
   function onMessageListElementInit(value: Nullable<HTMLDivElement>) {
+    messageListElement.value?.removeEventListener('scroll', onMessageListScroll);
     messageListElement.value = value;
     setMessageListElementRect(value);
-    messageListElement.value!.addEventListener('scroll', onMessageListScroll);
+    value?.addEventListener('scroll', onMessageListScroll);
   }
 
+  /**
+   * Read into locals and give up when there is no list yet.
+   *
+   * Not only a scroll handler: the watcher on window height below calls this
+   * too, and that watcher runs from the moment the chat route is rendered -
+   * while chat-messages waits behind `v-if` for its messages to arrive. The
+   * first resize callback of a window opened on a chat route therefore lands on
+   * an empty ref, and on 2026-09-11 that was the TypeError in the console of a
+   * window whose background component had stopped answering, so the list was
+   * never going to arrive at all.
+   */
   function onMessageListScroll() {
-    whetherShowButtonDown.value =
-      messageListElement.value!.scrollHeight - LIST_EDGE_THRESHOLD_PX >
-      messageListElementRect.value!.height + messageListElement.value!.scrollTop;
+    const el = messageListElement.value;
+    const rect = messageListElementRect.value;
+    if (!el || !rect) {
+      return;
+    }
 
-    if (messageListElement.value!.scrollTop <= LIST_EDGE_THRESHOLD_PX) {
+    whetherShowButtonDown.value =
+      el.scrollHeight - LIST_EDGE_THRESHOLD_PX > rect.height + el.scrollTop;
+
+    if (el.scrollTop <= LIST_EDGE_THRESHOLD_PX) {
       void loadOlderMessagesKeepingPosition();
     }
   }
@@ -456,7 +479,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     if (msg && msg.chatMessageType === 'regular') {
       initialMessageType.value = 'forward';
       initialMessage.value = msg;
-      inputEl.value!.focus();
+      inputEl.value?.focus();
     }
   }
 
@@ -705,7 +728,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   function prepareReplyMessage(msg: RegularMsgView) {
     initialMessageType.value = 'reply';
     initialMessage.value = msg;
-    inputEl.value!.focus();
+    inputEl.value?.focus();
   }
 
   function startEditMsgMode(msg: RegularMsgView) {
@@ -713,7 +736,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     editableMessage.value.body = restoreRawMessage(msg.body);
 
     msgText.value = restoreRawMessage(msg.body);
-    inputEl.value!.focus();
+    inputEl.value?.focus();
   }
 
   function isMsgEmpty() {
@@ -1011,7 +1034,9 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     // Before anything else: an unmounted media element is not a stopped one.
     recordingPlayback.stopCurrent();
     routeQueryWatching.stop();
-    messageListElement.value!.removeEventListener('scroll', onMessageListScroll);
+    // Optional: a chat left before its messages arrived never mounted the list,
+    // and unmounting must not throw on the way out of a chat that showed none.
+    messageListElement.value?.removeEventListener('scroll', onMessageListScroll);
 
     // Not awaited: unmounting cannot wait on storage, and there is nothing to
     // do with the outcome besides logging it, which the call itself does.

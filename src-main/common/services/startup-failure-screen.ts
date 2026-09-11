@@ -78,9 +78,10 @@ export function showStartupProgress(rootId: string, text: string): void {
 /**
  * The dead end: what happened, and the two things that are worth doing about
  * it. Retry reloads the window - the service callers are bound to their
- * connection for good and cannot reconnect - and closing the app is the other
- * honest option, since in the incident only a full restart of the platform app
- * brought the component back.
+ * connection for good and cannot reconnect - and the other button closes this
+ * window, which is all a component can do for itself: a background component
+ * that has stopped answering outlives every window of its app, and only a full
+ * restart of the platform app brings it back.
  */
 export function showStartupFailure(
   rootId: string,
@@ -113,7 +114,7 @@ export function showStartupFailure(
 
   const close = document.createElement('button');
   close.className = 'app-init-btn app-init-btn--secondary';
-  close.textContent = t('app.startup.closeApp');
+  close.textContent = t('app.startup.closeWindow');
   close.addEventListener('click', o.onClose);
   actions.appendChild(close);
 

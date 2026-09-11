@@ -1,7 +1,7 @@
 {
   "name": "Chat",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.12.17",
+  "version": "0.12.18",
   "icon": "logo.png",
   "description": "Send secure text messages, share files or start a video meeting.",
 
@@ -11,7 +11,6 @@
       "runtime": "web-gui",
       "formFactor": ["desktop", "tablet"],
       "capsRequested": {
-        "apps": "opener",
         "logToPlatform": true,
         "mailerid": true,
         "mail": {
@@ -85,7 +84,6 @@
       "runtime": "web-gui",
       "formFactor": "phone",
       "capsRequested": {
-        "apps": "opener",
         "logToPlatform": true,
         "mailerid": true,
         "mail": {

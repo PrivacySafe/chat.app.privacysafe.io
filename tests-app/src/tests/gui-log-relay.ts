@@ -18,6 +18,7 @@
 import { itCond } from '../libs-for-tests/jasmine-utils.js';
 import {
   makeLogRelayBuffer,
+  shouldRelayLogs,
   stringifyLogDetails,
   type GuiLogLine,
 } from '../../../shared-libs/log-relay.js';
@@ -80,6 +81,24 @@ describe(`Logs of the windows, on their way to the background`, () => {
     expect(() => stringifyLogDetails(cyclic))
       .withContext(`a logger must not fail on what it is asked to log`)
       .not.toThrow();
+  }, 5000);
+
+  itCond(`runs on the test stand only`, async () => {
+    // In a production run each window's own logToPlatform already puts these
+    // lines into the platform's log file, so the relayed copy is a duplicate -
+    // and a duplicate that the background component writes out one awaited
+    // w3n.log at a time, into the channel its main thread was found blocked in
+    // when it froze mid-call on 2026-09-11.
+    expect(shouldRelayLogs({ testStand: {} }))
+      .withContext(`the stand is the one place the three streams are read as one`)
+      .toBeTrue();
+    expect(shouldRelayLogs({}))
+      .withContext(`a production run gets no testStand from the platform`)
+      .toBeFalse();
+    expect(shouldRelayLogs(undefined)).toBeFalse();
+    expect(shouldRelayLogs(w3n as { testStand?: unknown }))
+      .withContext(`and these specs themselves run on the stand`)
+      .toBeTrue();
   }, 5000);
 
 });

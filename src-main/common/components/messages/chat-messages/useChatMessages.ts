@@ -121,7 +121,9 @@ export default function useChatMessages(
   async function scrollList({ chatId }: AppGlobalEvents['message:sent'], motSmoothly?: boolean) {
     if (listElement.value && currentChatId.value?.chatId === chatId.chatId) {
       await nextTick(() => {
-        listElement.value!.scrollTo({
+        // Re-read rather than reuse the check above: a tick is long enough for
+        // the component to unmount, which empties the template ref.
+        listElement.value?.scrollTo({
           top: 1e12,
           left: 0,
           behavior: motSmoothly ? 'auto' : 'smooth',
@@ -563,13 +565,22 @@ export default function useChatMessages(
     }
   }
 
+  /**
+   * Kept so unmounting can cancel it: this fires a tenth of a second after a
+   * chat is switched to, which is long enough for the user to leave the chat
+   * again, and it runs into a component that is no longer there.
+   */
+  let showMessagesTimerId: ReturnType<typeof setTimeout> | undefined = undefined;
+
   watch(
     chatId,
     (val, oldVal) => {
       if (val && val !== oldVal) {
         showMessages.value = false;
         messagesAreProcessing.value = [];
-        setTimeout(() => {
+        clearTimeout(showMessagesTimerId);
+        showMessagesTimerId = setTimeout(() => {
+          showMessagesTimerId = undefined;
           showMessages.value = true;
           scrollList({ chatId: currentChatId.value! }, true);
         }, 100);
@@ -588,6 +599,7 @@ export default function useChatMessages(
   });
 
   onBeforeUnmount(() => {
+    clearTimeout(showMessagesTimerId);
     bus.$emitter.off('message:sent', scrollList);
     bus.$emitter.off('message:added', scrollList);
   });

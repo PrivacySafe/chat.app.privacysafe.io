@@ -70,7 +70,7 @@ export async function startMainWindow(
     log.error(`App is not started, as its services could not be reached`, err);
     showStartupFailure(rootId, {
       title: t('app.startup.unreachableTitle'),
-      details: t('app.startup.unreachableText'),
+      details: t('app.startup.connectFailedText'),
       onRetry: () => location.reload(),
       onClose: () => w3n.closeSelf!(),
     });

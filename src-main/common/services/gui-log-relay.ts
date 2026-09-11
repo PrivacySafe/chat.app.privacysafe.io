@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { chatService } from '@main/common/services/external-services';
-import { makeBatchingLogRelay } from '@shared/log-relay';
+import { makeBatchingLogRelay, shouldRelayLogs } from '@shared/log-relay';
 import { setLogRelay } from '@shared/logger';
 import { wrapWithTimeout } from '@shared/processes/timeouts';
 
@@ -29,8 +29,13 @@ const LOG_RELAY_TIMEOUT_MILLIS = 10_000;
  * Called once the services are up: `chatService` is the channel, and the relay
  * asks for it on every flush rather than capturing it, so a batch written
  * before the connection existed still goes out with the first one after.
+ *
+ * Does nothing outside the test stand - see shouldRelayLogs() for why.
  */
 export function startMainWindowLogRelay(): void {
+  if (!shouldRelayLogs(w3n as { testStand?: unknown })) {
+    return;
+  }
   const { relay, flush } = makeBatchingLogRelay(() => (
     chatService
       ? lines => {

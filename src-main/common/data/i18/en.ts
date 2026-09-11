@@ -50,10 +50,20 @@ export const en = {
       stillStarting: 'The chat background service is still starting ({stage})…',
       unreachableTitle: 'The chat background service is not responding',
       unreachableText: 'The app cannot reach the service it keeps your chats in. '
-        + 'Restarting the app usually fixes this.',
+        + 'Check whether it answers again.',
+      // The pre-mount screen's own wording: there the connect itself failed, so
+      // there is no component to ask, and its Retry is a plain reload.
+      connectFailedText: 'The app could not connect to the service it keeps '
+        + 'your chats in. If a retry does not help, close PrivacySafe '
+        + 'completely and start it again.',
+      stillUnreachableText: 'The service still does not answer. Reloading this '
+        + 'window will not help: it reconnects to the same background process. '
+        + 'Close PrivacySafe completely and start it again.',
       failedTitle: 'The chat background service failed to start',
+      failedText: 'The service reported a failed start: {reason}',
+      checking: 'Checking…',
       retry: 'Retry',
-      closeApp: 'Close the app',
+      closeWindow: 'Close this window',
       listNotLoaded: 'The chat list could not be loaded.',
     },
     menu: {
