@@ -1,9 +1,17 @@
 {
   "name": "Chat",
   "appDomain": "chat.app.privacysafe.io",
-  "version": "0.12.20",
+  "version": "0.12.21",
   "icon": "logo.png",
   "description": "Send secure text messages, share files or start a video meeting.",
+
+  "publisher": "Ivy Cyber",
+  "website": "https://privacysafe.app",
+  "contact": "support@ivycyber.com",
+  "policy": "https://ivycyber.com/privacy",
+  "terms": "https://ivycyber.com/terms",
+  "license": "AGPL-3.0-or-later",
+  "source": "https://github.com/PrivacySafe/chat.app.privacysafe.io",
 
   "components": {
     "/index.html": {
