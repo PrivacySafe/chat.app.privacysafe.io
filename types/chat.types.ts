@@ -33,7 +33,10 @@ export type ChatMenuAction =
   | 'history:clean'
   | 'chat:close'
   | 'chat:timer'
-  | 'chat:delete';
+  | 'chat:delete'
+  | 'contact:block'
+  | 'contact:unblock'
+  | 'contact:manage-blocks';
 
 export interface ChatMenuItem {
   icon: string;
@@ -291,13 +294,7 @@ export interface MsgsDeletionResult {
 export type IncomingMessageStatus = 'read' | 'unread';
 
 export type OutgoingMessageStatus =
-  | 'ready_to_send'
-  | 'sending'
-  | 'syncing_self'
-  | 'sent'
-  | 'error'
-  | 'canceled'
-  | 'read';
+  'ready_to_send' | 'sending' | 'syncing_self' | 'sent' | 'error' | 'canceled' | 'read';
 
 export type MessageStatus = IncomingMessageStatus | OutgoingMessageStatus;
 

@@ -61,6 +61,7 @@
         >
           <ui3n-icon
             :icon="item.icon"
+            color="var(--color-icon-control-primary-default)"
             :class="$style.icon"
           />
 
@@ -126,10 +127,6 @@
         animation: bounce-once 0.4s ease-in-out forwards;
       }
     }
-  }
-
-  .icon {
-    color: var(--color-icon-control-secondary-default);
   }
 
   @keyframes bounce-once {

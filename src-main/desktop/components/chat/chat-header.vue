@@ -17,24 +17,30 @@
 
 <script lang="ts" setup>
   import { computed } from 'vue';
-  import { Ui3nButton, Ui3nHtml } from '@v1nt1248/3nclient-lib';
-  import { useChatHeader } from '@main/common/composables/useChatHeader.ts';
-  import { useRouting } from '@main/desktop/composables/useRouting.ts';
-  import { getChatName } from '@main/common/utils/chat-ui.helper.ts';
-  import type { ChatMessageView, ChatListItemView } from '~/index.ts';
+  import { Ui3nButton, Ui3nIcon, Ui3nHtml } from '@v1nt1248/3nclient-lib';
+  import { useChatHeader } from '@main/common/composables/useChatHeader';
+  import { useRouting } from '@main/desktop/composables/useRouting';
+  import { type ChatBlockingState, blockingIconFor, getChatName } from '@main/common/utils/chat-ui.helper';
+  import type { ChatMessageView, ChatListItemView } from '~/index';
   import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
   import ChatHeaderActions from './chat-header-actions.vue';
 
   const vUi3nHtml = Ui3nHtml;
 
-  const props = defineProps<{
-    chat: ChatListItemView;
-    messages: ChatMessageView[];
-    readonly?: boolean;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      chat: ChatListItemView;
+      messages: ChatMessageView[];
+      /** Who in this chat is blocked, and whether that is everyone but the user. */
+      blockingState?: ChatBlockingState;
+      readonly?: boolean;
+    }>(),
+    { blockingState: () => ({ blockedMembers: [], allOthersBlocked: false }) },
+  );
 
   const chatVal = computed(() => props.chat);
   const chatMessagesVal = computed(() => props.messages);
+  const blockingIcon = computed(() => blockingIconFor(props.blockingState));
 
   const { goToChatsRoute } = useRouting();
 
@@ -65,12 +71,21 @@
 
 <template>
   <div :class="$style.chatHeader">
-    <chat-avatar
-      :name="getChatName(props.chat)"
-      :shape="isGroupChat ? 'decagon' : 'circle'"
-      :call-in-progress="chatWithCall"
-      :settings="chat.settings"
-    />
+    <div :class="$style.chatHeaderAvatar">
+      <chat-avatar
+        :name="getChatName(props.chat)"
+        :shape="isGroupChat ? 'decagon' : 'circle'"
+        :call-in-progress="chatWithCall"
+        :settings="chat.settings"
+      />
+
+      <ui3n-icon
+        v-if="blockingIcon"
+        :icon="blockingIcon"
+        color="var(--warning-content-default)"
+        :class="$style.banned"
+      />
+    </div>
 
     <div :class="$style.chatHeaderContent">
       <div :class="$style.chatHeaderName">
@@ -181,6 +196,18 @@
     align-items: center;
     padding: 0 var(--spacing-m);
     column-gap: var(--spacing-s);
+  }
+
+  .chatHeaderAvatar {
+    position: relative;
+    width: fit-content;
+
+    .banned {
+      position: absolute;
+      top: -4px;
+      right: -2px;
+      z-index: 1;
+    }
   }
 
   .chatHeaderContent {

@@ -27,6 +27,9 @@ import { startStageFirst } from '../video-chat-service/utils/_common.ts';
 import { MAX_SIGNAL_AGE_MILLIS } from '../video-chat-service/utils/call-state.ts';
 import { INBOX_COMMIT_BATCH, INBOX_SCAN_FLOOR_MS, MAX_WATERMARK_LAG } from '../../../shared-libs/constants/index.ts';
 import { makeLogger } from '../../../shared-libs/logger.ts';
+import { areAddressesEqual } from '../../../shared-libs/address-utils.ts';
+import { removeMessageFromInbox } from '../../utils/inbox-utils.ts';
+import type { BlacklistTracker } from '../contacts-service/contacts-blacklist.ts';
 import { startupStage } from '../../utils/startup-progress.ts';
 
 const log = makeLogger('InboxDispatcher');
@@ -65,17 +68,21 @@ export function isSyncPhantomFromOtherDevice(
  * - Managing message queues for sequential processing
  */
 export async function inboxDispatcher({
+  ownAddr,
   chatsSrv,
   videoChatSrv,
   localDataStoreSrv,
   db,
   syncActivity,
+  blacklistTracker,
 }: {
+  ownAddr: string;
   chatsSrv: ChatSrv;
   videoChatSrv: VideoChatSrv;
   localDataStoreSrv: LocalDataStore;
   db: DB;
   syncActivity: SyncActivityTracker;
+  blacklistTracker: BlacklistTracker;
 }): Promise<{ stop: () => void }> {
   const chatMsgsQueue: ChatIncomingMessage[] = [];
 
@@ -353,6 +360,7 @@ export async function inboxDispatcher({
     const webrtcCandidates: Array<{ msg: ChatIncomingMessage; webrtcMsg: WebRTCMsg }> = [];
     let queuedChat = 0;
     let stale = 0;
+    let blacklisted = 0;
     let failed = 0;
     // Phantoms are counted apart, and those of this very device apart from the
     // rest: two app instances started on one data folder share a device id, and
@@ -375,6 +383,17 @@ export async function inboxDispatcher({
           failed += 1;
           failureFloor.recordFailure(deliveryTS);
           log.error(`Catch-up scan: getMsg(${msgId}) returned nothing (deliveryTS: ${deliveryTS})`);
+          continue;
+        }
+        if (!areAddressesEqual(msg.sender, ownAddr) && blacklistTracker.isBlacklisted(msg.sender)) {
+          blacklisted += 1;
+          log.info(
+            `Catch-up scan: message ${msgId} from blacklisted sender ${msg.sender} ignored; removing from server inbox`,
+          );
+          await removeMessageFromInbox(msgId).catch(err =>
+            w3n.log('error', `Fail to remove blacklisted inbox message ${msgId}`, err),
+          );
+          chatMsgsCommitter.recordProcessed(deliveryTS);
           continue;
         }
         log.debug(
@@ -418,7 +437,7 @@ export async function inboxDispatcher({
       `Catch-up scan handled ${listMessages.length} message(s): ${queuedChat} queued as chat `
         + `(${syncPhantoms} sync phantom(s), ${ownSyncPhantoms} of them from this device `
         + `${thisDeviceId}), ${webrtcCandidates.length} webrtc, ${stale} stale call sysmsg(s), `
-        + `${failed} failed to fetch`,
+        + `${blacklisted} blacklisted, ${failed} failed to fetch`,
     );
 
     // Ensure 'start' is handed to VideoChatSrv before any 'signalling'/
@@ -444,7 +463,22 @@ export async function inboxDispatcher({
       }
       seenMsgIds.add(msgId);
 
-      const { jsonBody } = msg as ChatIncomingMessage;
+      const incomingChatMsg = msg as ChatIncomingMessage;
+      if (!areAddressesEqual(incomingChatMsg.sender, ownAddr) && blacklistTracker.isBlacklisted(incomingChatMsg.sender)) {
+        log.info(
+          `Incoming message ${msgId} from blacklisted sender ${incomingChatMsg.sender} ignored; removing from server inbox`,
+        );
+        removeMessageFromInbox(msgId).catch(err =>
+          w3n.log('error', `Fail to remove blacklisted inbox message ${msgId}`, err),
+        );
+        chatMsgsCommitter.recordProcessed(incomingChatMsg.deliveryTS);
+        chatMsgsProc
+          .startOrChain(processQueuedChatMsg)
+          .catch(err => w3n.log('error', `Chat message queue run failed`, err));
+        return;
+      }
+
+      const { jsonBody } = incomingChatMsg;
 
       if (jsonBody?.chatMessageType === 'webrtc-call') {
         const webrtcBody = jsonBody as ChatWebRTCMsgV1;

@@ -269,6 +269,15 @@ export async function localDataStore(): Promise<LocalDataStore> {
     return () => clearInterval(interval);
   }
 
+  function getCachedBlacklist(): string[] | undefined {
+    return Array.isArray(data.cachedBlacklist) ? [...data.cachedBlacklist] : undefined;
+  }
+
+  async function setCachedBlacklist(list: string[]): Promise<void> {
+    data.cachedBlacklist = [...list];
+    await saveOrderly();
+  }
+
   await initialize();
 
   return {
@@ -281,5 +290,7 @@ export async function localDataStore(): Promise<LocalDataStore> {
     hasSeenOtherDevice,
     noteOtherDeviceSeen,
     nextCallSessionId,
+    getCachedBlacklist,
+    setCachedBlacklist,
   };
 }

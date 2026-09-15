@@ -439,6 +439,33 @@ export interface CallMsgBodySysMsgData {
   };
 }
 
+/**
+ * The user blocked, or unblocked, a contact they share a chat with.
+ *
+ * Purely local, and both halves of that are load-bearing. Such a record is
+ * NEVER sent to peers - the blocked side is not told - and it is NEVER put
+ * into a sync phantom either: the blacklist itself is replicated by the
+ * contacts app, so the watcher fires on every device of the user and each one
+ * writes its own record. Synchronizing on top of that would duplicate the line
+ * and would put an event onto the wire that older builds do not know.
+ *
+ * `mail` is the canonical address, so that the record can be matched against
+ * the blacklist without guessing how it was spelled when it was written.
+ */
+export interface ContactBlockedSysMsgData {
+  event: 'contact:blocked';
+  value: {
+    mail: string;
+  };
+}
+
+export interface ContactUnblockedSysMsgData {
+  event: 'contact:unblocked';
+  value: {
+    mail: string;
+  };
+}
+
 export interface WebRTCMsgBodySysMsgData {
   event: 'webrtc-call';
   value: {
@@ -538,6 +565,8 @@ export type ChatSystemMessageData =
   | AcceptedMsgBodySysMsgData
   | CallMsgBodySysMsgData
   | WebRTCMsgBodySysMsgData
+  | ContactBlockedSysMsgData
+  | ContactUnblockedSysMsgData
   | ResyncMsgRecordSysMsgData
   | RestoreSnapshotSysMsgData;
 

@@ -35,4 +35,15 @@ export interface LocalDataStore {
   hasSeenOtherDevice(): boolean;
   noteOtherDeviceSeen(deviceId: string): Promise<void>;
   nextCallSessionId(hostAddr: string): Promise<string>;
+  /**
+   * The blacklist as it was last seen, or undefined when none was ever stored.
+   *
+   * The two answers must stay distinguishable: an empty list means "nobody was
+   * blocked when we last looked", while undefined means "we have never looked".
+   * The blacklist tracker turns the first into a delta and the second into a
+   * baseline - conflating them would make the first run of a build read every
+   * already-blocked contact as blocked just now.
+   */
+  getCachedBlacklist(): string[] | undefined;
+  setCachedBlacklist(list: string[]): Promise<void>;
 }

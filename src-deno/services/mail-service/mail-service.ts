@@ -16,6 +16,7 @@
 */
 import type { ChatSrv, DB, LocalDataStore, VideoChatSrv } from '../../types/index.ts';
 import type { SyncActivityTracker } from '../../utils/sync-activity.ts';
+import type { BlacklistTracker } from '../contacts-service/contacts-blacklist.ts';
 import { inboxDispatcher } from './inbox-dispatcher.ts';
 import { deliveryMonitor } from './delivery-monitor.ts';
 import { startDeliveryReconcile } from './delivery-reconcile.ts';
@@ -35,6 +36,7 @@ export async function mailService({
   chatsSrv,
   videoChatSrv,
   syncActivity,
+  blacklistTracker,
 }: {
   ownAddr: string;
   db: DB;
@@ -42,6 +44,7 @@ export async function mailService({
   chatsSrv: ChatSrv;
   videoChatSrv: VideoChatSrv;
   syncActivity: SyncActivityTracker;
+  blacklistTracker: BlacklistTracker;
 }) {
   const appDeviceId = localDataStoreSrv.getAppDeviceId();
 
@@ -56,11 +59,13 @@ export async function mailService({
   const inbox = await startupStage(
     'mail/inbox-dispatcher',
     () => inboxDispatcher({
+      ownAddr,
       chatsSrv,
       videoChatSrv,
       localDataStoreSrv,
       db,
       syncActivity,
+      blacklistTracker,
     }),
     15000,
   );
@@ -94,6 +99,7 @@ export async function mailService({
       inbox.stop();
       delivery.stop();
       reconcile.stop();
+      blacklistTracker.stop();
     },
   };
 }

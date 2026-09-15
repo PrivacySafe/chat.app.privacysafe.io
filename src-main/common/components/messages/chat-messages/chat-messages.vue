@@ -27,6 +27,7 @@
   export interface ChatMessagesProps {
     chat: ChatListItemView;
     messages: ChatMessageView[];
+    blockedMembers: string[];
     readonly?: boolean;
   }
 
@@ -133,6 +134,7 @@
               "
               :related-message="(msg as RegularMsgView).relatedMessage"
               :is-origin-device="checkIsOriginDevice(msg)"
+              :blocked-members="blockedMembers"
               @select="selectMessage"
             />
           </template>

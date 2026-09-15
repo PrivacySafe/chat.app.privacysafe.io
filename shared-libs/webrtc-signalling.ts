@@ -45,6 +45,7 @@ import type {
 import type { DeliveryApiForConfirmation } from './asmail-utils.ts';
 import { sendMsgWithDeliveryConfirmation } from './asmail-utils.ts';
 import { sleep } from './processes/sleep.ts';
+import { withoutBlockedRecipients } from './blocked-recipients.ts';
 import { makeLogger } from './logger.ts';
 
 const log = makeLogger('WebRTCSignalling');
@@ -303,8 +304,15 @@ function queuedAddMsg(
   deliveryId: string,
   opts: web3n.asmail.DeliveryOptions,
 ): Promise<void> {
+  // Nothing is signalled to a blocked address; see blocked-recipients.ts, and
+  // note that only the deno component registers a filter there.
+  const allowedRecipients = withoutBlockedRecipients(recipients);
+  if (allowedRecipients.length === 0) {
+    return Promise.resolve();
+  }
+
   const turn = sendChain.then(
-    () => w3n.mail!.delivery.addMsg(recipients, msg, deliveryId, opts),
+    () => w3n.mail!.delivery.addMsg(allowedRecipients, msg, deliveryId, opts),
   );
   sendChain = turn.then(
     () => sleep(SIGNAL_SEND_SPACING_MS),

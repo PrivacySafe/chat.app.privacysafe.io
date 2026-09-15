@@ -26,6 +26,7 @@ import { chatIdToString, generateChatMessageId } from '../../../../shared-libs/c
 import { registerHeartbeatDelivery } from './heartbeat-delivery.ts';
 import { sendWebRTCSignal } from '../../../../shared-libs/webrtc-signalling.ts';
 import { sendSystemDeletableMessage } from '../../mail-sending-service/index.ts';
+import { withoutBlockedRecipients } from '../../../../shared-libs/blocked-recipients.ts';
 import { MAX_CALL_PARTICIPANTS } from '../constants.ts';
 import { makeLogger } from '../../../../shared-libs/logger.ts';
 
@@ -94,6 +95,15 @@ export async function sendHeartbeat(
    */
   stillNeeded?: () => boolean,
 ): Promise<void> {
+  // A blocked participant is told nothing about a call in progress, here as in
+  // every other send; see shared-libs/blocked-recipients.ts. This call reaches
+  // the platform directly rather than through the sending service, so it has
+  // to ask for itself.
+  const allowedRecipients = withoutBlockedRecipients(recipients);
+  if (allowedRecipients.length === 0) {
+    return;
+  }
+
   const webrtcMsg: WebRTCMsg = {
     stage: 'heartbeat',
     // A real send stamp, like every other signal: the receiver measures the
@@ -142,7 +152,7 @@ export async function sendHeartbeat(
   // Not routed through sendWebRTCSignal(): a heartbeat goes to *many*
   // recipients in one delivery, while a signal is always addressed to one peer.
   try {
-    await w3n.mail!.delivery.addMsg(recipients, msg, deliveryId, {
+    await w3n.mail!.delivery.addMsg(allowedRecipients, msg, deliveryId, {
       sendImmediately: true,
       localMeta: {
         chatId,

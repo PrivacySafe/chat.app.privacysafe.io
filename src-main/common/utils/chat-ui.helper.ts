@@ -21,6 +21,7 @@ import { useContactsStore } from '@main/common/store/contacts.store';
 import { useAppStore } from '@main/common/store/app.store';
 import { AUTO_DELETE_MESSAGES_BY_ID } from '@shared/constants';
 import { callCancelWording } from '@shared/call-record-wording';
+import { toCanonicalAddress } from '@shared/address-utils';
 import {
   AttachmentRecordingInfo,
   ChatListItemView,
@@ -29,13 +30,96 @@ import {
   ChatSysMsgView,
   ChatInvitationMsgView,
   OneToOneChatParameters,
+  SingleChatView,
+  GroupChatView,
   SingleChatStatus,
   GroupChatStatus,
   CallMsgBodySysMsgData,
   WebRTCMsgBodySysMsgData,
+  ContactBlockedSysMsgData,
+  ContactUnblockedSysMsgData,
   UpdatedChatSettingsSysMsgData,
 } from '~/index';
 import type { RecordingKind } from '@shared/constants/media-recording';
+
+export interface ChatBlockingState {
+  /** Blocked participants of the chat, as canonical addresses, never the user's own. */
+  blockedMembers: string[];
+  /**
+   * Everyone else in this chat is blocked, so there is nobody left to write to.
+   *
+   * False for a chat with no other participants at all: an emptied group is
+   * closed for other reasons (`no-members`), and calling that "all blocked"
+   * would be a statement about nobody.
+   */
+  allOthersBlocked: boolean;
+}
+
+type ChatForBlocking =
+  | Pick<GroupChatView, 'isGroupChat' | 'members'>
+  | Pick<SingleChatView, 'isGroupChat' | 'peerAddr'>;
+
+/**
+ * Who in this chat is blocked, and whether that is everybody but the user.
+ *
+ * Both answers come from one function because they are read off the same list
+ * and must agree: the mark on the avatar and the ban on typing are two sides
+ * of the same fact.
+ *
+ * `isBlacklisted` is passed in rather than taken from the store here, so that
+ * callers already holding it (a list item rendering many chats, say) do not
+ * each reach for the store again.
+ */
+export function chatBlockingStateOf(
+  chat: ChatForBlocking,
+  isBlacklisted: (mail: string) => boolean,
+  ownAddr: string | undefined,
+): ChatBlockingState {
+  const others = otherParticipantsOf(chat, ownAddr);
+  const blockedMembers = others.filter(addr => isBlacklisted(addr));
+
+  return {
+    blockedMembers,
+    allOthersBlocked: others.length > 0 && blockedMembers.length === others.length,
+  };
+}
+
+function otherParticipantsOf(chat: ChatForBlocking, ownAddr: string | undefined): string[] {
+  if (chat.isGroupChat) {
+    const members = (chat as GroupChatView).members ?? {};
+    const ownCAddr = ownAddr ? toCanonicalAddress(ownAddr) : undefined;
+    return Object.keys(members)
+      .map(addr => toCanonicalAddress(addr))
+      .filter(addr => addr !== ownCAddr);
+  }
+
+  const peerAddr = (chat as SingleChatView).peerAddr;
+  return peerAddr ? [toCanonicalAddress(peerAddr)] : [];
+}
+
+/**
+ * The icon marking a chat with blocked participants, or undefined when it has
+ * none.
+ *
+ * Two icons rather than one, because one would be saying different things. A
+ * padlock means the whole chat is shut: nothing can be written into it. That is
+ * true of a one-to-one chat with a blocked peer, and equally true of a group in
+ * which every other member is blocked. A group with only some of them blocked
+ * is still a chat the user writes in, so it gets an information mark instead,
+ * meaning "somebody here is blocked".
+ *
+ * Deliberately not keyed off `readonly`: that is also raised for a chat not yet
+ * accepted, or one left by everybody, which has nothing to do with blocking.
+ */
+export function blockingIconFor({
+  blockedMembers,
+  allOthersBlocked,
+}: ChatBlockingState): 'round-lock' | 'round-info' | undefined {
+  if (blockedMembers.length === 0) {
+    return undefined;
+  }
+  return allOthersBlocked ? 'round-lock' : 'round-info';
+}
 
 export function getChatName(chat: ChatListItemView): string {
   const { name, isGroupChat } = chat;
@@ -192,6 +276,19 @@ export function getTextForChatSystemMessage(
     case 'call': {
       const { sender, direction } = systemData.value as CallMsgBodySysMsgData['value'];
       return direction === 'incoming' ? t('va.text.incoming_call', { sender }) : t('va.text.outgoing_call');
+    }
+
+    case 'contact:blocked': {
+      const { mail } = systemData.value as ContactBlockedSysMsgData['value'];
+      // getContactName falls back to the address itself, which is exactly what
+      // is wanted for somebody who is not in the address book under a name.
+      return `${t('chat.contact.notification.blocked.part1', { name: getContactName(mail) })} `
+        + `${t('chat.contact.notification.blocked.part2')}`;
+    }
+
+    case 'contact:unblocked': {
+      const { mail } = systemData.value as ContactUnblockedSysMsgData['value'];
+      return t('chat.contact.notification.unblocked', { name: getContactName(mail) });
     }
 
     case 'webrtc-call': {

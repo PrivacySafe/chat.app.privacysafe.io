@@ -51,4 +51,10 @@ export interface DeliveryServiceData {
     deviceId: string;
     at: number;
   };
+  /**
+   * Cached blacklist of contact email addresses persisted so that Deno can
+   * immediately filter incoming messages on startup without waiting for RPC
+   * to the contacts app.
+   */
+  cachedBlacklist?: string[];
 }

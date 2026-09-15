@@ -18,6 +18,7 @@ import type { ChatIdObj, ChatIncomingMessage, ChatSystemMessageData, WebRTCMsg, 
 import type { IncomingCallCmdArg, OpenChatCmdArg } from '../../../types/chat-commands.types.ts';
 import type { CallStateForGui, ChatInfoForCall, VideoChatEvent } from '../../../types/services.types.ts';
 import type { CallInChat, ChatDbEntry, ChatSrv, ChatSrvEmit, DB, LocalDataStore, MsgDbEntry, VideoChatSrv } from '../../types/index.ts';
+import type { BlacklistTracker } from '../contacts-service/contacts-blacklist.ts';
 import { MultiConnectionIPCWrap } from '../../../shared-libs/ipc/ipc-service.js';
 import { facadeOver } from '../chat-service/ipc-expose.ts';
 import { ObserversSet } from '../../../shared-libs/observer-utils.ts';
@@ -118,6 +119,7 @@ export async function videoChatService(
   db: DB,
   emit: ChatSrvEmit,
   localDataStore: LocalDataStore,
+  blacklistTracker?: BlacklistTracker,
 ): Promise<{ videoChatSrv: VideoChatSrv; stopVideoChatSrv: () => void }> {
   const videoChatsObs = new ObserversSet<VideoChatEvent>();
   const appSettings = new AppSettings();
@@ -1354,6 +1356,14 @@ export async function videoChatService(
         msgId,
         `Incoming WebRTC chat message ${msgId} failed body check. Removing it from inbox.`,
       ).catch(err => w3n.log('error', `Failed to remove malformed WebRTC message`, err));
+      return;
+    }
+
+    if (blacklistTracker && !areAddressesEqual(sender, ownAddr) && blacklistTracker.isBlacklisted(sender)) {
+      removeMessageFromInbox(
+        msgId,
+        `Incoming WebRTC message ${msgId} is from blacklisted sender ${sender}. Removing it from inbox.`,
+      ).catch(err => w3n.log('error', `Failed to remove blacklisted WebRTC message ${msgId}`, err));
       return;
     }
 

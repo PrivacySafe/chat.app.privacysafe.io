@@ -13,6 +13,9 @@ This is an overview companion to the Russian documentation set. Detailed documen
 | [05-video-calls.md](./05-video-calls.md) | Star-topology video calls (initiator hosts), signalling, SFU relay, heartbeat/re-join |
 | [06-ui-architecture.md](./06-ui-architecture.md) | Vue 3 + Pinia, desktop and phone form factors, backend→UI event flow |
 | [07-build-test-run.md](./07-build-test-run.md) | Build (Vite + Deno bundle), test app, running on the platform |
+| [08-backup-and-restore.md](./08-backup-and-restore.md) | History archive and restore: format, layering, `merge`/`replace`, announcing it to the user's other devices |
+| [09-attachment-streaming.md](./09-attachment-streaming.md) | Viewing media attachments: chunked reads with progress and cancellation, early playback over MSE |
+| [10-contact-blocking.md](./10-contact-blocking.md) | Blocking a contact: the blacklist owned by the contacts app, filters on the way in and out, purely local history records, the marks in the UI |
 
 ## What the app is
 

@@ -16,7 +16,9 @@
 -->
 <script lang="ts" setup>
 import { computed, type VNode } from 'vue';
-import { Ui3nLongPress as vUi3nLongPress } from '@v1nt1248/3nclient-lib';
+import { useI18n } from 'vue-i18n';
+import { Ui3nIcon, Ui3nLongPress as vUi3nLongPress } from '@v1nt1248/3nclient-lib';
+import { useContactsStore } from '@main/common/store/contacts.store';
 import type { PersonView } from '~/index';
 import ContactIcon from './contact-icon.vue';
 
@@ -34,8 +36,32 @@ defineSlots<{
   extra?: (props: { contactId: string, mail: string }) => VNode;
 }>();
 
+const { t } = useI18n();
+const { isBlacklisted } = useContactsStore();
+
 const contactIconSize = 36;
 const contactIconSizeCss = computed(() => `${contactIconSize}px`);
+
+/**
+ * A blocked contact is shown, but cannot be picked: starting a chat with
+ * somebody one has blocked would make a chat that can neither send nor receive.
+ * Marked rather than hidden, so that its absence from the choice is explained.
+ */
+const isBlocked = computed(() => isBlacklisted(props.contact.mail));
+
+/**
+ * Blocking bars picking somebody, never un-picking them.
+ *
+ * In the group's "edit members" list a click is a toggle, and the members of
+ * the chat come in already selected. Barring every blocked contact there would
+ * take away the one thing an admin certainly may do with a blocked member -
+ * remove them from the chat - and leave them in it for good.
+ */
+const isSelectable = computed(() => !props.readonly && (!isBlocked.value || props.selected));
+
+const blockedHint = computed(() =>
+  isSelectable.value ? t('chat.contact.blocked.inChat') : t('chat.contact.blocked.mark'),
+);
 
 const contactElId = computed(() => {
   const parts = props.contact.mail.split('@');
@@ -58,9 +84,10 @@ function onClickRight() {
     :class="[
       $style.contactListItem,
       withoutAnchor && $style.withoutAnchor,
-      readonly && $style.readonly,
+      !isSelectable && $style.readonly,
+      isBlocked && !isSelectable && $style.blocked,
     ]"
-    v-on="readonly ? {} : { click: onClick }"
+    v-on="isSelectable ? { click: onClick } : {}"
     @click.right="onClickRight"
   >
     <contact-icon
@@ -73,6 +100,16 @@ function onClickRight() {
     <span :class="[$style.name, selected && $style.nameSelected]">
       {{ contact.displayName }}
     </span>
+
+    <ui3n-icon
+      v-if="isBlocked"
+      icon="outline-account-off-circle"
+      color="var(--warning-content-default)"
+      :width="16"
+      :height="16"
+      :title="blockedHint"
+      :class="$style.bannedIcon"
+    />
 
     <div
       v-if="$slots.extra"
@@ -122,6 +159,17 @@ function onClickRight() {
 
 .readonly {
   cursor: default;
+}
+
+/* Dimmed as well as marked: the icon says why, the dimming says it is out. */
+.blocked {
+  .name {
+    color: var(--color-text-control-secondary-default);
+  }
+}
+
+.bannedIcon {
+  flex-shrink: 0;
 }
 
 .name {

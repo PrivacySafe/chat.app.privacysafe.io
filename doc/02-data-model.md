@@ -517,6 +517,7 @@ flowchart LR
 | `appDeviceId` | `<formFactor>-<random20>`, создаётся один раз при первом запуске ([local-data-store.ts:33-38](../src-deno/services/local-data-store/local-data-store.ts#L33-L38)) |
 | `lastReceivedMessageTimestamp` | watermark inbox: с какого момента сканировать при старте |
 | `lastSyncClockTs` | состояние гибридных логических часов ([04-multi-device-sync.md](./04-multi-device-sync.md#2-гибридные-логические-часы)) |
+| `cachedBlacklist` | чёрный список, каким его видели в прошлый раз: даёт фильтру входящих работать с первой секунды, до подключения к приложению контактов, и позволяет отличить изменения, случившиеся при закрытом приложении, от первого запуска ([10-contact-blocking.md §2](./10-contact-blocking.md#2-blacklisttracker)) |
 
 Запись — через `SingleProc` с флагом «нужно сохранить», то есть подряд идущие изменения
 сливаются в одну запись файла

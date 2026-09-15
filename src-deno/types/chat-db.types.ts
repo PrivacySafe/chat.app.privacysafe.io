@@ -83,5 +83,14 @@ export interface ChatsDb {
     toUpdate: Partial<GroupChatDbEntry>,
   ): Promise<GroupChatDbEntry | undefined>;
   getChatList(): ChatDbEntry[];
+  /**
+   * Chats this address takes part in - the one-to-one chat with it, and every
+   * group chat it is a member of.
+   *
+   * Apart from getChatList() because that one asks the messages db for a last
+   * message and an unread count of every chat, and a caller that only wants to
+   * know where an address appears has no use for either.
+   */
+  getChatsWithParticipant(cAddr: string): ChatIdObj[];
   deleteChat(chatId: ChatIdObj): Promise<RefsToMsgsDataNoInDB | undefined>;
 }

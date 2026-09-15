@@ -46,9 +46,11 @@ import type {
 } from '../../types/index.ts';
 import { createChatEvents } from './events.ts';
 import type { GuiLogLine } from '../../../shared-libs/log-relay.ts';
-import { includesAddress } from '../../../shared-libs/address-utils.ts';
+import { areAddressesEqual, includesAddress } from '../../../shared-libs/address-utils.ts';
 import { fileStoreService } from '../file-store-service/file-store-service.ts';
 import { AppSettings } from '../../utils/app-settings.ts';
+import type { BlacklistTracker } from '../contacts-service/contacts-blacklist.ts';
+import { contactBlockingRecords } from './utils/contact-blocking-records.ts';
 import { makeDbRecordException } from '../../utils/exceptions.ts';
 import { checkAddressExistenceForASMail, ensureAllAddressesExist } from '../../utils/address-checks.ts';
 import {
@@ -113,6 +115,7 @@ export async function chatService(
   ownAddr: string,
   localDataStoreSrv: LocalDataStore,
   data: DB,
+  blacklistTracker?: BlacklistTracker,
 ): Promise<{ chatsSrv: ChatSrv; syncActivity: SyncActivityTracker }> {
   const filesStore = await fileStoreService();
   const appSettings = new AppSettings();
@@ -304,6 +307,13 @@ export async function chatService(
       return await removeMessageFromInbox(
         msg.msgId,
         `Incoming chat message ${msg.msgId} failed body check. Removing it from inbox.`,
+      );
+    }
+
+    if (blacklistTracker && !areAddressesEqual(msg.sender, ownAddr) && blacklistTracker.isBlacklisted(msg.sender)) {
+      return await removeMessageFromInbox(
+        msg.msgId,
+        `Incoming chat message ${msg.msgId} is from blacklisted sender ${msg.sender}. Removing it from inbox.`,
       );
     }
 
@@ -933,6 +943,7 @@ export async function chatService(
       resyncCtx.isBusy = isBusy;
     },
     syncLocallyMadeSystemEvent,
+    getBlacklistedAddresses: async () => blacklistTracker?.getBlacklist() ?? [],
     getLatestIncomingMsgTimestamp: data.getLatestIncomingMsgTimestamp,
     getMessage,
     getMessagesByChat,
@@ -957,6 +968,22 @@ export async function chatService(
     watch,
     onIncomingCallSysMsg,
   };
+
+  // A change of the blacklist leaves its mark in the chats of the contact it
+  // is about. Registered here, before the tracker is started in index.ts: a
+  // change arriving with no handler in place is not replayed.
+  if (blacklistTracker) {
+    const { handleBlacklistChanges } = contactBlockingRecords({
+      data,
+      emit: emitEventAfterAction,
+      ownAddr,
+    });
+    blacklistTracker.setChangeHandler(changes => {
+      handleBlacklistChanges(changes).catch(err =>
+        w3n.log('error', `Fail to write contact blocking records`, err),
+      );
+    });
+  }
 
   // IPC exposure is NOT done here: it must happen at the very start of the
   // component (see index.ts), long before this service can be constructed.

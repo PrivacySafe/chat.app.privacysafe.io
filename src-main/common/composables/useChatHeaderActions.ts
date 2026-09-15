@@ -17,9 +17,11 @@
 import { computed, type ComputedRef, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
+import { useContactsStore } from '@main/common/store/contacts.store';
 import { useChatStore } from '@main/common/store/chat.store';
 import { chatMenuItems } from '@main/common/constants';
-import type { ChatListItemView, ChatMenuItem } from '~/index';
+import { toCanonicalAddress } from '@shared/address-utils';
+import { ChatListItemView, ChatMenuItem, SingleChatView } from '~/index';
 
 export function useChatHeaderActions(
   props: ComputedRef<{ chat: ChatListItemView; chatWithCall?: boolean; disabled?: boolean }>,
@@ -27,6 +29,8 @@ export function useChatHeaderActions(
 ) {
   const { t } = useI18n();
 
+  const contactsStore = useContactsStore();
+  const { isBlacklisted } = contactsStore;
   const { currentChat, isAdminOfGroupChat } = storeToRefs(useChatStore());
 
   const isMenuOpen = ref(false);
@@ -75,7 +79,22 @@ export function useChatHeaderActions(
 
         return i.chatTypes.includes('single');
       })
-      .filter(i => i.action !== 'chat:delete' || (i.action === 'chat:delete' && canLeaveAndDeleteChat.value))
+      .filter(i => {
+        if (['contact:block', 'contact:unblock'].includes(i.action)) {
+          // Only one of the pair is ever offered, and neither without a peer to
+          // be about: the filter above lets these through whenever there is no
+          // current chat at all, which is not the same as a one-to-one one.
+          const peerAddr = (currentChat.value as SingleChatView | undefined)?.peerAddr;
+          if (!peerAddr) {
+            return false;
+          }
+
+          const isPeerBlacklisted = isBlacklisted(toCanonicalAddress(peerAddr.toLowerCase()));
+          return i.action === 'contact:block' ? !isPeerBlacklisted : isPeerBlacklisted;
+        }
+
+        return i.action !== 'chat:delete' || (i.action === 'chat:delete' && canLeaveAndDeleteChat.value);
+      })
       .map(i => ({
         ...i,
         id: i.action.replaceAll(':', ''),

@@ -20,6 +20,7 @@
 
 import { generateOutgoingMsgId } from '../../../shared-libs/chat-ids.ts';
 import { flushDb } from '../../dataset/db-flush.ts';
+import { withoutBlockedRecipients } from '../../../shared-libs/blocked-recipients.ts';
 import type {
   ChatIdObj,
   ChatInvitationMsgV1,
@@ -67,6 +68,24 @@ export async function addMessageToDeliveryList(
     chatMessageType === 'synchronization' ? 'sync_' : undefined,
   );
 
+  // Blocked addresses are dropped here rather than where each caller builds
+  // its recipient list; see blocked-recipients.ts. Sync phantoms address the
+  // user's own address, which cannot be in the blacklist, so they pass through.
+  const allowedRecipients = withoutBlockedRecipients(recipients);
+  if (allowedRecipients.length === 0) {
+    // Nothing is handed to the platform: a delivery with no recipients has
+    // nothing to do, and what it would report back is not defined. The id is
+    // still returned, so that a caller tracking this delivery keeps its
+    // contract - it simply never sees progress for it.
+    await w3n.log(
+      'info',
+      recipients.length === 0
+        ? `Delivery ${deliveryId} is not started: it was given no recipients`
+        : `Delivery ${deliveryId} is not started: every recipient of it is blocked (${recipients.join(', ')})`,
+    );
+    return deliveryId;
+  }
+
   try {
     // Database writes are batched, so make sure what this message reflects is
     // on disk before it goes out. Both directions matter: a phantom whose
@@ -75,7 +94,7 @@ export async function addMessageToDeliveryList(
     // message delivered but not saved is the worst outcome of all.
     await flushDb();
 
-    await w3n.mail!.delivery.addMsg(recipients, message, deliveryId, {
+    await w3n.mail!.delivery.addMsg(allowedRecipients, message, deliveryId, {
       sendImmediately: !message.attachments,
       localMeta,
     });

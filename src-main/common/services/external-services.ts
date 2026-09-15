@@ -49,21 +49,25 @@ async function connectToContactsApp(): Promise<ContactsService> {
       await sleep(CONTACTS_CONNECT_RETRY_DELAYS_MILLIS[attempt - 1]);
     }
     try {
-      const srvConn = await w3n.rpc!.otherAppsRPC!(
-        'contacts.app.privacysafe.io', 'AppContacts',
-      );
-      return makeServiceCaller<ContactsService>(srvConn, [
-        'getContact',
-        'getContactByMail',
-        'getContactList',
-        'addContact',
-        'upsertContact',
-      ]) as ContactsService;
+      const srvConn = await w3n.rpc!.otherAppsRPC!('contacts.app.privacysafe.io', 'AppContacts');
+      return makeServiceCaller<ContactsService>(
+        srvConn,
+        [
+          'getContact',
+          'getContactByMail',
+          'getContactList',
+          'getContactBlacklist',
+          'addContact',
+          'upsertContact',
+          'changeContactBlockingSettings',
+        ],
+        ['watchContactBlacklistChanging'],
+      ) as ContactsService;
     } catch (err) {
       lastErr = err;
       log.info(
-        `Attempt ${attempt + 1} to connect to the contacts app failed`
-          + `${(attempt < CONTACTS_CONNECT_RETRY_DELAYS_MILLIS.length) ? '; will try again' : ''}`,
+        `Attempt ${attempt + 1} to connect to the contacts app failed` +
+          `${attempt < CONTACTS_CONNECT_RETRY_DELAYS_MILLIS.length ? '; will try again' : ''}`,
         err,
       );
     }
@@ -130,6 +134,7 @@ export async function initializeServices() {
               'countPendingSyncPhantoms',
               'countSyncPhantomsInDelivery',
               'getSyncActivityState',
+              'getBlacklistedAddresses',
               'removeExpiredInboxMessages',
               'getMessage',
               'getMessagesByChat',
@@ -161,12 +166,7 @@ export async function initializeServices() {
         srvConn =>
           makeServiceCaller<VideoGUIOpener>(
             srvConn,
-            [
-              'startVideoCallForChatRoom',
-              'joinOrDismissCallInRoom',
-              'endVideoCallInChatRoom',
-              'getCallsState',
-            ],
+            ['startVideoCallForChatRoom', 'joinOrDismissCallInRoom', 'endVideoCallInChatRoom', 'getCallsState'],
             ['watchVideoChats'],
           ) as VideoGUIOpener,
       ),
@@ -177,9 +177,7 @@ export async function initializeServices() {
     // that this app must not wait for it. Kicking it off all the same, because
     // the cost has to be paid by somebody, and paying it in the background
     // beats paying it inside whatever first asks for a contact's name.
-    contactsSrv().catch(err => log.error(
-      `Contacts app is not reachable; names will show as addresses`, err,
-    ));
+    contactsSrv().catch(err => log.error(`Contacts app is not reachable; names will show as addresses`, err));
 
     console.info('<- SERVICES ARE INITIALIZED ->');
   } catch (err) {

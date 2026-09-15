@@ -268,9 +268,27 @@
     border-radius: var(--spacing-m);
   }
 
+  /*
+    A column that fills the dialog's body slot exactly, so that scrolling
+    happens in the list at the bottom of it and nowhere else.
+
+    The slot's own container scrolls (`overflow-y: auto` in ui3n-dialog), so
+    anything taller than it takes the whole panel - header, avatar and all -
+    with it. Percentage heights inside could not hold that down either: this
+    box used to have no height of its own, and `height: calc(100% - ...)` on
+    its children resolved against `auto`.
+
+    `min-height: 0` is what lets the list actually shrink: a flex item's floor
+    is its content, so without it the list grows to fit every member and pushes
+    the column past the dialog instead of scrolling.
+  */
   .chatInfoDialogBody {
     position: relative;
     width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
 
@@ -293,6 +311,7 @@
     position: relative;
     width: 100%;
     height: var(--chat-info-dialog-header-height);
+    flex-shrink: 0;
     padding: 0 var(--spacing-m);
     display: flex;
     justify-content: flex-start;
@@ -338,12 +357,16 @@
   .chatInfoDialogContent {
     position: relative;
     width: 100%;
-    height: calc(100% - var(--chat-info-dialog-header-height));
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .chatInfoDialogContentTitle {
     position: relative;
     width: 100%;
+    flex-shrink: 0;
     padding: var(--spacing-m);
     display: flex;
     justify-content: flex-start;
@@ -362,14 +385,17 @@
 
   .chatInfoDialogContentSearch {
     width: calc(100% - var(--spacing-l));
+    flex-shrink: 0;
     margin: 0 auto var(--spacing-m);
   }
 
+  /* The only scrolling box in the dialog, in both of its modes. */
   .chatInfoDialogUserList {
     position: relative;
     width: 100%;
     padding: 0 var(--spacing-m);
-    height: calc(100% - 112px);
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
   }
 

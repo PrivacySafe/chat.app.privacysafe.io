@@ -35,6 +35,8 @@ const props = defineProps<{
   prevMsgSender: string | undefined;
   prevMsgInfo: Nullable<{ isIncomingMsg?: boolean, status: MessageStatus | undefined }>;
   isOriginDevice?: boolean;
+  /** Passed through to the system record about a contact being blocked. */
+  blockedMembers?: string[];
 }>();
 const emits = defineEmits<{
   (event: 'click:right', value: MouseEvent): void;
@@ -166,6 +168,7 @@ onBeforeUnmount(() => {
     <chat-message-system
       v-if="isMsgSystem && !isInvitationRequest"
       :msg="msg"
+      :blocked-members="blockedMembers"
     />
 
     <chat-message-invitation-request

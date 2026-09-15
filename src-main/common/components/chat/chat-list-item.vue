@@ -23,6 +23,8 @@
   import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
   import { Ui3nBadge, Ui3nButton, Ui3nIcon, Ui3nHtml } from '@v1nt1248/3nclient-lib';
   import {
+    blockingIconFor,
+    chatBlockingStateOf,
     getChatNameHint,
     getTextForChatInvitationMessage,
     getTextForChatSystemMessage,
@@ -30,6 +32,7 @@
     recordingOfAttachments,
   } from '@main/common/utils/chat-ui.helper';
   import { useAppStore } from '@main/common/store/app.store';
+  import { useContactsStore } from '@main/common/store/contacts.store';
   import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
   import { useChatStore } from '@main/common/store/chat.store';
   import type { ChatListItemUiView, OutgoingMessageStatus } from '~/index';
@@ -46,6 +49,7 @@
   const { t } = useI18n();
   const { user: ownAddr } = storeToRefs(useAppStore());
   const { currentChatId } = storeToRefs(useChatStore());
+  const { isBlacklisted } = useContactsStore();
   const { toggleRinging, joinIncomingCall, dismissIncomingCall, endCall, rejoinCall } = useUiIncomingStore();
 
   const selectedChatId = computed<string>(() => (currentChatId.value ? currentChatId.value.chatId : ''));
@@ -59,6 +63,13 @@
   const isCallActive = computed(() => !!props.data.isCallActive);
 
   const nameHint = computed<string>(() => getChatNameHint(props.data));
+
+  // Same mark as the one on the avatar in the chat header: a padlock for a
+  // one-to-one chat with a blocked peer, an information mark for a group that
+  // merely has blocked members in it.
+  const blockingIcon = computed(() =>
+    blockingIconFor(chatBlockingStateOf(props.data, isBlacklisted, ownAddr.value)),
+  );
 
   const isLastMsgIncoming = computed(() => {
     if (!props.data.lastMsg) return true;
@@ -125,12 +136,21 @@
     :class="[$style.chatListItem, data.chatId === selectedChatId && $style.chatListItemSelected]"
     @click="emit('click', $event)"
   >
-    <chat-avatar
-      :name="data.displayName"
-      :shape="isGroupChat ? 'decagon' : 'circle'"
-      :call-in-progress="chatWithCall"
-      :settings="data.settings"
-    />
+    <div :class="$style.chatListItemAvatar">
+      <chat-avatar
+        :name="data.displayName"
+        :shape="isGroupChat ? 'decagon' : 'circle'"
+        :call-in-progress="chatWithCall"
+        :settings="data.settings"
+      />
+
+      <ui3n-icon
+        v-if="blockingIcon"
+        :icon="blockingIcon"
+        color="var(--warning-content-default)"
+        :class="$style.banned"
+      />
+    </div>
 
     <div :class="$style.chatListItemBody">
       <div :class="$style.chatListItemContent">
@@ -278,6 +298,19 @@
 
     &.chatListItemSelected {
       background-color: var(--color-bg-chat-bubble-general-bg);
+    }
+  }
+
+  .chatListItemAvatar {
+    position: relative;
+    width: fit-content;
+    flex-shrink: 0;
+
+    .banned {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      z-index: 1;
     }
   }
 

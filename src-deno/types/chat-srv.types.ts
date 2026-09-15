@@ -207,6 +207,15 @@ export interface ChatSrv {
     chatSystemData: ChatSystemMessageData,
   ): Promise<void>;
 
+  /**
+   * Blocked addresses as this component knows them, canonical.
+   *
+   * Answered from the blacklist tracker, which is warm from its cache before
+   * any RPC (see contacts-blacklist.ts), and exists so that the GUI need not
+   * wait for the contacts app to come up to learn who is blocked. Empty when
+   * the tracker has nothing yet.
+   */
+  getBlacklistedAddresses(): Promise<string[]>;
   getLatestIncomingMsgTimestamp(): number | undefined;
 
   getMessage(id: ChatMessageId): Promise<ChatMessageView | undefined>;

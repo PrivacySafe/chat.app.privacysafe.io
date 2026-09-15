@@ -45,6 +45,7 @@ const REQ_REPLY_METHODS: (keyof ChatSrv)[] = [
   'countPendingSyncPhantoms',
   'countSyncPhantomsInDelivery',
   'getSyncActivityState',
+  'getBlacklistedAddresses',
   'getLatestIncomingMsgTimestamp',
   'getMessage',
   'getMessagesByChat',

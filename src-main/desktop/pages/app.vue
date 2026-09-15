@@ -15,14 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import {
-    Ui3nDialogProvider,
-    Ui3nProgressLinear,
-    Ui3nResize as vUi3nResize,
-  } from '@v1nt1248/3nclient-lib';
+  import { Ui3nDialogProvider, Ui3nProgressLinear, Ui3nResize as vUi3nResize } from '@v1nt1248/3nclient-lib';
   import prLogo from '@main/common/assets/images/privacysafe-logo-new.svg';
   import { useAppView } from '@main/common/composables/useAppView';
-  import { useAppStore } from '@main/common/store/app.store';
   import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
   import AppMenu from '@main/desktop/components/app-shell/app-menu.vue';
   import BackendUnreachable from '@main/common/components/app-shell/backend-unreachable.vue';
@@ -38,16 +33,16 @@
     syncStalled,
     syncStatusText,
     showSyncStatus,
+    setAppWindowSize,
     openDashboard,
     runMenuAction,
     t,
   } = useAppView();
-  const appStore = useAppStore();
 </script>
 
 <template>
   <div
-    v-ui3n-resize="appStore.setAppWindowSize"
+    v-ui3n-resize="setAppWindowSize"
     :class="$style.app"
   >
     <div :class="$style.toolbar">
@@ -65,6 +60,7 @@
 
         <div :class="$style.info">
           {{ t('app.title') }}
+
           <div :class="$style.version">
             v {{ appVersion }}
           </div>

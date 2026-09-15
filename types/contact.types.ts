@@ -19,6 +19,7 @@ export interface ContactsService {
   getContact: (id: string) => Promise<Person | undefined>;
   getContactByMail: (mail: string) => Promise<Person | undefined>;
   getContactList: (withImage?: boolean) => Promise<Person[]>;
+  getContactBlacklist: (withImage?: boolean) => Promise<Person[]>;
   addContact: (contact: Omit<Person, 'timestamp'>) => Promise<
     | Person
     | {
@@ -33,6 +34,16 @@ export interface ContactsService {
         errorMessage: string;
       }
   >;
+  changeContactBlockingSettings: ({
+    id,
+    mail,
+    value,
+  }: {
+    id?: string;
+    mail?: string;
+    value: boolean;
+  }) => Promise<Person>;
+  watchContactBlacklistChanging: (obs: web3n.Observer<Person[]>) => () => void;
 }
 
 export interface PersonView {
@@ -62,4 +73,3 @@ export interface Person extends PersonView {
   phone?: string;
   activities?: string[];
 }
-

@@ -29,6 +29,8 @@ import {
 } from './utils/startup-progress.ts';
 import { dataset } from './dataset/index.ts';
 import { localDataStore } from './services/local-data-store/local-data-store.ts';
+import { createBlacklistTracker } from './services/contacts-service/contacts-blacklist.ts';
+import { setBlockedRecipientsFilter } from '../shared-libs/blocked-recipients.ts';
 import { chatService } from './services/chat-service/chat-service.ts';
 import { exposeChatServiceOnIPC } from './services/chat-service/ipc-expose.ts';
 import {
@@ -101,9 +103,19 @@ try {
   log.info(`app device id is ${appDeviceId}`);
   await localDataStoreSrv.setLastReceivedMessageTimestamp(latestIncomingMsgTS || 0);
 
+  const blacklistTracker = createBlacklistTracker(localDataStoreSrv);
+  // Outgoing messages are kept from blocked addresses at the one place every
+  // send funnels through; see blocked-recipients.ts for why it is a hook.
+  setBlockedRecipientsFilter(recipients => recipients.filter(addr => !blacklistTracker.isBlacklisted(addr)));
+
   const { chatsSrv, syncActivity } = await startupStage(
-    'chat-service', () => chatService(ownAddr, localDataStoreSrv, db), 30000,
+    'chat-service', () => chatService(ownAddr, localDataStoreSrv, db, blacklistTracker), 30000,
   );
+  // Started only now: chatService registers the handler that turns a change of
+  // the blacklist into system records, and a change arriving before it is in
+  // place is not replayed. Filtering of incoming messages does not wait for
+  // this - the tracker is warm from its cache the moment it is created.
+  blacklistTracker.start();
   // From here on the GUI's queued calls can run.
   chatSrvDeferred.resolve(chatsSrv);
 
@@ -153,7 +165,7 @@ try {
   const { videoChatSrv } = await startupStage(
     'video-chat-service',
     () => videoChatService(
-      ownAddr, chatsSrv, db, chatsSrv.emitEventsOutward, localDataStoreSrv,
+      ownAddr, chatsSrv, db, chatsSrv.emitEventsOutward, localDataStoreSrv, blacklistTracker,
     ),
     20000,
   );
@@ -216,6 +228,7 @@ try {
       chatsSrv,
       videoChatSrv,
       syncActivity,
+      blacklistTracker,
     }),
     20000,
   );

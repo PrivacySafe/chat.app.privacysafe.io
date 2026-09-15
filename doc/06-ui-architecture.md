@@ -132,7 +132,7 @@ flowchart TB
 | `chats` | список чатов, создание чатов, входящие звонки, обработка событий чатов | [chats.store.ts](../src-main/common/store/chats.store.ts) |
 | `chat` | текущий чат, отправка сообщений, переименование/удаление, участники и админы | [chat.store.ts](../src-main/common/store/chat.store.ts) |
 | `messages` | сообщения открытого чата, реакции, вложения, удаление, недавние реакции | [messages.store.ts](../src-main/common/store/messages.store.ts) |
-| `contacts` | список контактов из внешнего приложения | [contacts.store.ts](../src-main/common/store/contacts.store.ts) |
+| `contacts` | список контактов из внешнего приложения, чёрный список и блокировка ([10-contact-blocking.md §6](10-contact-blocking.md#6-интерфейс)) | [contacts.store.ts](../src-main/common/store/contacts.store.ts) |
 | `ui.incoming` | входящий звонок: рингтон, принять/отклонить, re-join | [ui.incoming.store.ts](../src-main/common/store/ui.incoming.store.ts) |
 | `ui.outgoing` | прогресс отправки по сообщениям | [ui.outgoing.store.ts](../src-main/common/store/ui.outgoing.store.ts) |
 
@@ -209,7 +209,8 @@ flowchart TB
 | Ввод и отправка | сборка текста, разметка упоминаний и ссылок, вызов `sendMessageInChat` | [useChatView.ts:497-575](../src-main/common/composables/useChatView.ts#L497-L575) |
 | Вложения | выбор через диалог, drag-and-drop, вставка из буфера, конвертация `File` → 3N-файл | [useChatView.ts:355-452](../src-main/common/composables/useChatView.ts#L355-L452) |
 | Упоминания | распознавание `@`, список участников, выбор клавишами | [useChatView.ts:126-281](../src-main/common/composables/useChatView.ts#L126-L281) |
-| Режим только чтение | статус чата / не принятое приглашение блокируют ввод | [useChatView.ts:169-182](../src-main/common/composables/useChatView.ts#L169-L182) |
+| Режим только чтение | статус чата, не принятое приглашение, а также **некому писать**: собеседник one-to-one чата заблокирован либо в группе заблокированы все остальные. Закрывает и вложения — диалог, перетаскивание, вставку из буфера | [useChatView.ts:232](../src-main/common/composables/useChatView.ts#L232) |
+| Заблокированные участники | кто из участников этого чата в чёрном списке и все ли это — считается один раз на весь экран и передаётся вниз | [useChatView.ts:203](../src-main/common/composables/useChatView.ts#L203) |
 | Прокрутка | к первому непрочитанному, кнопка «вниз» | [useChatView.ts:600-636](../src-main/common/composables/useChatView.ts#L600-L636) |
 | Смена чата | `doBeforeRouteUpdate` — отмена задач, сброс выделения, загрузка сообщений | [useChatView.ts:662-683](../src-main/common/composables/useChatView.ts#L662-L683) |
 

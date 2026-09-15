@@ -26,6 +26,8 @@
   const {
     t,
     me,
+    isOnline,
+    connectivityStatusText,
     runMenuAction,
     isSyncing,
     syncPending,
@@ -81,6 +83,16 @@
           {{ t('app.title') }}
         </div>
 
+        <div
+          :class="$style.status"
+          :title="t(connectivityStatusText)"
+        >
+          <span>{{ t('app.status.label') }}</span>
+
+          <b :class="isOnline && $style.ok" />
+        </div>
+
+        <!-- Out of the flow: its wording is long enough to squeeze the toolbar. -->
         <div
           v-if="showSyncStatus"
           :class="[$style.syncStatus, syncStalled && $style.syncStalled]"
@@ -189,13 +201,21 @@
     }
   }
 
+  /*
+    Spans the toolbar just above the progress bar, out of the flow: in the flow
+    its wording ("Catching up on messages…") pushed the title off centre.
+  */
   .syncStatus {
-    flex: 0 1 auto;
-    min-width: 0;
-    padding: 0 var(--spacing-m);
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 2px;
+    padding: 0 var(--spacing-s);
+    text-align: center;
+    pointer-events: none;
     font-size: var(--font-12);
     font-weight: 500;
-    line-height: var(--font-20);
+    line-height: var(--font-14);
     color: var(--color-text-control-secondary-default);
     white-space: nowrap;
     overflow: hidden;
@@ -204,6 +224,34 @@
 
   .syncStalled {
     color: var(--warning-content-default);
+  }
+
+  /* The connectivity light, spelled as in the contacts and inbox apps. */
+  .status {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    font-size: var(--font-11);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--color-text-control-primary-default);
+    user-select: none;
+
+    b {
+      position: relative;
+      width: 12px;
+      min-width: 12px;
+      height: 12px;
+      min-height: 12px;
+      border-radius: 50%;
+      background-color: var(--warning-content-default);
+    }
+
+    .ok {
+      background-color: var(--success-content-default);
+    }
   }
 
   .syncProgress {

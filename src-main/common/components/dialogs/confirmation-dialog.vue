@@ -14,17 +14,29 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
-
 <script lang="ts" setup>
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { Ui3nDialog, type Ui3nDialogComponentProps, type Ui3nDialogEvent } from '@v1nt1248/3nclient-lib';
+  import {
+    Ui3nDialog,
+    Ui3nHtml,
+    type Ui3nDialogComponentProps,
+    type Ui3nDialogEvent,
+  } from '@v1nt1248/3nclient-lib';
 
-  const props = defineProps<{
-    dialogText?: string;
-    additionalDialogText?: string;
-    dialogProps?: Ui3nDialogComponentProps<boolean>;
-  }>();
+  const vUi3nHtml = Ui3nHtml;
+
+  const props = withDefaults(
+    defineProps<{
+      dialogText?: string;
+      additionalDialogText?: string;
+      dialogProps?: Ui3nDialogComponentProps<boolean>;
+    }>(),
+    {
+      dialogText: '',
+      additionalDialogText: '',
+    },
+  );
   const emits = defineEmits<{
     (event: 'action', value: { event: Ui3nDialogEvent; data?: boolean }): void;
   }>();
@@ -41,10 +53,8 @@
   >
     <template #body>
       <div :class="$style.confirmationDialog">
-        {{ text }}
-        <span v-if="additionalDialogText">
-          {{ additionalDialogText }}
-        </span>
+        <div v-ui3n-html="text" />
+        <span v-ui3n-html="additionalDialogText" />
       </div>
     </template>
   </ui3n-dialog>
@@ -57,5 +67,9 @@
     color: var(--color-text-block-primary-default);
     text-align: center;
     padding: var(--spacing-l) var(--spacing-m);
+
+    div {
+      margin-bottom: var(--spacing-m);
+    }
   }
 </style>

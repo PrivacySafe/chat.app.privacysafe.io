@@ -16,25 +16,39 @@
 -->
 <script lang="ts" setup>
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import { prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
-import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
+import { Ui3nButton, Ui3nIcon } from '@v1nt1248/3nclient-lib';
 import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from '@main/common/utils/chat-ui.helper';
 import { callCancelWording } from '@shared/call-record-wording';
+import { areAddressesEqual } from '@shared/address-utils';
 import { useAppStore } from '@main/common/store/app.store';
+import { useContactBlocking } from '@main/common/composables/useContactBlocking';
 import {
   CallMsgBodySysMsgData,
   ChatInvitationMsgView,
   ChatMessageView,
   ChatSysMsgView,
+  ContactBlockedSysMsgData,
   WebRTCMsgBodySysMsgData,
 } from '~/index';
 
-const props = defineProps<{
-  msg: ChatMessageView;
-}>();
+const props = withDefaults(
+  defineProps<{
+    msg: ChatMessageView;
+    /**
+     * Who is blocked right now, as canonical addresses. Computed once for the
+     * whole list (see useChatView) rather than asked of the store by every row.
+     */
+    blockedMembers?: string[];
+  }>(),
+  { blockedMembers: () => [] },
+);
 
+const { t } = useI18n();
 const { isMobileMode, user: ownAddr } = storeToRefs(useAppStore());
+const { runContactBlocking } = useContactBlocking();
 
 const data = computed(() => {
   const { chatMessageType } = props.msg;
@@ -44,6 +58,36 @@ const data = computed(() => {
 });
 
 const isSystemMsgByCall = computed(() => ['call', 'webrtc-call'].includes((data.value as ChatSysMsgView['systemData']).event));
+
+const isContactBlockedMsg = computed(
+  () => (data.value as ChatSysMsgView['systemData']).event === 'contact:blocked',
+);
+
+const isContactRelatedMsg = computed(() => isContactBlockedMsg.value || (data.value as ChatSysMsgView['systemData']).event === 'contact:unblocked');
+
+/**
+ * The address this record is about, or undefined when it is about something
+ * else entirely.
+ */
+const blockedContactMail = computed(() => {
+  const systemData = data.value as ChatSysMsgView['systemData'];
+  return systemData.event === 'contact:blocked'
+    ? (systemData as ContactBlockedSysMsgData).value.mail
+    : undefined;
+});
+
+/**
+ * The button is offered only while the block is still in force. A record of a
+ * block that has since been lifted stays in the history as it was written.
+ */
+const canUnblockContact = computed(() => {
+  const mail = blockedContactMail.value;
+  return !!mail && props.blockedMembers.some(addr => areAddressesEqual(addr, mail));
+});
+
+function unblockContact() {
+  return runContactBlocking(blockedContactMail.value!, false);
+}
 const isSystemMsgByMissedCall = computed(() => (data.value as ChatSysMsgView['systemData']).event === 'webrtc-call');
 const isSystemMsgByIncomingCall = computed(() => {
   if (!isSystemMsgByCall.value) {
@@ -116,6 +160,7 @@ const date = computed(() => {
       isMobileMode && $style.chatMessageSystemMobile,
       isSystemMsgByCall && $style.byCall,
       isSystemMsgByMissedCall && $style.warning,
+      isContactRelatedMsg && $style.contactRelatedMsg,
     ]"
   >
     <ui3n-icon
@@ -127,8 +172,32 @@ const date = computed(() => {
       :class="$style.icon"
     />
 
+    <ui3n-icon
+      v-if="isContactBlockedMsg"
+      icon="outline-account-off-circle"
+      color="var(--warning-content-default)"
+      :width="16"
+      :height="16"
+      :class="$style.icon"
+    />
+
     <div :class="$style.text">
       <span>{{ msgText }}</span>
+    </div>
+
+    <div
+      v-if="canUnblockContact"
+      :class="$style.unblockBtnBox"
+    >
+      <ui3n-button
+        type="custom"
+        :size="isMobileMode ? 'large' : 'small'"
+        color="var(--success-content-default)"
+        text-color="var(--success-fill-default)"
+        @click="unblockContact"
+      >
+        {{ t('dialog.button.unblock') }}
+      </ui3n-button>
     </div>
 
     <div :class="$style.date">
@@ -158,7 +227,7 @@ const date = computed(() => {
   user-select: none;
 
   &.chatMessageSystemMobile {
-    padding: var(--spacing-xs) var(--spacing-m);
+    padding: var(--spacing-s) var(--spacing-m);
   }
 
   &.byCall {
@@ -176,6 +245,26 @@ const date = computed(() => {
       }
     }
   }
+
+  &.contactRelatedMsg {
+    padding: 8px 12px;
+    border-radius: 20px;
+    background-color: var(--color-bg-chat-bubble-user-default);
+
+    &.chatMessageSystemMobile {
+      flex-direction: column;
+      align-items: center;
+      row-gap: var(--spacing-xs);
+
+      .date {
+        flex-grow: 0;
+      }
+
+      .unblockBtnBox {
+        order: 1;
+      }
+    }
+  }
 }
 
 .text {
@@ -185,6 +274,12 @@ const date = computed(() => {
     white-space: break-spaces;
     color: var(--color-text-block-secondary-default);
   }
+}
+
+.unblockBtnBox {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .date {

@@ -43,7 +43,7 @@
 | `shell.startAppCmds.thisApp` | `incoming-call`, `open-chat-with` ([237-239](../manifest.json#L237-L239)) | — | — |
 | `shell.fsResource` | `thisApp: ice-servers` + `ui-settings` лончера ([241-246](../manifest.json#L241-L246)) | `ui-settings` лончера ([25-29](../manifest.json#L25-L29)) | `ui-settings` лончера ([151-156](../manifest.json#L151-L156)) |
 | `appRPC` (кого может вызывать) | `VideoChatComponent` ([228](../manifest.json#L228)) | `AppChatsInternal`, `VideoGUIOpener` ([45](../manifest.json#L45)) | — |
-| `otherAppsRPC` | — | `contacts.app.privacysafe.io / AppContacts` ([46-51](../manifest.json#L46-L51)) | — |
+| `otherAppsRPC` | `contacts.app.privacysafe.io / AppContacts` ([253-258](../manifest.json#L253-L258)) | `contacts.app.privacysafe.io / AppContacts` ([51-56](../manifest.json#L51-L56)) | — |
 
 Следствия, важные при чтении кода:
 
@@ -384,10 +384,15 @@ observable **без реплея**, а `handle()` возвращается си�
 
 Основной GUI обращается к приложению контактов за именами и аватарами:
 [external-services.ts:32-41](../src-main/common/services/external-services.ts#L32-L41),
-контракт — [types/contact.types.ts:18-36](../types/contact.types.ts#L18-L36).
+контракт — [types/contact.types.ts:18-47](../types/contact.types.ts#L18-L47).
 Если контактов нет, отображаемое имя выводится из адреса — например
 [video-chat-service.ts:398-400](../src-deno/services/video-chat-service/video-chat-service.ts#L398-L400)
 и `getContactName()` в [use-in-calls.ts:112-119](../src-video/common/composables/use-in-calls.ts#L112-L119).
+
+**В это же приложение ходит и Deno-инстанс** — за чёрным списком: он решает, чьи входящие
+выбрасывать и кому не отправлять. Поэтому `otherAppsRPC` на `AppContacts` выдана обоим
+компонентам (таблица в §1.1), а подписок на `watchContactBlacklistChanging` две независимые —
+своя у бекенда, своя у GUI. Подробно — [10-contact-blocking.md](10-contact-blocking.md).
 
 ---
 

@@ -59,25 +59,34 @@ ASMail переносит сообщение как «конверт»: адре
 
 ### 1.1 Системные события
 
-`ChatSystemMessageData` — 14 вариантов
-([types/asmail-msgs.types.ts:359-373](../types/asmail-msgs.types.ts#L359-L373)):
+`ChatSystemMessageData` — 18 вариантов
+([types/asmail-msgs.types.ts:553-571](../types/asmail-msgs.types.ts#L553-L571)):
 
 | Событие | Смысл | Отображается в истории |
 |---|---|---|
-| `update:status` ([301](../types/asmail-msgs.types.ts#L301)) | «доставлено»/«прочитано» для конкретного сообщения | нет |
-| `update:msg-record` ([309](../types/asmail-msgs.types.ts#L309)) | авторитетный статус + `history` записи (только между своими устройствами) | нет |
-| `update:body` ([325](../types/asmail-msgs.types.ts#L325)) | правка текста сообщения | нет (меняет само сообщение) |
-| `update:reactions` ([317](../types/asmail-msgs.types.ts#L317)) | новый набор реакций | нет |
-| `delete:message` ([240](../types/asmail-msgs.types.ts#L240)) | удалить одно / несколько / всю историю | нет |
-| `update:chatName` ([269](../types/asmail-msgs.types.ts#L269)) | переименование чата | да |
-| `update:settings` ([276](../types/asmail-msgs.types.ts#L276)) | смена настроек (авто-удаление) | да |
-| `update:members` ([251](../types/asmail-msgs.types.ts#L251)) | изменение состава группы | да |
-| `update:admins` ([260](../types/asmail-msgs.types.ts#L260)) | изменение администраторов | да |
-| `member-left` ([283](../types/asmail-msgs.types.ts#L283)) | отправитель покинул чат | да |
-| `member-removed` ([293](../types/asmail-msgs.types.ts#L293)) | получателя исключили / чат удалён | да |
-| `accept:invitation` ([333](../types/asmail-msgs.types.ts#L333)) | приглашение принято | да |
-| `call` ([341](../types/asmail-msgs.types.ts#L341)) | запись о звонке (создаётся локально, наружу не уходит) | да |
-| `webrtc-call` ([350](../types/asmail-msgs.types.ts#L350)) | звонок отменён (исходящий/входящий) | да |
+| `update:status` ([374](../types/asmail-msgs.types.ts#L374)) | «доставлено»/«прочитано» для конкретного сообщения | нет |
+| `update:msg-record` ([382](../types/asmail-msgs.types.ts#L382)) | авторитетный статус + `history` записи (только между своими устройствами) | нет |
+| `resync:msg-record` ([419](../types/asmail-msgs.types.ts#L419)) | запрос переслать запись заново (только между своими устройствами) | нет |
+| `update:body` ([398](../types/asmail-msgs.types.ts#L398)) | правка текста сообщения | нет (меняет само сообщение) |
+| `update:reactions` ([390](../types/asmail-msgs.types.ts#L390)) | новый набор реакций | нет |
+| `delete:message` ([313](../types/asmail-msgs.types.ts#L313)) | удалить одно / несколько / всю историю | нет |
+| `update:chatName` ([342](../types/asmail-msgs.types.ts#L342)) | переименование чата | да |
+| `update:settings` ([349](../types/asmail-msgs.types.ts#L349)) | смена настроек (авто-удаление) | да |
+| `update:members` ([324](../types/asmail-msgs.types.ts#L324)) | изменение состава группы | да |
+| `update:admins` ([333](../types/asmail-msgs.types.ts#L333)) | изменение администраторов | да |
+| `member-left` ([359](../types/asmail-msgs.types.ts#L359)) | отправитель покинул чат | да |
+| `member-removed` ([369](../types/asmail-msgs.types.ts#L369)) | получателя исключили / чат удалён | да |
+| `accept:invitation` ([426](../types/asmail-msgs.types.ts#L426)) | приглашение принято | да |
+| `call` ([434](../types/asmail-msgs.types.ts#L434)) | запись о звонке (создаётся локально, наружу не уходит) | да |
+| `webrtc-call` ([470](../types/asmail-msgs.types.ts#L470)) | звонок отменён (исходящий/входящий) | да |
+| `contact:blocked` ([456](../types/asmail-msgs.types.ts#L456)) | контакт заблокирован (запись чисто локальная, см. [10-contact-blocking.md](10-contact-blocking.md)) | да |
+| `contact:unblocked` ([463](../types/asmail-msgs.types.ts#L463)) | контакт разблокирован (там же) | да |
+| `restore:snapshot` ([514](../types/asmail-msgs.types.ts#L514)) | кусок снимка при восстановлении из архива (см. [08-backup-and-restore.md](08-backup-and-restore.md)) | нет |
+
+Три из них — `call`, `contact:blocked` и `contact:unblocked` — **никогда не уходят пиру**: они
+описывают решение, принятое на этой стороне. Первое при этом синхронизируется на другие устройства
+пользователя фантомом, а два последних — нет, и почему именно, разобрано в
+[10-contact-blocking.md §5.1](10-contact-blocking.md#51-почему-они-не-синхронизируются-между-устройствами).
 
 Различие «отображается / не отображается» технически сводится к наличию `chatMessageId` в теле:
 только с ним событие получает запись в `messages` и попадает в ленту
@@ -123,6 +132,11 @@ flowchart TB
 - **Две независимые очереди**, каждая на своём `SingleProc`
   ([inbox-dispatcher.ts:40-44](../src-deno/services/mail-service/inbox-dispatcher.ts#L40-L44)):
   медленная обработка чата не задерживает латентно-критичный WebRTC-сигналинг.
+- **Сообщение от заблокированного отправителя до очередей не доходит**: оно удаляется с сервера
+  сразу и в базу не попадает — и в живом потоке
+  ([:467](../src-deno/services/mail-service/inbox-dispatcher.ts#L467)), и в catch-up-скане
+  ([:388](../src-deno/services/mail-service/inbox-dispatcher.ts#L388)). Кто заблокирован, знает
+  `BlacklistTracker` ([10-contact-blocking.md](10-contact-blocking.md)).
 - **Дедупликация по `seenMsgIds`**
   ([inbox-dispatcher.ts:56](../src-deno/services/mail-service/inbox-dispatcher.ts#L56)): одно и то
   же сообщение может попасть и в подписку, и в стартовое сканирование.
@@ -233,6 +247,12 @@ flowchart LR
 
 - Примитивы отправки — [sending-primitives.ts](../src-deno/services/mail-sending-service/sending-primitives.ts):
   `sendRegularMessage`, `sendSystemMessage`, `sendSystemDeletableMessage`, `sendChatInvitation`.
+- **Заблокированные адреса вычёркиваются из получателей прямо перед `addMsg`**
+  ([:74](../src-deno/services/mail-sending-service/sending-primitives.ts#L74)), а не там, где
+  каждый вызывающий собирает свой список: таких мест около двадцати, и пропустить одно — вопрос
+  времени. Если после этого получателей не осталось, доставка не начинается, но `deliveryId`
+  возвращается, чтобы вызывающий не терял свой контракт. Полностью —
+  [10-contact-blocking.md §4](10-contact-blocking.md#4-что-фильтруется-на-выходе).
 - Фантомы своим устройствам живут отдельно, в
   [sync-phantoms.ts](../src-deno/services/mail-sending-service/sync-phantoms.ts): они не отправляются
   напрямую, а записываются в журнал и выпускаются оттуда

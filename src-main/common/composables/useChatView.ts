@@ -35,7 +35,7 @@ import {
 } from '@v1nt1248/3nclient-lib/plugins';
 import { capitalize, formatFileSize, getFileExtension } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import type {
+import {
   ChatIdObj,
   ChatMessageAttachmentsInfo,
   ChatMessageId,
@@ -54,6 +54,7 @@ import { THUMBNAIL_CACHE_KEY, useThumbnailCache } from '@main/common/composables
 import { CHAT_STAGE_KEY, useChatStage } from '@main/common/composables/useChatStage';
 import { RECORDING_PLAYBACK_KEY, useRecordingPlayback } from '@main/common/composables/useRecordingPlayback';
 import { useAppStore } from '@main/common/store/app.store';
+import { useContactsStore } from '@main/common/store/contacts.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
@@ -65,7 +66,7 @@ import {
   prepareMessageBody,
   restoreRawMessage,
 } from '@main/common/utils/chats.helper';
-import { recordingExcerpt, recordingOfAttachments } from '@main/common/utils/chat-ui.helper';
+import { chatBlockingStateOf, recordingExcerpt, recordingOfAttachments } from '@main/common/utils/chat-ui.helper';
 import MessageDeleteDialog from '@main/common/components/dialogs/message-delete-dialog.vue';
 import ChatMediaRecorderDialog from '@main/common/components/dialogs/chat-media-recorder/chat-media-recorder-dialog.vue';
 import type { MediaRecordingResult } from '@main/common/components/dialogs/chat-media-recorder/useMediaRecorder';
@@ -144,6 +145,9 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
 
   const { user, appWindowSize, isMobileMode } = storeToRefs(useAppStore());
 
+  const contactsStore = useContactsStore();
+  const { isBlacklisted } = contactsStore;
+
   const chatsStore = useChatsStore();
   const { updateChatItemInList } = chatsStore;
 
@@ -196,6 +200,12 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
         })
       : [],
   );
+  const blockingState = computed(() =>
+    currentChat.value
+      ? chatBlockingStateOf(currentChat.value, isBlacklisted, user.value)
+      : { blockedMembers: [], allOthersBlocked: false },
+  );
+  const blockedMembers = computed(() => blockingState.value.blockedMembers);
 
   watch(
     () => size(filteredMembers.value),
@@ -223,14 +233,22 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   });
 
   const readonly = computed(() => {
-    return (
-      !currentChat.value ||
-      currentChat.value?.status === 'no-members' ||
-      (currentChat.value && ['initiated', 'invited'].includes(currentChat.value.status)) ||
-      (currentChat.value &&
-        currentChat.value.isGroupChat &&
-        !get(currentChat.value, ['members', user.value, 'hasAccepted']))
-    );
+    if (!currentChat.value) {
+      return true;
+    }
+
+    if (['initiated', 'invited', 'no-members'].includes(currentChat.value.status)) {
+      return true;
+    }
+
+    if (currentChat.value.isGroupChat && !get(currentChat.value, ['members', user.value, 'hasAccepted'])) {
+      return true;
+    }
+
+    // Nobody left to write to: the peer of a one-to-one chat is blocked, or
+    // every other member of a group is. A group with only some of them blocked
+    // stays writable - those are simply struck off the recipients when sending.
+    return blockingState.value.allOthersBlocked;
   });
 
   const sendBtnDisabled = computed<boolean>(() => {
@@ -384,8 +402,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
       return;
     }
 
-    whetherShowButtonDown.value =
-      el.scrollHeight - LIST_EDGE_THRESHOLD_PX > rect.height + el.scrollTop;
+    whetherShowButtonDown.value = el.scrollHeight - LIST_EDGE_THRESHOLD_PX > rect.height + el.scrollTop;
 
     if (el.scrollTop <= LIST_EDGE_THRESHOLD_PX) {
       void loadOlderMessagesKeepingPosition();
@@ -449,7 +466,7 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
    * HTML, and a preview has to be read from the previews table.
    */
   const initialMsgRecording = computed(() =>
-    (initialMessage.value && !initialMessage.value.body)
+    initialMessage.value && !initialMessage.value.body
       ? recordingOfAttachments(initialMessage.value.attachments)
       : undefined,
   );
@@ -533,6 +550,14 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
   }
 
   async function addFiles(): Promise<void> {
+    // The button that calls this is disabled in a readonly chat, but a guard
+    // here as well - the other two ways of attaching (drag-and-drop and paste)
+    // have had one from the start, and a disabled button is a statement about
+    // the markup, not about what may be attached.
+    if (readonly.value) {
+      return;
+    }
+
     if (isEmpty(attachmentsInfo.value)) {
       attachmentsInfo.value = [];
     }
@@ -1097,6 +1122,8 @@ export function useChatView(navigationUtils: () => NavigationUtils) {
     mention,
     filteredMembers,
     activeSuggestionIndex,
+    blockedMembers,
+    blockingState,
     clearSelectedMessages,
     deleteMessages,
     onInput,

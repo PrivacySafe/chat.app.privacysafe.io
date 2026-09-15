@@ -320,7 +320,7 @@
   .chatCreateDialogActions {
     position: relative;
     height: var(--chat-create-dialog-actions-height);
-    padding-right: var(--spacing-m);
+    padding: 0 var(--spacing-m);
     display: flex;
     justify-content: space-between;
     align-items: center;

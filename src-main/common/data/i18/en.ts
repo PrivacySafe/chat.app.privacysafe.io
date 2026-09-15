@@ -30,17 +30,18 @@ export const en = {
       labelWithCount: 'Synchronizing… ({count})',
       catchUp: 'Catching up on messages…',
       stalled: 'Changes are waiting to be sent',
-      stalledTooltip: 'Changes made here have not reached your other devices yet; '
-        + 'they are kept and will be sent again',
+      stalledTooltip:
+        'Changes made here have not reached your other devices yet; ' + 'they are kept and will be sent again',
       tooltip: {
         idle: '',
         'catch-up': 'Catching up on messages received while the app was closed',
         incoming: 'Applying changes made on your other devices',
         outgoing: 'Sending changes to your other devices',
       },
-      duplicateInstance: 'Another copy of the app uses the same data folder, '
-        + 'so both act as the same device and cannot synchronize with each other. '
-        + 'Start the second copy with its own data folder.',
+      duplicateInstance:
+        'Another copy of the app uses the same data folder, ' +
+        'so both act as the same device and cannot synchronize with each other. ' +
+        'Start the second copy with its own data folder.',
     },
     orientation: {
       rotateBack: 'Please rotate your phone back to portrait orientation',
@@ -49,16 +50,18 @@ export const en = {
       starting: 'Starting…',
       stillStarting: 'The chat background service is still starting ({stage})…',
       unreachableTitle: 'The chat background service is not responding',
-      unreachableText: 'The app cannot reach the service it keeps your chats in. '
-        + 'Check whether it answers again.',
+      unreachableText:
+        'The app cannot reach the service it keeps your chats in. ' + 'Check whether it answers again.',
       // The pre-mount screen's own wording: there the connect itself failed, so
       // there is no component to ask, and its Retry is a plain reload.
-      connectFailedText: 'The app could not connect to the service it keeps '
-        + 'your chats in. If a retry does not help, close PrivacySafe '
-        + 'completely and start it again.',
-      stillUnreachableText: 'The service still does not answer. Reloading this '
-        + 'window will not help: it reconnects to the same background process. '
-        + 'Close PrivacySafe completely and start it again.',
+      connectFailedText:
+        'The app could not connect to the service it keeps ' +
+        'your chats in. If a retry does not help, close PrivacySafe ' +
+        'completely and start it again.',
+      stillUnreachableText:
+        'The service still does not answer. Reloading this ' +
+        'window will not help: it reconnects to the same background process. ' +
+        'Close PrivacySafe completely and start it again.',
       failedTitle: 'The chat background service failed to start',
       failedText: 'The service reported a failed start: {reason}',
       checking: 'Checking…',
@@ -102,14 +105,13 @@ export const en = {
     // and before a restore of one.
     skipped: {
       onAnotherDevice:
-        '{count} file(s) were attached on another of your devices, and file bytes never travel '
-        + 'between devices.',
+        '{count} file(s) were attached on another of your devices, and file bytes never travel ' +
+        'between devices.',
       notRequested: '{count} file(s) were left out because you asked for an archive without them.',
       symlink:
-        '{count} file(s) are bigger than 20 MiB and were attached by reference, so the archive '
-        + 'points at them rather than holding them.',
-      inIncomingMsg:
-        '{count} file(s) belong to messages you received and stay in your mailbox on the server.',
+        '{count} file(s) are bigger than 20 MiB and were attached by reference, so the archive ' +
+        'points at them rather than holding them.',
+      inIncomingMsg: '{count} file(s) belong to messages you received and stay in your mailbox on the server.',
       unreadable: '{count} file(s) could not be read.',
       folderPartial: '{count} attached folder(s) hold too many files, and only part of them is in.',
       noLocalSource: '{count} file(s) have no readable file on this device.',
@@ -117,8 +119,7 @@ export const en = {
     passphrase: {
       createTitle: 'Protect the backup',
       openTitle: 'Passphrase required',
-      createHint:
-        'A passphrase encrypts the archive. Leave both fields empty to save it unencrypted.',
+      createHint: 'A passphrase encrypts the archive. Leave both fields empty to save it unencrypted.',
       openHint: 'This backup archive is encrypted. Enter the passphrase it was created with.',
       label: 'Passphrase',
       repeatLabel: 'Repeat passphrase',
@@ -130,8 +131,7 @@ export const en = {
       mismatch: 'The two passphrases do not match.',
       tooShort: 'A passphrase has to be at least {count} characters long.',
       noRecovery: 'A forgotten passphrase cannot be recovered: the archive stays unreadable.',
-      optional:
-        'Without a passphrase the archive is only as private as the place you keep it in.',
+      optional: 'Without a passphrase the archive is only as private as the place you keep it in.',
     },
     // Shown by the platform's file dialogs in their file-type dropdown, so it
     // reaches the user like any other label. One key for both of them.
@@ -154,26 +154,24 @@ export const en = {
       // can ever bring back - said now, rather than in half a year when the
       // archive is needed.
       attachmentsNotice:
-        'Files of messages you received are kept in your mailbox on the server and do not go '
-        + 'into the archive. The messages themselves are restored in full.',
+        'Files of messages you received are kept in your mailbox on the server and do not go ' +
+        'into the archive. The messages themselves are restored in full.',
       thisDeviceNotice:
-        'Only files that are on this device go into the archive. A message whose file was '
-        + 'attached on another of your devices is backed up without it, so take the backup '
-        + 'where the files are.',
+        'Only files that are on this device go into the archive. A message whose file was ' +
+        'attached on another of your devices is backed up without it, so take the backup ' +
+        'where the files are.',
       bigFilesNotice:
-        'Files bigger than 20 MiB are attached by reference rather than copied, so the archive '
-        + 'points at your own file instead of holding it.',
+        'Files bigger than 20 MiB are attached by reference rather than copied, so the archive ' +
+        'points at your own file instead of holding it.',
       autoDeleteNotice:
-        'Chats with auto-deletion on will restore only the messages whose lifetime has not run '
-        + 'out yet.',
+        'Chats with auto-deletion on will restore only the messages whose lifetime has not run ' + 'out yet.',
       success: 'The backup {filename} was saved.',
       skippedTitle: 'Some files did not go into the archive.',
       empty: 'There is nothing to back up.',
       cancel: 'Creating the backup was stopped.',
       error: 'The backup could not be created.',
       errorTooLarge:
-        'This history is too big to be carried into an archive whole. Take a backup without '
-        + 'files instead.',
+        'This history is too big to be carried into an archive whole. Take a backup without ' + 'files instead.',
     },
     restore: {
       dialogTitle: 'Restoring backup',
@@ -182,9 +180,9 @@ export const en = {
       confirmTitle: 'Restore from a backup',
       confirmBtn: 'Restore',
       confirmWarningText:
-        'This archive was written by version {archiveVersion}, and this app is version '
-        + '{appVersion}, or the archive carries no version at all. Restoring it may damage the '
-        + 'chats. Proceed at your own risk.',
+        'This archive was written by version {archiveVersion}, and this app is version ' +
+        '{appVersion}, or the archive carries no version at all. Restoring it may damage the ' +
+        'chats. Proceed at your own risk.',
       unknownVersion: 'unknown',
       unknownDate: 'unknown',
       skippedTitle: 'This archive does not hold every file:',
@@ -202,20 +200,20 @@ export const en = {
       mode: {
         mergeTitle: 'Add what is missing',
         mergeHint:
-          'Chats and messages that are not here are put back. Nothing that is here is changed, '
-          + 'and nothing is deleted. A message deleted after the backup stays deleted.',
+          'Chats and messages that are not here are put back. Nothing that is here is changed, ' +
+          'and nothing is deleted. A message deleted after the backup stays deleted.',
         replaceTitle: 'Make the chats match the archive',
         replaceHint:
-          'The archive states what the chats are. Anything you changed after the backup was '
-          + 'taken still wins over it.',
+          'The archive states what the chats are. Anything you changed after the backup was ' +
+          'taken still wins over it.',
         replaceWarning:
-          'Chats and messages that are not in the archive, and that are older than it, will be '
-          + 'deleted — on this device and on your other ones. Deleting a chat takes its whole '
-          + 'history with it.',
+          'Chats and messages that are not in the archive, and that are older than it, will be ' +
+          'deleted — on this device and on your other ones. Deleting a chat takes its whole ' +
+          'history with it.',
       },
       devicesNotice:
-        'Whatever you choose here is what every device of yours will do: the restore is sent '
-        + 'to them and applied by the same rule.',
+        'Whatever you choose here is what every device of yours will do: the restore is sent ' +
+        'to them and applied by the same rule.',
       text: {
         unpacking: 'Reading the archive',
         decrypting: 'Decrypting the archive',
@@ -225,12 +223,11 @@ export const en = {
         announcing: 'Telling your other devices',
         completed: 'Restoration completed',
       },
-      success:
-        'The backup was restored: {created} added, {updated} updated, {deleted} deleted.',
+      success: 'The backup was restored: {created} added, {updated} updated, {deleted} deleted.',
       expiredNotice: '{count} message(s) were left out: their auto-deletion time has passed.',
       offlineNotice:
-        'The server could not be reached, so it is not known which received messages are still '
-        + 'there. Some files may turn out to be unavailable.',
+        'The server could not be reached, so it is not known which received messages are still ' +
+        'there. Some files may turn out to be unavailable.',
       error: 'The backup could not be restored.',
       errorCorruptedArchive: 'This file is damaged or is not a ZIP archive.',
       errorForeignArchive: 'This archive is a backup of another app, not of the chats.',
@@ -280,10 +277,11 @@ export const en = {
         video: '10 minutes',
       },
       hint: {
-        choose: 'Record straight into the chat. Pick what to record - the device '
-          + 'is only turned on once you do.',
-        sent_at_once: 'A recording is sent as a message of its own - you get to hear it '
-          + 'first, and nothing you have typed is touched.',
+        choose:
+          'Record straight into the chat. Pick what to record - the device ' + 'is only turned on once you do.',
+        sent_at_once:
+          'A recording is sent as a message of its own - you get to hear it ' +
+          'first, and nothing you have typed is touched.',
         preparing: 'Turning the device on…',
         recording: 'Recording. Press Stop when you are done - it also stops on its own at the limit.',
         review: 'Listen to it, then send it or record again.',
@@ -302,15 +300,17 @@ export const en = {
       },
       stopped: {
         duration: 'The recording reached its time limit and stopped.',
-        size: 'The recording reached its size limit and stopped, so that it still plays '
-          + 'without being downloaded in full first.',
+        size:
+          'The recording reached its size limit and stopped, so that it still plays ' +
+          'without being downloaded in full first.',
       },
       error: {
-        access_denied: 'Access to the microphone or camera is not allowed. '
-          + 'Allow it in the system settings and try again.',
+        access_denied:
+          'Access to the microphone or camera is not allowed. ' + 'Allow it in the system settings and try again.',
         no_device: 'No microphone or camera was found on this device.',
-        device_busy: 'The microphone or camera is in use by another application. '
-          + 'A call in progress is the usual reason.',
+        device_busy:
+          'The microphone or camera is in use by another application. ' +
+          'A call in progress is the usual reason.',
         unsupported: 'Recording is not supported in this runtime.',
         failed: 'The recording failed.',
         sending: 'The recording could not be sent.',
@@ -338,6 +338,9 @@ export const en = {
             '4': '1 day',
             '5': '1 hour',
           },
+          block: 'Block User',
+          unblock: 'Unblock User',
+          manage_blocks: 'Manage Blocks',
           leave: 'Leave and Delete Chat',
         },
       },
@@ -364,6 +367,21 @@ export const en = {
           unknown: 'Failed to add contact {addr}',
         },
       },
+      notification: {
+        blocked: {
+          part1: 'You blocked {name}.',
+          part2: 'They can no longer message or call you through PrivacySafe.',
+        },
+        unblocked: 'You unblocked {name}.',
+      },
+      blocked: {
+        mark: 'Blocked. Unblock this contact to start a chat with them.',
+        inChat: 'Blocked. Deselect to remove them from the chat.',
+      },
+      error: {
+        block: 'Failed to block the contact',
+        unblock: 'Failed to unblock the contact',
+      },
     },
     content: {
       empty: 'Select a Chat to Start Messaging',
@@ -375,10 +393,12 @@ export const en = {
       },
     },
     call: {
-      startFailed: 'Could not reach the background service to start the call. '
-        + 'Try again; if it keeps failing, restart the app.',
-      endFailed: 'Could not reach the background service to end the call. '
-        + 'The call state shown here may be out of date; restart the app if it persists.',
+      startFailed:
+        'Could not reach the background service to start the call. ' +
+        'Try again; if it keeps failing, restart the app.',
+      endFailed:
+        'Could not reach the background service to end the call. ' +
+        'The call state shown here may be out of date; restart the app if it persists.',
     },
     header: {
       info: 'Last post on {date}',
@@ -390,6 +410,10 @@ export const en = {
       },
     },
     dialog: {
+      manage_blocks: {
+        title: 'Manage Blocks',
+        nobody: 'No members match the search',
+      },
       info: {
         title: 'Chat Info',
         auto_delete: {
@@ -683,9 +707,20 @@ export const en = {
       default: {
         cancel: 'Cancel',
       },
+      block: 'Block',
+      unblock: 'Unblock',
+    },
+    label: {
+      warning: 'Warning',
     },
     text: {
       confirmation: 'Are you sure?',
+      block: 'Block the user {mail}?',
+      unblock: 'Unblock the user {mail}?',
+    },
+    additionalText: {
+      block: `They will no longer be able to send you messages or call you through PrivacySafe.<br>Existing messages will remain in this conversation.`,
+      unblock: 'They will be able to send you messages and call you through PrivacySafe again.',
     },
     // The file-type name the platform's open-file dialog shows in its dropdown,
     // asked for by selectImageFilesWithDialog (image-files.ts).
@@ -726,19 +761,15 @@ export const en = {
       participants: 'Participants',
       call_full: 'The call is full ({current}/{max} participants). Please try again later.',
       user_stopped_sharing: '[{user}] stopped sharing "{screen}"',
-      peer_app_closed:
-        '{user} closed the application. The call will end in a few seconds.',
+      peer_app_closed: '{user} closed the application. The call will end in a few seconds.',
       host_unreachable:
         'Cannot reach {user} anymore — the call appears to have ended. The call window will close.',
-      call_setup_timeout:
-        'Could not connect with {user}. The call window will close.',
-      invite_not_delivered:
-        'The invitation could not be delivered to {user}. They have not been called.',
+      call_setup_timeout: 'Could not connect with {user}. The call window will close.',
+      invite_not_delivered: 'The invitation could not be delivered to {user}. They have not been called.',
       // The reason itself goes to the log: a JS error message is not something
       // to read in a notice.
       call_start_failed: 'The call could not be started.',
-      group_call_unanswered:
-        'Nobody joined the call. The call window will close.',
+      group_call_unanswered: 'Nobody joined the call. The call window will close.',
     },
     setup: {
       title: 'Call Setup',

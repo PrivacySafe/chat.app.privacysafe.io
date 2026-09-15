@@ -16,6 +16,7 @@
 */
 
 import { type ContactsStore, useContactsStore } from '@main/common/store/contacts.store.ts';
+import { contactsSrv } from '@main/common/services/external-services.ts';
 import { itCond, rejectionOf, skipSpecIfUnresponsive } from '../libs-for-tests/jasmine-utils.js';
 import { stringifyErr } from '../lib-common/exceptions/error.js';
 import { includesAddress } from '@shared/address-utils.js';
@@ -91,5 +92,56 @@ describe(`Contacts store`, () => {
     w3n.testStand.log('info', `addContact('${nonexistingAddr}') rejected with: ${stringifyErr(exc)}`);
     expect(exc.type).withContext(`addContact('${nonexistingAddr}') rejected with: ${stringifyErr(exc)}`).toBe('contacts');
     expect(exc.failASMailCheck).toBeTrue();
+  }, SPEC_TIMEOUT_MILLIS);
+
+  itCond(`fetches blacklist and checks isBlacklisted`, async () => {
+    const list = await contactsStore.fetchBlacklist();
+    expect(Array.isArray(list)).withContext(`blacklist is an array`).toBeTrue();
+    expect(typeof contactsStore.isBlacklisted).toBe('function');
+    // Own address is not blacklisted by default
+    expect(contactsStore.isBlacklisted(fstUserAddr)).toBeFalse();
+  }, SPEC_TIMEOUT_MILLIS);
+
+  // Deliberately an address of nobody in this run, rather than sndUserAddr:
+  // blocking a contact one shares chats with puts a system record into each of
+  // those chats, which the chat specs would then be counting.
+  //
+  // No skipSpecIfUnresponsive here either, unlike every addContact() spec
+  // above: blocking does not verify the address over ASMail - it has to work
+  // offline, and for an address that no longer exists - so it waits on no
+  // server, and a spec that hangs here says something real.
+  itCond(`blocks and unblocks an address that is in no address book`, async () => {
+    const strangerAddr = `blocking-test@example.com`;
+
+    // Blocking lives in the contacts app, and the build of it that the test
+    // stand runs against is downloaded, not the one in the next folder: a
+    // version that predates the blacklist has none of these methods. Probing
+    // for it here, rather than letting the asserts below fail, keeps "this
+    // platform build cannot do it yet" apart from "this code is broken".
+    try {
+      await (await contactsSrv()).getContactBlacklist();
+    } catch (err) {
+      pending(`installed contacts app has no blacklist support: ${stringifyErr(err)}`);
+      return;
+    }
+
+    // Nothing to unblock, and that is not an error.
+    await contactsStore.setContactBlocking(strangerAddr, false);
+    expect(contactsStore.isBlacklisted(strangerAddr))
+      .withContext(`unblocking an unknown address is a no-op`).toBeFalse();
+
+    await contactsStore.setContactBlocking(strangerAddr, true);
+    expect(contactsStore.isBlacklisted(strangerAddr))
+      .withContext(`${strangerAddr} is blacklisted although it was not a contact`).toBeTrue();
+    expect(isAddressIn(contactsStore, strangerAddr))
+      .withContext(`blocking made a contact out of ${strangerAddr}`).toBeTrue();
+
+    // Blocking what is already blocked changes nothing and must not fail.
+    await contactsStore.setContactBlocking(strangerAddr, true);
+    expect(contactsStore.isBlacklisted(strangerAddr)).toBeTrue();
+
+    await contactsStore.setContactBlocking(strangerAddr, false);
+    expect(contactsStore.isBlacklisted(strangerAddr))
+      .withContext(`${strangerAddr} is off the blacklist after unblocking`).toBeFalse();
   }, SPEC_TIMEOUT_MILLIS);
 });

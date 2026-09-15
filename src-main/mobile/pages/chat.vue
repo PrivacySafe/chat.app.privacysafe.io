@@ -63,6 +63,8 @@
     recordBtnDisabled,
     filteredMembers,
     activeSuggestionIndex,
+    blockedMembers,
+    blockingState,
     onInput,
     selectMention,
     hideSuggestions,
@@ -100,6 +102,7 @@
       v-if="currentChat"
       :chat="currentChat!"
       :messages="currentChatMessages"
+      :blocking-state="blockingState"
       :readonly="readonly"
     />
 
@@ -110,6 +113,7 @@
             v-if="currentChatMessages && currentChat"
             :chat="currentChat!"
             :messages="currentChatMessages"
+            :blocked-members="blockedMembers"
             :readonly="readonly"
             @init="onMessageListElementInit"
             @reply="prepareReplyMessage"

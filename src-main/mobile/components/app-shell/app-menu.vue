@@ -20,9 +20,11 @@
  not a trigger - the drawer is opened by the hamburger in the toolbar.
 -->
 <script lang="ts" setup>
+  import { storeToRefs } from 'pinia';
   import { Ui3nButton } from '@v1nt1248/3nclient-lib';
   import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
   import { useAppMenuItems } from '@main/common/composables/useAppMenu';
+  import { useAppStore } from '@main/common/store/app.store';
   import type { AppMenuAction } from '~/app.types';
 
   defineProps<{
@@ -35,6 +37,10 @@
   }>();
 
   const menuItems = useAppMenuItems();
+  // Taken from the store rather than passed in: the drawer is the only place on
+  // a phone where the version is shown, and a prop for it would have to be
+  // threaded through the page that opens the drawer for nothing else.
+  const { appVersion } = storeToRefs(useAppStore());
 
   /**
    * The drawer is closed BEFORE the action is passed on: every action here opens
@@ -77,6 +83,10 @@
         >
           {{ item.label }}
         </ui3n-button>
+
+        <div :class="$style.appInfo">
+          v {{ appVersion }}
+        </div>
       </div>
     </div>
   </div>
@@ -133,5 +143,18 @@
     display: flex;
     flex-direction: column;
     row-gap: var(--spacing-s);
+
+    .appInfo {
+      position: relative;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: var(--font-16);
+      font-weight: 500;
+      line-height: 1;
+      color: var(--color-text-control-secondary-default);
+      user-select: none;
+    }
   }
 </style>

@@ -48,8 +48,10 @@ export function useAppView() {
   const { initialize, stopMessagesProcessing, stopVideoCallsWatching } = useInitialize();
   const { startBackupWorkflow, runRestoreWorkflow } = useBackupRestore();
 
+  const isOnline = computed(() => connectivityStatus.value === 'online');
+
   const connectivityStatusText = computed(() =>
-    connectivityStatus.value === 'online' ? 'app.status.connected.online' : 'app.status.connected.offline',
+    isOnline.value ? 'app.status.connected.online' : 'app.status.connected.offline',
   );
 
   async function openDashboard() {
@@ -128,6 +130,7 @@ export function useAppView() {
     stopMessagesProcessing.value && stopMessagesProcessing.value();
     stopVideoCallsWatching.value && stopVideoCallsWatching.value();
     appStore.stopWatching();
+    contactsStore.stopWatching();
     periodicCleanupTimerId && clearInterval(periodicCleanupTimerId);
   });
 
@@ -137,6 +140,7 @@ export function useAppView() {
     me,
     customLogoSrc,
     appVersion,
+    isOnline,
     connectivityStatusText,
     isSyncing,
     syncPending,
@@ -147,5 +151,6 @@ export function useAppView() {
     openDashboard,
     appExit,
     runMenuAction,
+    setAppWindowSize: appStore.setAppWindowSize,
   };
 }

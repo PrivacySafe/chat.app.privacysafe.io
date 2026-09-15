@@ -37,7 +37,7 @@ import {
   isUniqueViolation,
 } from './utils.ts';
 import { fromQueryResult, queryParamsFrom, forTableInsert, setExprFor, tableColumnNames } from '../utils/for-sqlite.ts';
-import { toCanonicalAddress } from '../../shared-libs/address-utils.ts';
+import { includesAddress, toCanonicalAddress } from '../../shared-libs/address-utils.ts';
 import { msgsDb } from './msgs-db.ts';
 
 const queryToCreateChatsDbV3 = [
@@ -479,6 +479,28 @@ export async function chatsDb({
     return [...otoChats, ...groupChats];
   }
 
+  function getChatsWithParticipant(cAddr: string): ChatIdObj[] {
+    const canonAddr = toCanonicalAddress(cAddr);
+    const chatIds: ChatIdObj[] = [];
+
+    for (const { peerCAddr } of getOTOChatsList()) {
+      // peerCAddr is already canonical - it is the primary key of the table.
+      if (peerCAddr === canonAddr) {
+        chatIds.push({ isGroupChat: false, chatId: peerCAddr });
+      }
+    }
+
+    for (const { chatId, members } of getGroupChatsList()) {
+      // Members are spelled as they were given, so they need canonicalizing
+      // before they can be compared.
+      if (includesAddress(Object.keys(members ?? {}), canonAddr)) {
+        chatIds.push({ isGroupChat: true, chatId });
+      }
+    }
+
+    return chatIds;
+  }
+
   async function deleteOTOChat(peerCAddr: string) {
     const { whereClause, whereParams } = otoChatWhereParamsFor(peerCAddr);
     sqlite.db.exec(
@@ -525,6 +547,7 @@ export async function chatsDb({
     updateOTOChatRecord,
     updateGroupChatRecord,
     getChatList,
+    getChatsWithParticipant,
     deleteChat,
   };
 }

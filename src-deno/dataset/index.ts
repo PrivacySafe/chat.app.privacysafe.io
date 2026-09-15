@@ -96,6 +96,7 @@ export async function dataset(): Promise<DB> {
     updateOTOChatRecord: chatsBdSrv.updateOTOChatRecord,
     updateGroupChatRecord: chatsBdSrv.updateGroupChatRecord,
     getChatList: chatsBdSrv.getChatList,
+    getChatsWithParticipant: chatsBdSrv.getChatsWithParticipant,
     deleteChat: chatsBdSrv.deleteChat,
   };
 }

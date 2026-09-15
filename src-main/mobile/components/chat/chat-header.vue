@@ -16,22 +16,28 @@
 -->
 <script lang="ts" setup>
   import { computed } from 'vue';
-  import { Ui3nButton, Ui3nHtml as vUi3nHtml } from '@v1nt1248/3nclient-lib';
-  import { getChatName } from '@main/common/utils/chat-ui.helper';
+  import { Ui3nButton, Ui3nIcon, Ui3nHtml as vUi3nHtml } from '@v1nt1248/3nclient-lib';
+  import { type ChatBlockingState, blockingIconFor, getChatName } from '@main/common/utils/chat-ui.helper';
   import { useChatHeader } from '@main/common/composables/useChatHeader';
   import { useNavigation } from '@main/mobile/composables/useNavigation';
   import type { ChatListItemView, ChatMessageView } from '~/chat.types';
   import ChatAvatar from '@main/common/components/chat/chat-avatar.vue';
   import ChatHeaderActions from './chat-header-actions.vue';
 
-  const props = defineProps<{
-    chat: ChatListItemView;
-    messages: ChatMessageView[];
-    readonly?: boolean;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      chat: ChatListItemView;
+      messages: ChatMessageView[];
+      /** Who in this chat is blocked, and whether that is everyone but the user. */
+      blockingState?: ChatBlockingState;
+      readonly?: boolean;
+    }>(),
+    { blockingState: () => ({ blockedMembers: [], allOthersBlocked: false }) },
+  );
 
   const chatVal = computed(() => props.chat);
   const chatMessagesVal = computed(() => props.messages);
+  const blockingIcon = computed(() => blockingIconFor(props.blockingState));
 
   const { navigateToChats } = useNavigation();
 
@@ -74,12 +80,21 @@
       @click.stop.prevent="goToChats"
     />
 
-    <chat-avatar
-      :name="getChatName(props.chat)"
-      :shape="isGroupChat ? 'decagon' : 'circle'"
-      :call-in-progress="chatWithCall"
-      :settings="chat.settings"
-    />
+    <div :class="$style.chatHeaderAvatar">
+      <chat-avatar
+        :name="getChatName(props.chat)"
+        :shape="isGroupChat ? 'decagon' : 'circle'"
+        :call-in-progress="chatWithCall"
+        :settings="chat.settings"
+      />
+
+      <ui3n-icon
+        v-if="blockingIcon"
+        :icon="blockingIcon"
+        color="var(--warning-content-default)"
+        :class="$style.banned"
+      />
+    </div>
 
     <div :class="$style.content">
       <div :class="$style.headerName">
@@ -170,6 +185,18 @@
     column-gap: var(--spacing-xs);
     padding: 0 12px;
     background-color: var(--color-bg-block-primary-default);
+  }
+
+  .chatHeaderAvatar {
+    position: relative;
+    width: fit-content;
+
+    .banned {
+      position: absolute;
+      top: -4px;
+      right: -2px;
+      z-index: 1;
+    }
   }
 
   .content {

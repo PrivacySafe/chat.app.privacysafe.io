@@ -26,17 +26,20 @@ import {
 import { capitalize, prepareDateAsSting } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { areChatIdsEqual } from '@shared/chat-ids';
+import { toCanonicalAddress } from '@shared/address-utils';
 import { exportChatMessages } from '@main/common/utils/chats.helper';
 import { useAppStore } from '@main/common/store/app.store';
+import { useContactBlocking } from '@main/common/composables/useContactBlocking';
 import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
 import { chatService } from '@main/common/services/external-services';
-import type { ChatListItemView, ChatMessageView } from '~/chat.types';
+import { ChatListItemView, ChatMessageView, SingleChatView } from '~/chat.types';
 import ConfirmationDialog from '@main/common/components/dialogs/confirmation-dialog.vue';
 import ChatRenameDialog from '@main/common/components/dialogs/chat-rename-dialog.vue';
 import ChatInfoDialog from '@main/common/components/dialogs/chat-info-dialog/chat-info-dialog.vue';
+import ManageBlocksDialog from '@main/common/components/dialogs/manage-blocks-dialog/manage-blocks-dialog.vue';
 
 interface ChatActionHandlers {
   history: {
@@ -50,6 +53,11 @@ interface ChatActionHandlers {
     delete: () => Promise<void> | void;
     timer: (id: string) => void;
     leave: () => Promise<void> | void;
+  };
+  contact: {
+    block: () => Promise<void>;
+    unblock: () => Promise<void>;
+    'manage-blocks': () => Promise<void>;
   };
 }
 
@@ -69,6 +77,8 @@ export function useChatHeader({
   const notification = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const { user } = storeToRefs(useAppStore());
+
+  const { runContactBlocking } = useContactBlocking();
 
   const uiIncomingStore = useUiIncomingStore();
   const { joinIncomingCall, dismissIncomingCall, startCall, endCall, rejoinCall } = uiIncomingStore;
@@ -182,15 +192,12 @@ export function useChatHeader({
 
   async function runChatDeleting() {
     const res = await dialog.$openDialog<boolean>(ConfirmationDialog, {
-      dialogText: t('chat.dialog.delete.text', { chatName: chat.value.name }),
+      dialogText: t('chat.dialog.delete.text', { chatName: `<b>${chat.value.name}</b>` }),
       dialogProps: {
         title: t('chat.dialog.delete.title'),
         ...(isMobileMode && { width: 300 }),
         confirmButtonText: capitalize(t('chat.dialog.delete.btn')),
-        confirmButtonColor: 'var(--color-text-button-secondary-default)',
-        confirmButtonBackground: 'var(--color-bg-button-secondary-default)',
-        cancelButtonColor: 'var(--color-text-button-primary-default)',
-        cancelButtonBackground: 'var(--color-bg-button-primary-default)',
+        confirmButtonBackground: 'var(--warning-content-default)',
       },
     });
 
@@ -219,6 +226,43 @@ export function useChatHeader({
     }
   }
 
+  async function setUpContactBlocking(value: boolean) {
+    // Group chats have no such menu item: which of the many members it would
+    // be about has no answer in a header.
+    if (isGroupChat.value) {
+      return;
+    }
+
+    const currentChatParticipant = toCanonicalAddress((currentChat.value as SingleChatView).peerAddr.toLowerCase());
+    await runContactBlocking(currentChatParticipant, value);
+  }
+
+  function blockContactInOTOChat() {
+    return setUpContactBlocking(true);
+  }
+
+  function unblockContactInOTOChat() {
+    return setUpContactBlocking(false);
+  }
+
+  async function openManageBlocksDialog() {
+    // A one-to-one chat has the plain Block/Unblock item instead.
+    if (!isGroupChat.value) {
+      return;
+    }
+
+    await dialog.$openDialog<void>(ManageBlocksDialog, {
+      chat: chat.value,
+      isMobileMode,
+      dialogProps: {
+        title: t('chat.dialog.manage_blocks.title'),
+        ...(isMobileMode && { width: 300 }),
+        confirmButton: false,
+        cancelButton: false,
+      },
+    });
+  }
+
   const actionsHandlers: ChatActionHandlers = {
     history: {
       export: runChatHistoryExporting,
@@ -231,6 +275,11 @@ export function useChatHeader({
       delete: runChatDeleting,
       timer: setMessagesAutoDelete,
       leave: runChatDeleting,
+    },
+    contact: {
+      block: blockContactInOTOChat,
+      unblock: unblockContactInOTOChat,
+      'manage-blocks': openManageBlocksDialog,
     },
   };
 
