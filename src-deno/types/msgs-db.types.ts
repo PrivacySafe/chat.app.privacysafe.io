@@ -179,6 +179,14 @@ export interface MsgsDb {
   flush(): Promise<void>;
   addMessage(msg: MsgDbEntry): Promise<void>;
   getMessage(id: ChatMessageId): Promise<MsgDbEntry | undefined>;
+  /**
+   * Whether a message row still points at this inbox message.
+   *
+   * True only for a message with attachments: those keep `incomingMsgId`, and
+   * their inbox message stays on the server as the one carrier of the file
+   * bytes. Asked before removing anything that was received earlier.
+   */
+  isMsgKeptForInboxMsg(incomingMsgId: string): boolean;
   /** Every row there is, oldest first. Read by a backup, and by nothing else. */
   getAllMessages(): MsgDbEntry[];
   countMessages(): number;

@@ -48,6 +48,7 @@ export async function dataset(): Promise<DB> {
     flush,
     addMessage: msgsBdSrv.addMessage,
     getMessage: msgsBdSrv.getMessage,
+    isMsgKeptForInboxMsg: msgsBdSrv.isMsgKeptForInboxMsg,
     getAllMessages: msgsBdSrv.getAllMessages,
     countMessages: msgsBdSrv.countMessages,
     getExpiredMessages: msgsBdSrv.getExpiredMessages,

@@ -311,6 +311,17 @@ export async function chatService(
     }
 
     if (blacklistTracker && !areAddressesEqual(msg.sender, ownAddr) && blacklistTracker.isBlacklisted(msg.sender)) {
+      // A message the history still holds was received before the blocking, and
+      // only the user deletes what they have received. For one with attachments
+      // the inbox message is also the only carrier of the file bytes, so taking
+      // it off the server would leave the entry pointing at nothing.
+      if (data.isMsgKeptForInboxMsg(msg.msgId)) {
+        await w3n.log(
+          'info',
+          `Incoming chat message ${msg.msgId} is from blacklisted sender ${msg.sender}, but it was received before the blocking; leaving it alone.`,
+        );
+        return;
+      }
       return await removeMessageFromInbox(
         msg.msgId,
         `Incoming chat message ${msg.msgId} is from blacklisted sender ${msg.sender}. Removing it from inbox.`,

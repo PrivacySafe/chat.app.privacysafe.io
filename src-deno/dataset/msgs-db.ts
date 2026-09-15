@@ -453,6 +453,27 @@ export async function msgsDb({
   }
 
   /**
+   * Whether some message row still points at this inbox message.
+   *
+   * Only messages with attachments do: for those, `incomingMsgId` is kept and
+   * the inbox message stays on the server as the one carrier of the attachment
+   * bytes (see handleRegularMsg). Asked before taking anything off the server
+   * that was received earlier, so that a message already in the history is not
+   * stripped of its files afterwards.
+   */
+  function isMsgKeptForInboxMsg(incomingMsgId: string): boolean {
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT 1
+      FROM messages
+      WHERE incomingMsgId=$incomingMsgId
+      LIMIT 1`,
+      { $incomingMsgId: incomingMsgId },
+    );
+    return !!sqlValue;
+  }
+
+  /**
    * Every message row there is, oldest first.
    *
    * Only a backup needs this: everything else reads a chat, or a page of one.
@@ -1413,6 +1434,7 @@ export async function msgsDb({
     flush,
     addMessage,
     getMessage,
+    isMsgKeptForInboxMsg,
     getAllMessages,
     countMessages,
     getExpiredMessages,

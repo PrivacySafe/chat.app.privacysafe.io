@@ -387,6 +387,19 @@ export async function inboxDispatcher({
         }
         if (!areAddressesEqual(msg.sender, ownAddr) && blacklistTracker.isBlacklisted(msg.sender)) {
           blacklisted += 1;
+          // A message received BEFORE the blocking is the user's, and only they
+          // delete it. This scan does come back round to such a message: the
+          // watermark is set from the newest incoming row at every start and the
+          // listing begins a minute before it, and a message with attachments
+          // stays in the inbox indefinitely - it is where its file bytes live.
+          // Removing it would leave the history entry pointing at nothing.
+          if (db.isMsgKeptForInboxMsg(msgId)) {
+            log.info(
+              `Catch-up scan: message ${msgId} is from blacklisted sender ${msg.sender}, but it was received before the blocking and its record still holds it; leaving it on the server`,
+            );
+            chatMsgsCommitter.recordProcessed(deliveryTS);
+            continue;
+          }
           log.info(
             `Catch-up scan: message ${msgId} from blacklisted sender ${msg.sender} ignored; removing from server inbox`,
           );
@@ -465,12 +478,20 @@ export async function inboxDispatcher({
 
       const incomingChatMsg = msg as ChatIncomingMessage;
       if (!areAddressesEqual(incomingChatMsg.sender, ownAddr) && blacklistTracker.isBlacklisted(incomingChatMsg.sender)) {
+        // Normally new, and normally not in the database - but the platform can
+        // hand the same message over again, and the one already kept for its
+        // attachments must not be taken off the server. See the catch-up scan.
+        const keptAlready = db.isMsgKeptForInboxMsg(msgId);
         log.info(
-          `Incoming message ${msgId} from blacklisted sender ${incomingChatMsg.sender} ignored; removing from server inbox`,
+          keptAlready
+            ? `Incoming message ${msgId} from blacklisted sender ${incomingChatMsg.sender} ignored; it was received before the blocking, so it stays on the server`
+            : `Incoming message ${msgId} from blacklisted sender ${incomingChatMsg.sender} ignored; removing from server inbox`,
         );
-        removeMessageFromInbox(msgId).catch(err =>
-          w3n.log('error', `Fail to remove blacklisted inbox message ${msgId}`, err),
-        );
+        if (!keptAlready) {
+          removeMessageFromInbox(msgId).catch(err =>
+            w3n.log('error', `Fail to remove blacklisted inbox message ${msgId}`, err),
+          );
+        }
         chatMsgsCommitter.recordProcessed(incomingChatMsg.deliveryTS);
         chatMsgsProc
           .startOrChain(processQueuedChatMsg)
