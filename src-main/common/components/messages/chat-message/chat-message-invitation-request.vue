@@ -126,7 +126,7 @@
       :disabled="!tooltipText"
     >
       <div :class="$style.text">
-        {{ getTextForChatInvitationMessage(msg) }}
+        {{ getTextForChatInvitationMessage(t, msg) }}
       </div>
     </ui3n-tooltip>
 

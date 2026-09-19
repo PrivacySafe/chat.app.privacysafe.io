@@ -35,7 +35,7 @@ import type {
 } from '~/index';
 import { getFileStat, getEntityStat } from '@shared/get-stats-safely';
 import { useContactsStore } from '@main/common/store/contacts.store';
-import { getTextForChatInvitationMessage, getTextForChatSystemMessage } from './chat-ui.helper';
+import { getTextForChatInvitationMessage, getTextForChatSystemMessage, type TranslateFn } from './chat-ui.helper';
 import { makeLogger } from '@shared/logger';
 
 const log = makeLogger('ChatsHelper');
@@ -114,6 +114,7 @@ export async function getAttachmentFilesInfo({
 }
 
 function prepareMsgDataToExport(
+  t: TranslateFn,
   msg: ChatMessageView,
   ownAddr: string,
   getContactName: (val: string) => string,
@@ -128,9 +129,9 @@ function prepareMsgDataToExport(
 
   const text =
     type === 'system'
-      ? getTextForChatSystemMessage(msg, msg.chatId.isGroupChat, ownAddr)
+      ? getTextForChatSystemMessage(t, msg, msg.chatId.isGroupChat, ownAddr)
       : type === 'invitation'
-        ? getTextForChatInvitationMessage(msg)
+        ? getTextForChatInvitationMessage(t, msg)
         : html2text(msg.body);
 
   const attachInfo =
@@ -167,7 +168,7 @@ export async function exportChatMessages({
   const { getContactName } = useContactsStore();
   const chatContent = messages
     .sort((a, b) => a.timestamp - b.timestamp)
-    .map(m => prepareMsgDataToExport(m, ownAddr, getContactName))
+    .map(m => prepareMsgDataToExport(t, m, ownAddr, getContactName))
     .join('\n');
 
   if (w3n.shell?.fileDialogs?.saveFileDialog) {

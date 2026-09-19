@@ -16,9 +16,10 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 import { toRO } from "@main/common/utils/readonly.ts";
-import { SystemSettings } from "@main/common/utils/ui-settings.ts";
+import { getActiveTheme, SystemSettings } from "@main/common/utils/ui-settings.ts";
 import { ref } from "vue";
-import { AppConfig, AvailableColorTheme, AvailableLanguage, SettingsJSON } from '~/app.types.ts';
+import type { ThemeId } from '@v1nt1248/3nclient-lib/plugins';
+import { AppConfig, AvailableLanguage, SettingsJSON } from '~/app.types.ts';
 import { blobFromDataURL } from '@main/common/utils/image-files.ts';
 import { makeLogger, setDebugLogging } from '@shared/logger';
 
@@ -29,23 +30,19 @@ export function useSystemLevelAppConfig() {
   const appVersion = ref<string>('');
   const user = ref<string>('');
   const lang = ref<AvailableLanguage>('en');
-  const colorTheme = ref<AvailableColorTheme>('dark2');
+  const colorTheme = ref<ThemeId>('dark');
   const customLogoSrc = ref<string>();
 
   function setLang(value: AvailableLanguage) {
     lang.value = value;
   }
 
-  function setColorTheme(theme: AvailableColorTheme) {
-    const prevColorThemeCssClass = `${colorTheme.value}-theme`;
+  /**
+   * Only the id is kept here. Putting a class on <html> is the theme plugin's
+   * job, and windows tie this ref to it with useThemeSync.
+   */
+  function setColorTheme(theme: ThemeId) {
     colorTheme.value = theme;
-    const curColorThemeCssClass = `${colorTheme.value}-theme`;
-
-    const htmlEl = document.querySelector('html');
-    if (!htmlEl) return;
-
-    htmlEl.classList.remove(prevColorThemeCssClass);
-    htmlEl.classList.add(curColorThemeCssClass);
   }
 
   async function setCustomLogo(dataURL: AppConfig['customLogo']): Promise<void> {
@@ -78,14 +75,14 @@ export function useSystemLevelAppConfig() {
       const settings = await config.getAll();
       const { lang, colorTheme, customLogo } = settings;
       setLang(lang);
-      setColorTheme(colorTheme);
+      setColorTheme(getActiveTheme(colorTheme));
       setCustomLogo(customLogo);
       applyDebugLoggingFlag(settings);
       unsubFromConfigWatch = config.watchConfig({
         next: appConfig => {
           const { lang, colorTheme, customLogo } = appConfig;
           setLang(lang);
-          setColorTheme(colorTheme);
+          setColorTheme(getActiveTheme(colorTheme));
           setCustomLogo(customLogo);
           applyDebugLoggingFlag(appConfig as Partial<SettingsJSON>);
         },

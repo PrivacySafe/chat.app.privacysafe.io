@@ -17,7 +17,8 @@ this program. If not, see <http://www.gnu.org/licenses/>.
 
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import { AvailableColorTheme, AvailableLanguage } from '~/app.types';
+import type { ThemeId } from '@v1nt1248/3nclient-lib/plugins';
+import { AvailableLanguage } from '~/app.types';
 import { useSystemLevelAppConfig } from './app/system-level-app-config';
 import { useConnectivityStatus } from './app/connectivity';
 import { useMediaRecordingSupport } from './app/media-recording';
@@ -37,7 +38,7 @@ export interface AppStoreState {
   connectivityStatus: string;
   user: string;
   lang: AvailableLanguage;
-  colorTheme: AvailableColorTheme;
+  colorTheme: ThemeId;
   appWindowSize: {
     width: number;
     height: number;

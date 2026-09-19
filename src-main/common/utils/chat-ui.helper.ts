@@ -14,7 +14,6 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { useI18n } from 'vue-i18n';
 import dayjs from 'dayjs';
 import get from 'lodash/get';
 import { useContactsStore } from '@main/common/store/contacts.store';
@@ -58,6 +57,14 @@ export interface ChatBlockingState {
 type ChatForBlocking =
   | Pick<GroupChatView, 'isGroupChat' | 'members'>
   | Pick<SingleChatView, 'isGroupChat' | 'peerAddr'>;
+
+/**
+ * Translation is passed in rather than taken with useI18n() here, and must be:
+ * these functions are called from computed properties, which Vue also
+ * evaluates from its scheduler, where there is no current instance and
+ * useI18n() throws "Must be called at the top of a `setup` function".
+ */
+export type TranslateFn = (key: string, placeholders?: Record<string, string>) => string;
 
 /**
  * Who in this chat is blocked, and whether that is everybody but the user.
@@ -136,22 +143,21 @@ export function getChatName(chat: ChatListItemView): string {
  * group chat, which neither address nor member list can distinguish. For a name
  * that is unique in the list, an empty string.
  */
-export function getChatNameHint(chat: ChatListItemUiView): string {
+export function getChatNameHint(t: TranslateFn, chat: ChatListItemUiView): string {
   if (!chat.isNameDuplicated) {
     return '';
   }
-  const { t } = useI18n();
   return chat.isGroupChat
     ? t('chat.list.item.created_at', { date: dayjs(chat.createdAt).format('DD MMM YYYY') })
     : chat.peerAddr;
 }
 
 export function getTextForChatSystemMessage(
+  t: TranslateFn,
   message: ChatSysMsgView,
   isGroupChat: boolean,
   ownAddr?: string,
 ): string {
-  const { t } = useI18n();
   const { getContactName } = useContactsStore();
   const appStore = useAppStore();
 
@@ -309,11 +315,10 @@ export function getTextForChatSystemMessage(
 }
 
 export function getTextForChatInvitationMessage(
+  t: TranslateFn,
   message: ChatInvitationMsgView,
   chatStatus?: SingleChatStatus | GroupChatStatus,
 ): string {
-  const { t } = useI18n();
-
   const { sender, inviteData, isIncomingMsg, groupSender } = message as ChatInvitationMsgView & {
     groupSender?: string;
   };

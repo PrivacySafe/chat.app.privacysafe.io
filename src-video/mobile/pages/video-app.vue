@@ -17,12 +17,18 @@
 
 <script lang="ts" setup>
 import { onBeforeMount, onBeforeUnmount } from 'vue';
+import { storeToRefs } from 'pinia';
 import { Ui3nDialogProvider } from '@v1nt1248/3nclient-lib';
 import { useAppStore } from '@video/common/store/app.store';
+import { useThemeSync } from '@main/common/composables/useThemeSync';
 import { initializationServices } from '@video/common/services/service-provider';
 import OrientationNotice from '@main/common/components/app-shell/orientation-notice.vue';
 
-const { initialize, stopWatching } = useAppStore();
+const appStore = useAppStore();
+const { initialize, stopWatching } = appStore;
+const { colorTheme } = storeToRefs(appStore);
+
+useThemeSync(colorTheme);
 
 onBeforeMount(async () => {
   try {

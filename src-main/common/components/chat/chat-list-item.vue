@@ -62,7 +62,7 @@
   const chatWithCall = computed(() => !!props.data.callStart);
   const isCallActive = computed(() => !!props.data.isCallActive);
 
-  const nameHint = computed<string>(() => getChatNameHint(props.data));
+  const nameHint = computed<string>(() => getChatNameHint(t, props.data));
 
   // Same mark as the one on the avatar in the chat header: a padlock for a
   // one-to-one chat with a blocked peer, an information mark for a group that
@@ -102,10 +102,10 @@
       }
 
       case 'system':
-        return `<i>${getTextForChatSystemMessage(lastMsg, props.data.isGroupChat, ownAddr.value)}</i>`;
+        return `<i>${getTextForChatSystemMessage(t, lastMsg, props.data.isGroupChat, ownAddr.value)}</i>`;
 
       case 'invitation':
-        return `<i>${getTextForChatInvitationMessage(lastMsg, props.data.status)}</i>`;
+        return `<i>${getTextForChatInvitationMessage(t, lastMsg, props.data.status)}</i>`;
 
       default:
         return ' ';

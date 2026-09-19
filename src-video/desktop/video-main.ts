@@ -18,7 +18,7 @@
 import { createApp } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { createPinia } from 'pinia';
-import { dialogs, notifications, storeVueBus, vueBus } from '@v1nt1248/3nclient-lib/plugins';
+import { dialogs, notifications, storeVueBus, theme, vueBus } from '@v1nt1248/3nclient-lib/plugins';
 
 import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
@@ -64,7 +64,9 @@ app.config.compilerOptions.isCustomElement = tag => {
   return tag.startsWith('ui3n-');
 };
 
-app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#video-main');
+app
+  .use(theme, { theme: 'dark' })
+  .use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#video-main');
 
 // Diagnostic logging of signalling and track handling, off unless the
 // launcher's app configuration turns it on (see shared-libs/logger.ts).

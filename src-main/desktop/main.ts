@@ -17,7 +17,7 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 
-import { dialogs, notifications, storeVueBus, storeNotifications, vueBus } from '@v1nt1248/3nclient-lib/plugins';
+import { dialogs, notifications, storeVueBus, storeNotifications, theme, vueBus } from '@v1nt1248/3nclient-lib/plugins';
 
 import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
@@ -58,5 +58,7 @@ startMainWindow('main', () => {
     return tag.startsWith('ui3n-');
   };
 
-  app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#main');
+  app
+    .use(theme, { theme: 'dark' })
+    .use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#main');
 });

@@ -137,9 +137,9 @@ const msgText = computed(() => {
   const { chatMessageType } = props.msg;
   switch (chatMessageType) {
     case 'invitation':
-      return getTextForChatInvitationMessage(props.msg);
+      return getTextForChatInvitationMessage(t, props.msg);
     case 'system': {
-      const text = getTextForChatSystemMessage(props.msg, props.msg.chatId.isGroupChat, ownAddr.value);
+      const text = getTextForChatSystemMessage(t, props.msg, props.msg.chatId.isGroupChat, ownAddr.value);
       return isSystemMsgByCall.value && callDuration.value ? `${text} (${callDuration.value})` : text;
     }
     default:

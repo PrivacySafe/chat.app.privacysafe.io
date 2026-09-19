@@ -61,7 +61,7 @@
       )
       // Picking the wrong one of two same-named chats sends the message to the
       // wrong people, so the list spells out what tells them apart.
-      .map(c => ({ ...c, nameHint: getChatNameHint(c) })),
+      .map(c => ({ ...c, nameHint: getChatNameHint(t, c) })),
   );
 
   function selectItem({ chatId, contact }: { chatId?: ChatIdObj; contact?: { mail: string; name: string } }) {

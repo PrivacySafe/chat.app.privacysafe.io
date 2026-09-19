@@ -65,8 +65,16 @@
 
 html {
   --column-size: 95px;
-  
+
   overflow: hidden;
+
+  /*
+    Inherited by what the library appends straight to the body - tooltips
+    (.ui3n-title) above all. Until 0.3.50 the library's variables.css set this
+    on html itself; now nothing does, and the app roots below are not the
+    tooltips' parent.
+  */
+  font-family: Inter, system-ui, sans-serif;
 }
 
 body {
@@ -85,6 +93,10 @@ div {
   position: fixed;
   inset: 0;
   background-color: var(--color-bg-block-primary-default);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+#ui3n-notifications-container {
   font-family: Inter, system-ui, sans-serif;
 }
 

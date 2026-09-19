@@ -23,6 +23,7 @@ import { useContactsStore } from '@main/common/store/contacts.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useInitialize } from '@main/common/composables/useInitialize';
 import { useBackupRestore } from '@main/common/composables/useBackupRestore';
+import { useThemeSync } from '@main/common/composables/useThemeSync';
 import { chatService } from '@main/common/services/external-services.ts';
 import { makeLogger } from '@shared/logger';
 import type { AppMenuAction } from '~/app.types';
@@ -41,9 +42,11 @@ export function useAppView() {
   const chatsStore = useChatsStore();
 
   const {
-    commonLoading, appVersion, user: me, connectivityStatus, customLogoSrc,
+    commonLoading, appVersion, user: me, connectivityStatus, customLogoSrc, colorTheme,
     isSyncing, syncPending, syncPhase, syncStalled, syncStatusText, showSyncStatus,
   } = storeToRefs(appStore);
+
+  useThemeSync(colorTheme);
 
   const { initialize, stopMessagesProcessing, stopVideoCallsWatching } = useInitialize();
   const { startBackupWorkflow, runRestoreWorkflow } = useBackupRestore();
