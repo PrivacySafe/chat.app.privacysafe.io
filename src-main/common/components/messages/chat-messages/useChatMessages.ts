@@ -54,6 +54,11 @@ import type { ChatMessagesEmits } from './chat-messages.vue';
 import MessageDeleteDialog from '@main/common/components/dialogs/message-delete-dialog.vue';
 import MessageForwardDialog from '@main/common/components/dialogs/message-forward-dialog.vue';
 
+interface OpenContactCmdArg {
+  mail: string;
+  name?: string;
+}
+
 export default function useChatMessages(
   chatId: ComputedRef<string>,
   readonly: ComputedRef<boolean>,
@@ -298,11 +303,6 @@ export default function useChatMessages(
     }
   }
 
-  interface OpenContactCmdArg {
-    mail: string;
-    name?: string;
-  }
-
   async function openContact(command: string, account: string, name: string) {
     try {
       await w3n.shell!.startAppWithParams!('contacts.app.privacysafe.io', command, {
@@ -398,7 +398,9 @@ export default function useChatMessages(
     }
 
     addMsgToProcessingInfoList(chatMessageId);
+    console.log('<- 000 ->');
     const res = await downloadAttachments(msg, t).finally(() => removeMsgFromProcessingInfoList(chatMessageId));
+    console.log('downloadAttachment res => ', res);
 
     if (res === undefined) {
       return;

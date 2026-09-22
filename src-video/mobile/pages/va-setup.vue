@@ -49,7 +49,7 @@
       <ui3n-button
         type="custom"
         color="var(--error-content-default)"
-        text-color="var(--error-fill-default)"
+        text-color="var(--white-100)"
         @click.stop.prevent="cancel"
       >
         {{ t('dialog.button.default.cancel') }}

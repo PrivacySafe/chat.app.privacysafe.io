@@ -18,7 +18,6 @@
   import type { ChatListItemView } from '~/chat.types';
   import { useNavigation } from '@main/mobile/composables/useNavigation';
   import ChatList from '@main/common/components/chat/chat-list.vue';
-  import { Ui3nButton } from '@v1nt1248/3nclient-lib';
   import { useChatsView } from '@main/common/composables/useChatsView.ts';
 
   const { openCreateChatDialog } = useChatsView();
@@ -38,19 +37,10 @@
 
 <template>
   <chat-list
+    :is-mobile-mode="true"
+    :open-create-chat-dialog="openCreateChatDialog"
     :class="$style.chats"
     @click="goChat"
-  />
-
-  <ui3n-button
-    type="icon"
-    size="large"
-    color="var(--color-bg-button-primary-default)"
-    icon="round-plus"
-    icon-color="var(--color-icon-button-primary-default)"
-    icon-size="32"
-    :class="$style.createBtn"
-    @click.stop.prevent="() => openCreateChatDialog(true)"
   />
 </template>
 
@@ -61,12 +51,5 @@
     height: 100%;
     background-color: var(--color-bg-block-primary-default);
     overflow-y: auto;
-  }
-
-  .createBtn {
-    position: absolute !important;
-    bottom: var(--spacing-m);
-    right: var(--spacing-m);
-    z-index: 2;
   }
 </style>

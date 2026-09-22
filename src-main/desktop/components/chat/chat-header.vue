@@ -110,7 +110,7 @@
       v-if="chatWithCall"
       type="custom"
       color="var(--error-content-default)"
-      text-color="var(--error-fill-default)"
+      text-color="var(--white-100)"
       icon="round-phone-disabled"
       icon-color="var(--error-fill-default)"
       icon-position="left"

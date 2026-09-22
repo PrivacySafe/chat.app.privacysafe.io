@@ -61,7 +61,12 @@
   }
 
   async function downloadFile() {
-    const res = await saveFileFromMsg(props.item.id!, t, props.incomingMsgId);
+    const res = await saveFileFromMsg({
+      fileId: props.item.id!,
+      name: props.item.name,
+      t,
+      incomingMsgId: props.incomingMsgId,
+    });
     if (res === undefined) {
       return;
     }

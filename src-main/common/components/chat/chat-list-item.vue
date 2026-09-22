@@ -184,7 +184,9 @@
           :class="$style.chatListItemMessage"
         >
           <i v-if="chatWithCall">{{ t('va.text.call_in_progress') }} {{ callInOnSince }}</i>
-          <i v-else-if="isIncomingCall">{{ t('va.presettings.incoming_call', { address: data.incomingCall!.peerAddress }) }}</i>
+          <i v-else-if="isIncomingCall">{{
+            t('va.presettings.incoming_call', { address: data.incomingCall!.peerAddress })
+          }}</i>
           <i v-else>{{ t('va.text.call_is_active') }}</i>
         </div>
 
@@ -206,7 +208,7 @@
             type="custom"
             size="small"
             color="var(--error-content-default)"
-            text-color="var(--error-fill-default)"
+            text-color="var(--white-100)"
             icon="round-phone-disabled"
             icon-color="var(--error-fill-default)"
             icon-position="left"

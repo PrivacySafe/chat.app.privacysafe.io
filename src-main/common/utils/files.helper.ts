@@ -76,11 +76,12 @@ export async function getReadableFileFromMsg(
   return entity as ReadonlyFile;
 }
 
-export async function saveFileFromMsg(
-  fileId: string,
-  t: (key: string, placeholders?: Record<string, string>) => string,
-  incomingMsgId?: string,
-): Promise<boolean | undefined> {
+export async function saveFileFromMsg({ fileId, name, incomingMsgId, t }: {
+  fileId: string;
+  name?: string;
+  t: (key: string, placeholders?: Record<string, string>) => string;
+  incomingMsgId?: string;
+}): Promise<boolean | undefined> {
   const entity = await getFileByInfoFromMsg(fileId, incomingMsgId);
   if (!entity) {
     return false;
@@ -92,7 +93,7 @@ export async function saveFileFromMsg(
       // Not '': an empty label leaves the platform to put its own, untranslated
       // one on the button.
       t('app.text.save'),
-      entity.name,
+      name || entity.name,
     );
 
     if (!targetFolder) {
@@ -110,7 +111,7 @@ export async function saveFileFromMsg(
     const targetFile = await w3n.shell?.fileDialogs?.saveFileDialog!(
       t('chat.message.dialog.file_download.title'),
       t('app.text.save'),
-      entity.name,
+      name || entity.name,
     );
 
     if (!targetFile) {

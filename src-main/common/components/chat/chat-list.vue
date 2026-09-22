@@ -16,29 +16,32 @@
 -->
 
 <script lang="ts" setup>
-import { storeToRefs } from 'pinia';
-import { useI18n } from 'vue-i18n';
-import { Ui3nButton, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
-import { useChatsStore } from '@main/common/store/chats.store';
-import { useAppStore } from '@main/common/store/app.store';
-import type { ChatListItemView } from '~/chat.types';
-import ChatListItem from './chat-list-item.vue';
+  import { storeToRefs } from 'pinia';
+  import { useI18n } from 'vue-i18n';
+  import { Ui3nButton, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
+  import { useChatsStore } from '@main/common/store/chats.store';
+  import { useAppStore } from '@main/common/store/app.store';
+  import type { ChatListItemView } from '~/chat.types';
+  import ChatListItem from './chat-list-item.vue';
 
-const emits = defineEmits<{
-  (event: 'click', value: ChatListItemView): void;
-}>();
+  defineProps<{
+    isMobileMode?: boolean;
+    openCreateChatDialog?: (isMobileMode?: boolean) => Promise<void>;
+  }>();
 
-const { t } = useI18n();
+  const emits = defineEmits<{
+    (event: 'click', value: ChatListItemView): void;
+  }>();
 
-const chatsStore = useChatsStore();
-const { chatListSortedByTime, chatListLoaded, chatListError } = storeToRefs(chatsStore);
-const { backendStage } = storeToRefs(useAppStore());
+  const { t } = useI18n();
+
+  const chatsStore = useChatsStore();
+  const { chatListSortedByTime, chatListLoaded, chatListError } = storeToRefs(chatsStore);
+  const { backendStage } = storeToRefs(useAppStore());
 </script>
 
 <template>
   <div :class="$style.chatList">
-    <!-- Before the spinner: a list that could not be fetched at all used to
-         fall back to the spinner and turn there forever (2026-09-10). -->
     <div
       v-if="chatListError"
       :class="$style.stateInfo"
@@ -52,9 +55,6 @@ const { backendStage } = storeToRefs(useAppStore());
       </ui3n-button>
     </div>
 
-    <!-- The first list load waits for the deno component to open its
-         databases, which on a cold start takes seconds: without an explicit
-         state the sidebar is a blank block indistinguishable from a hang. -->
     <div
       v-else-if="!chatListLoaded"
       :class="$style.stateInfo"
@@ -63,9 +63,7 @@ const { backendStage } = storeToRefs(useAppStore());
         indeterminate
         size="32"
       />
-      <!-- What it is waiting on, when the service says so: a slow start is a
-           legitimate wait, and naming the stage is what tells it apart from
-           a hang without cutting it short. -->
+
       <div v-if="backendStage">
         {{ t('app.startup.stillStarting', { stage: backendStage }) }}
       </div>
@@ -86,29 +84,48 @@ const { backendStage } = storeToRefs(useAppStore());
         @click.stop.prevent="emits('click', chat)"
       />
     </template>
+
+    <ui3n-button
+      v-if="isMobileMode"
+      type="icon"
+      size="large"
+      color="var(--color-bg-button-primary-default)"
+      icon="round-plus"
+      icon-color="var(--color-icon-button-primary-default)"
+      icon-size="32"
+      :class="$style.createBtn"
+      @click.stop.prevent="() => openCreateChatDialog && openCreateChatDialog(isMobileMode)"
+    />
   </div>
 </template>
 
 <style lang="scss" module>
-.chatList {
-  position: relative;
-  width: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 0 var(--spacing-xs);
-  background-color: var(--color-bg-block-primary-default);
-  user-select: none;
-}
+  .chatList {
+    position: relative;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 0 var(--spacing-xs);
+    background-color: var(--color-bg-block-primary-default);
+    user-select: none;
+  }
 
-.stateInfo {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: var(--spacing-s);
-  padding: var(--spacing-l) var(--spacing-s);
-  font-size: var(--font-13);
-  color: var(--color-text-block-secondary-default);
-  text-align: center;
-}
+  .stateInfo {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: var(--spacing-s);
+    padding: var(--spacing-l) var(--spacing-s);
+    font-size: var(--font-13);
+    color: var(--color-text-block-secondary-default);
+    text-align: center;
+  }
+
+  .createBtn {
+    position: fixed;
+    bottom: var(--spacing-m);
+    right: var(--spacing-m);
+    z-index: 5;
+  }
 </style>

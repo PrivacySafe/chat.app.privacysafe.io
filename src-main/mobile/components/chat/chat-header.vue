@@ -119,6 +119,7 @@
       v-if="chatWithCall"
       type="icon"
       color="var(--error-content-default)"
+      text-color="var(--white-100)"
       icon="round-phone-disabled"
       icon-color="var(--error-fill-default)"
       @click.stop.prevent="() => endCall(currentChatObjId)"
