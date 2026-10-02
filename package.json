@@ -1,13 +1,13 @@
 {
   "name": "chat.app.privacysafe.io",
-  "version": "0.12.24",
+  "version": "0.12.25",
   "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build:deno": "bash ci/bundle-deno-code.sh",
-    "build:deno:dev": "bash ci/bundle-deno-code.sh --dev",
+    "build:deno": "bash bundle-deno-code.sh",
+    "build:deno:dev": "bash bundle-deno-code.sh --dev",
     "build:gui": "vue-tsc --noEmit && vite build",
     "build": "pnpm lint && pnpm build:gui && pnpm build:deno",
     "bench:db": "deno run -A ci/bench-db-writes.ts",
@@ -37,11 +37,11 @@
     "lint": "pnpm linter && pnpm stylelint"
   },
   "dependencies": {
-    "@v1nt1248/3nclient-lib": "0.4.0",
+    "@v1nt1248/3nclient-lib": "0.4.3",
     "dayjs": "1.11.23",
     "fflate": "0.8.3",
     "lodash": "4.18.1",
-    "pdfjs-dist": "5.7.284",
+    "pdfjs-dist": "6.3.289",
     "pinia": "3.0.4",
     "vue": "3.5.43",
     "vue-i18n": "11.4.12",
@@ -87,5 +87,5 @@
     "vue-eslint-parser": "10.4.1",
     "vue-tsc": "3.3.11"
   },
-  "packageManager": "pnpm@11.18.0"
+  "packageManager": "pnpm@12.6.0"
 }

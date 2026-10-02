@@ -26,70 +26,70 @@ declare namespace web3n.caps {
 	type AppManifest = GeneralAppManifest | SimpleGUIAppManifest;
 
 	interface GeneralAppManifest {
-    appDomain: string;
-    version: string;
-    name: string;
-    description: string;
-    icon: string;
-    /**
-     * Optional application classification tags. Tag values are intentionally
-     * open-ended so new tags don't require a manifest format change.
-     */
-    tags?: string[];
-    /** Publisher/distributor of the application. */
-    publisher?: string;
-    /** Primary application website URL. */
-    website?: string;
-    /** Support or other application-related contact information. */
-    contact?: string;
-    /** Privacy policy URL. */
-    policy?: string;
-    /** Terms of Service / Terms of Use URL. */
-    terms?: string;
-    /** SPDX license identifier or expression. */
-    license?: string;
-    /** Canonical source-code repository or source distribution URL. */
-    source?: string;
+		appDomain: string;
+		version: string;
+		name: string;
+		description: string;
+		icon: string;
+		/**
+		 * Optional application classification tags. Tag values are intentionally
+		 * open-ended so new tags don't require a manifest format change.
+		 */
+		tags?: string[];
+		/** Publisher/distributor of the application. */
+		publisher?: string;
+		/** Primary application website URL. */
+		website?: string;
+		/** Support or other application-related contact information. */
+		contact?: string;
+		/** Privacy policy URL. */
+		policy?: string;
+		/** Terms of Service / Terms of Use URL. */
+		terms?: string;
+		/** SPDX license identifier or expression. */
+		license?: string;
+		/** Canonical source-code repository or source distribution URL. */
+		source?: string;
 		/**
 		 * components object enumerates all components of the app. Keys are
 		 * entrypoint paths within app folder. Respective values are definitions.
 		 */
-    components: {
-      [entrypoint: string]: AppComponent;
-    };
-    /**
-     * launchers is an array of explicit launchers that user can start.
-     * If this array is missing and there is a component with default
-     * entrypoint, then a default launcher is created from app's data in the
-     * manifest (name, icon, description).
-     * If there are no launchers, and there is no default component, then an
-     * app can't be launched by user directly.
-     */
-    launchers?: (Launcher | DynamicLaunchers)[];
-    /**
-     * launchOnSystemStartup is an array of explicit launchers that platform
-     * can start on system/platform's startup for a current user. This might
-     * be useful to warmup/preload service components.
-     */
-    launchOnSystemStartup?: Launcher[];
-    /**
-     * exposedFSResources object enumerates exposed file system resources.
-     * Keys are resource names. Respective values are definitions.
-     */
-    exposedFSResources?: {
-      [resourceName: string]: FSResourceDescriptor;
-    };
+		components: {
+			[entrypoint: string]: AppComponent;
+		};
+		/**
+		 * launchers is an array of explicit launchers that user can start.
+		 * If this array is missing and there is a component with default
+		 * entrypoint, then a default launcher is created from app's data in the
+		 * manifest (name, icon, description).
+		 * If there are no launchers, and there is no default component, then an
+		 * app can't be launched by user directly.
+		 */
+		launchers?: (Launcher|DynamicLaunchers)[];
+		/**
+		 * launchOnSystemStartup is an array of explicit launchers that platform
+		 * can start on system/platform's startup for a current user. This might
+		 * be useful to warmup/preload service components.
+		 */
+		launchOnSystemStartup?: Launcher[];
+		/**
+		 * exposedFSResources object enumerates exposed file system resources.
+		 * Keys are resource names. Respective values are definitions.
+		 */
+		exposedFSResources?: {
+			[resourceName: string]: FSResourceDescriptor;
+		};
 
-    // XXX
-    // App that uses connectors (TBD) may want to provide default connector
-    // settings, allowing user to start with non-empty configuration that may
-    // evolve into some custom settings, e.g. Thunderbird will let one setup
-    // gmail with simple parameters of user name and password, indicating
-    // that technical details come from app.
-    // Besides having info here, we may see json format developing to allow
-    // easy passing of connectivity data from providers to their users.
-    // defaultConnections?: {}[];
-  }
+		// XXX 
+		// App that uses connectors (TBD) may want to provide default connector
+		// settings, allowing user to start with non-empty configuration that may
+		// evolve into some custom settings, e.g. Thunderbird will let one setup
+		// gmail with simple parameters of user name and password, indicating
+		// that technical details come from app.
+		// Besides having info here, we may see json format developing to allow
+		// easy passing of connectivity data from providers to their users.
+		// defaultConnections?: {}[];
+	}
 
 	/**
 	 * Simple app has only one implicit simgleton component, exposes no

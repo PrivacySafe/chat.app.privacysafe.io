@@ -134,11 +134,10 @@
   .block {
     position: relative;
     width: 100%;
-    padding-top: var(--spacing-l);
-    padding-right: var(--spacing-m);
+    padding-top: var(--spacing-xl);
     margin-bottom: var(--spacing-m);
     display: grid;
-    grid-template-columns: repeat(auto-fill, 340px);
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: var(--spacing-m);
   }
 
@@ -147,7 +146,7 @@
     top: 0;
     left: 0;
     width: 100%;
-    height: var(--spacing-l);
+    height: var(--spacing-xl);
     font-size: var(--font-16);
     font-weight: 600;
     line-height: var(--spacing-l);

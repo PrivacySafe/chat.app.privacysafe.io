@@ -23,7 +23,6 @@ import {
   notifications,
   storeVueBus,
   storeNotifications,
-  theme,
   vueBus,
 } from '@v1nt1248/3nclient-lib/plugins';
 
@@ -43,7 +42,6 @@ export function setupMainApp(app: App<Element>, router: Router) {
   app
   .use(pinia)
   .use(i18n)
-  .use(theme, { theme: 'dark' })
   .use(vueBus)
   .use(dialogs)
   .use(notifications)

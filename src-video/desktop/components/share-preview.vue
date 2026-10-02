@@ -16,166 +16,187 @@
 -->
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
-import { Ui3nSwitch } from '@v1nt1248/3nclient-lib';
-import type { ScreenShareOption, WindowShareOption } from '@video/common/types';
+  import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue';
+  import type { ScreenShareOption, WindowShareOption } from '@video/common/types';
 
-const props = defineProps<{
-  opts: ScreenShareOption | WindowShareOption;
-  /** Currently selected source id (single-select). Controls switch state. */
-  activeSrcId?: string | null;
-}>();
-const emit = defineEmits(['selected']);
+  const props = defineProps<{
+    opts: ScreenShareOption | WindowShareOption;
+    /** Currently selected source id (single-select). Controls switch state. */
+    activeSrcId?: string | null;
+  }>();
+  const emits = defineEmits(['selected']);
 
-const name = computed(() => props.opts.name);
-const thumbnailURL = computed(() => props.opts.thumbnailURL);
-const stream = computed(() => props.opts.stream);
-const appIconURL = computed(() => (props.opts as WindowShareOption)?.appIconURL);
+  const name = computed(() => props.opts.name);
+  const thumbnailURL = computed(() => props.opts.thumbnailURL);
+  const stream = computed(() => props.opts.stream);
+  const appIconURL = computed(() => (props.opts as WindowShareOption)?.appIconURL);
 
-const videoTag = useTemplateRef<HTMLVideoElement>('video-tag');
-// Fully controlled by parent activeSrcId so failed capture reverts the switch.
-const selected = computed({
-  get: () =>
-    props.activeSrcId !== undefined
-      ? props.activeSrcId === props.opts.srcId
-      : props.opts.initiallySelected,
-  set: (v: boolean) => {
-    emit('selected', v);
-  },
-});
-const streamIsAttached = ref(false);
+  const videoTag = useTemplateRef<HTMLVideoElement>('video-tag');
+  // Fully controlled by parent activeSrcId so failed capture reverts the switch.
+  const selected = computed(() =>
+    props.activeSrcId !== undefined ? props.activeSrcId === props.opts.srcId : props.opts.initiallySelected,
+  );
+  const streamIsAttached = ref(false);
 
-async function attachStream(): Promise<void> {
-  try {
-    const mediaStream = await props.opts.stream;
-    if (videoTag.value && mediaStream) {
-      videoTag.value.srcObject = mediaStream;
-      streamIsAttached.value = true;
+  function select() {
+    emits('selected', !selected.value);
+  }
+
+  async function attachStream(): Promise<void> {
+    try {
+      const mediaStream = await props.opts.stream;
+      if (videoTag.value && mediaStream) {
+        videoTag.value.srcObject = mediaStream;
+        streamIsAttached.value = true;
+      }
+    } catch (err) {
+      console.error('[SharePreview] Failed to attach stream:', err);
     }
-  } catch (err) {
-    console.error('[SharePreview] Failed to attach stream:', err);
   }
-}
 
-onMounted(async () => {
-  // Attach immediately only for initially shared / already active sources.
-  // Other options resolve their deferred stream only after selection.
-  if (props.opts.initiallySelected || props.activeSrcId === props.opts.srcId) {
-    await attachStream();
-  }
-});
+  onMounted(async () => {
+    // Attach immediately only for initially shared / already active sources.
+    // Other options resolve their deferred stream only after selection.
+    if (props.opts.initiallySelected || props.activeSrcId === props.opts.srcId) {
+      await attachStream();
+    }
+  });
 
-watch(
-  [() => props.activeSrcId, () => props.opts.stream],
-  async ([srcId]) => {
+  watch([() => props.activeSrcId, () => props.opts.stream], async ([srcId]) => {
     if (srcId !== props.opts.srcId) {
       return;
     }
     await attachStream();
-  },
-);
+  });
 
-onBeforeUnmount(async () => {
-  try {
-    // Never stop initially-shared (live call) streams here — only preview captures.
-    if (!selected.value && !props.opts.initiallySelected) {
-      const mediaStream = await stream.value.catch(() => undefined);
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
+  onBeforeUnmount(async () => {
+    try {
+      // Never stop initially-shared (live call) streams here — only preview captures.
+      if (!selected.value && !props.opts.initiallySelected) {
+        const mediaStream = await stream.value.catch(() => undefined);
+        if (mediaStream) {
+          mediaStream.getTracks().forEach(track => track.stop());
+        }
       }
+    } catch (err) {
+      console.error('[SharePreview] Failed to stop stream in onBeforeUnmount:', err);
     }
-  } catch (err) {
-    console.error('[SharePreview] Failed to stop stream in onBeforeUnmount:', err);
-  }
-});
+  });
 </script>
 
 <template>
-  <div :class="$style.sharePreview">
-    <video
-      v-show="!!streamIsAttached"
-      ref="video-tag"
-      :class="$style.videoPreview"
-      playsinline
-      autoplay
-      muted
-    />
+  <div
+    :class="[$style.sharePreview, selected && $style.selected]"
+    @click="() => select()"
+  >
+    <div :class="$style.header">
+      <img
+        v-if="appIconURL"
+        :class="$style.appIcon"
+        :src="appIconURL"
+        alt="app icon"
+      >
 
-    <img
-      v-show="!streamIsAttached"
-      :src="thumbnailURL"
-      alt="thumbnail url"
-    >
+      <span>{{ name }}</span>
+    </div>
 
-    <div :class="$style.action">
-      <ui3n-switch
-        v-model="selected"
-        size="24"
+    <div :class="$style.body">
+      <video
+        v-show="!!streamIsAttached"
+        ref="video-tag"
+        :class="$style.preview"
+        playsinline
+        autoplay
+        muted
       />
 
-      <div :class="$style.text">
-        <img
-          v-if="appIconURL"
-          :class="$style.appIcon"
-          :src="appIconURL"
-          alt="app icon"
-        >
+      <img
+        v-show="!streamIsAttached"
+        :src="thumbnailURL"
+        alt="thumbnail url"
+        :class="$style.preview"
+      >
+    </div>
 
-        <span>{{ name }}</span>
-      </div>
+    <div
+      v-if="selected"
+      :class="$style.info"
+    >
+      SELECTED
     </div>
   </div>
 </template>
 
 <style lang="scss" module>
-@use '@main/common/assets/styles/mixins' as mixins;
+  @use '@main/common/assets/styles/mixins' as mixins;
 
-.sharePreview {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding-bottom: var(--spacing-xl);
-  background-color: var(--color-bg-chat-bubble-general-bg);
-  color: var(--color-text-block-primary-default);
-}
+  .sharePreview {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    padding: var(--spacing-s);
+    background-color: var(--color-bg-chat-bubble-general-bg);
+    color: var(--color-text-block-primary-default);
+    border-radius: var(--spacing-s);
+    border: 4px solid transparent;
+    cursor: pointer;
 
-.videoPreview {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.action {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: var(--spacing-xl);
-  padding: 0 var(--spacing-s);
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  column-gap: var(--spacing-s);
-  overflow: hidden;
-}
-
-.text {
-  display: flex;
-  width: calc(100% - var(--spacing-xl) - var(--spacing-s));
-  justify-content: flex-start;
-  align-items: center;
-  column-gap: var(--spacing-s);
-
-  .appIcon {
-    width: var(--spacing-m);
-    height: var(--spacing-m);
+    &.selected,
+    &:hover {
+      border-color: var(--color-border-control-accent-default);
+    }
   }
 
-  span {
-    display: block;
-    height: var(--spacing-m);
-    line-height: var(--spacing-m);
-    @include mixins.text-overflow-ellipsis();
+  .header {
+    display: flex;
+    width: 100%;
+    height: var(--spacing-l);
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    margin-bottom: var(--spacing-s);
+
+    .appIcon {
+      width: var(--spacing-m);
+      height: var(--spacing-m);
+    }
+
+    span {
+      display: block;
+      font-size: var(--font-14);
+      font-weight: 500;
+      @include mixins.text-overflow-ellipsis();
+    }
   }
-}
+
+  .body {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+  }
+
+  .preview {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: top;
+  }
+
+  .info {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: var(--font-16);
+    font-weight: 600;
+    line-height: 1;
+    text-transform: uppercase;
+    padding: var(--spacing-l) var(--spacing-xl);
+    border-radius: var(--spacing-s);
+    color: var(--color-text-button-primary-default);
+    background-color: var(--color-bg-button-primary-default);
+  }
 </style>

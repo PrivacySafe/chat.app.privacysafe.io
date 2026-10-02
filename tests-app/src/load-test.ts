@@ -24,13 +24,7 @@ import { defer } from '@tests/lib-common/processes/deferred';
 import { stringifyErr } from '@tests/lib-common/exceptions/error';
 import { logErr } from './test-page-utils';
 
-declare const w3n: web3n.testing.CommonW3N;
-
-/**
- * Must match the template of the users in ci/stress-test/test-setup.json.
- */
-const STRESS_USER_PREFIX = 'test_user_';
-
+// eslint-disable-next-line @typescript-eslint/no-invalid-void-type
 const { promise, reject, resolve } = defer<void>();
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (window as any).preTestProc = promise;
@@ -48,48 +42,17 @@ const routerForTestApp = createRouter({
   ]
 });
 
-/**
- * Tells a stress run from the ordinary suite.
- *
- * The two stands differ in how their users are named: the stress stand's are
- * `test_user_*`, while the ordinary suite's are `chat app ... tester ...`.
- * Reading this window's own id is enough, and it neither probes a user that
- * may not exist nor touches the ordinary flow.
- */
-async function isAsmailStressRun(): Promise<boolean> {
-  try {
-    const { userId } = await w3n.testStand.staticTestInfo();
-    return (typeof userId === 'string') && userId.startsWith(STRESS_USER_PREFIX);
-  } catch {
-    return false;
-  }
-}
-
-async function start(): Promise<void> {
-  if (await isAsmailStressRun()) {
-    // preTestProc is deliberately left pending: boot1.js waits on it before it
-    // starts jasmine, so no spec runs in a stress window, and the stress module
-    // is what ends the run (see its orchestrator).
-    const { userNum } = await w3n.testStand.staticTestInfo();
-    const { runAsmailStress } = await import('../../ci/stress-test/asmail-stress');
-    await runAsmailStress(userNum);
-    return;
-  }
-
-  initializeServices()
-  .then(() => {
-    const app = createApp(TestApp, { reject, resolve });
-    setupMainApp(app, routerForTestApp);
-    app.mount(`#test-app-vue`);
-  })
-  .catch(err => {
-    // The reason goes into the message itself: the stand's log serializes the
-    // error argument with JSON.stringify, and an RPC exception comes out of that
-    // as `{}` - which is exactly what the run of 2026-08-14 printed instead of
-    // naming the service that timed out.
-    logErr(`Failed to initialize test app: ${stringifyErr(err)}`, err);
-    reject(err);
-  });
-}
-
-void start();
+initializeServices()
+.then(() => {
+  const app = createApp(TestApp, { reject, resolve });
+  setupMainApp(app, routerForTestApp);
+  app.mount(`#test-app-vue`);
+})
+.catch(err => {
+  // The reason goes into the message itself: the stand's log serializes the
+  // error argument with JSON.stringify, and an RPC exception comes out of that
+  // as `{}` - which is exactly what the run of 2026-08-14 printed instead of
+  // naming the service that timed out.
+  logErr(`Failed to initialize test app: ${stringifyErr(err)}`, err);
+  reject(err);
+});

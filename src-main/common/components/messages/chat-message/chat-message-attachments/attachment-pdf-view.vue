@@ -110,7 +110,7 @@
           return;
         }
 
-        return pdfjs.getDocument(byteArray).promise;
+        return pdfjs.getDocument({ data: byteArray }).promise;
       })
       .then(doc => {
         pdfDoc = doc;

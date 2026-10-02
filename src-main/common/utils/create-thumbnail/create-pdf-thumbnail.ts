@@ -26,7 +26,7 @@ export async function makePdfThumbnail(
 ): Promise<string> {
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
-  const pdf = await pdfjs.getDocument(byteArray).promise;
+  const pdf = await pdfjs.getDocument({ data: byteArray }).promise;
   const page1 = await pdf.getPage(pageNum);
 
   const viewport = page1.getViewport({ scale: 1 });
