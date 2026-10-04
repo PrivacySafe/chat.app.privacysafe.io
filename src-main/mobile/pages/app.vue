@@ -16,7 +16,7 @@
 -->
 <script lang="ts" setup>
   import { onBeforeMount, ref } from 'vue';
-  import { Ui3nDialogProvider, Ui3nButton, Ui3nProgressLinear } from '@v1nt1248/3nclient-lib';
+  import { Ui3nDialogProvider, Ui3nButton, Ui3nProgressLinear, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
   import { useAppView } from '@main/common/composables/useAppView';
   import { useAppStore } from '@main/common/store/app.store';
   import OrientationNotice from '@main/common/components/app-shell/orientation-notice.vue';
@@ -28,6 +28,7 @@
     me,
     isOnline,
     connectivityStatusText,
+    commonLoading,
     runMenuAction,
     isSyncing,
     syncPending,
@@ -133,6 +134,17 @@
     <ui3n-dialog-provider />
 
     <orientation-notice />
+
+    <div
+      v-if="commonLoading"
+      :class="$style.loading"
+    >
+      <ui3n-progress-circular
+        indeterminate
+        size="120"
+        width="6"
+      />
+    </div>
   </section>
 </template>
 
@@ -146,6 +158,18 @@
     justify-content: flex-start;
     align-items: stretch;
     overflow: hidden;
+  }
+
+  /* The full-screen loader of an action that blocks the app, the same as the
+     desktop window's: over everything, including the drawer. */
+  .loading {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(4px);
   }
 
   .menu {

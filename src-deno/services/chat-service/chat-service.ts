@@ -47,6 +47,8 @@ import type {
 import { createChatEvents } from './events.ts';
 import type { GuiLogLine } from '../../../shared-libs/log-relay.ts';
 import { areAddressesEqual, includesAddress } from '../../../shared-libs/address-utils.ts';
+import { areChatIdsEqual } from '../../../shared-libs/chat-ids.ts';
+import { INBOX_SCAN_FLOOR_MS } from '../../../shared-libs/constants/index.ts';
 import { fileStoreService } from '../file-store-service/file-store-service.ts';
 import { AppSettings } from '../../utils/app-settings.ts';
 import type { BlacklistTracker } from '../contacts-service/contacts-blacklist.ts';
@@ -418,6 +420,69 @@ export async function chatService(
       msg.msgId,
       `Incoming chat message ${msg.msgId} has unrecognized type. Removing it from inbox.`,
     );
+  }
+
+  /**
+   * Pulls messages still sitting in the shared inbox for one chat, without the
+   * live inbox subscription.
+   *
+   * The subscription can go quiet (a platform defect seen on 2026-08-16), and
+   * then the user receives nothing at all. This method is the way out: the
+   * listing starts at the chat's last incoming message - incoming records keep
+   * the delivery timestamp, which is exactly what inbox.listMsgs() reads - and
+   * every listed message that belongs to this chat goes through the ordinary
+   * handleIncomingMsg(), so the database writes, events and notifications are
+   * the same as for a message that arrived by itself.
+   *
+   * Webrtc-call messages are left alone: they belong to VideoChatSrv, and
+   * handleIncomingMsg() would not recognize them (it removes an unrecognized
+   * message from the inbox). The global inbox watermark is deliberately not
+   * touched - the catch-up scan keeps owning it, and reprocessing here is
+   * idempotent.
+   */
+  async function forceRefreshChat(chatId: ChatIdObj): Promise<{ listed: number; applied: number }> {
+    // The chat's last incoming message is the listing floor, so a pass does not
+    // walk the whole shared inbox. It is not the measure of "new" though: the
+    // listing can turn up system updates and phantoms of this device too, so
+    // newness is gauged by the chat's own row count, which only a message that
+    // actually adds a record moves.
+    const fromTS = data.getLatestIncomingMsgTimestampInChat(chatId) ?? INBOX_SCAN_FLOOR_MS;
+    const messagesBefore = data.countMessagesInChat(chatId);
+    const listed = await w3n.mail!.inbox.listMsgs(fromTS);
+
+    for (const { msgId, msgType } of listed) {
+      if (msgType !== 'chat') { continue; }
+
+      const msg = await w3n.mail!.inbox.getMsg(msgId).catch(err => {
+        w3n.log('error', `Force-refresh: fail to get inbox message ${msgId}`, err).catch(() => {});
+        return undefined;
+      });
+      if (!msg) { continue; }
+
+      const incoming = msg as ChatIncomingMessage;
+      const body = incoming.jsonBody;
+      if (body?.chatMessageType === 'webrtc-call') { continue; }
+
+      let msgChatId: ChatIdObj | undefined;
+      if (body?.chatMessageType === 'synchronization') {
+        const syncMsg = body as ChatSyncMsgV1<
+          PhantomSyncMsgDataBasedOnRegularMsgV1 | ChatSystemMsgV1 | ChatInvitationMsgV1
+        >;
+        // A phantom of this very device is the echo of a message sent here, not
+        // a new message for the chat.
+        if (syncMsg.sourceDeviceId === getAppDeviceId()) { continue; }
+        msgChatId = syncMsg.chatId;
+      } else {
+        msgChatId = checkChatMessageJSON(incoming)?.chatId;
+      }
+
+      if (!msgChatId || !areChatIdsEqual(msgChatId, chatId)) { continue; }
+
+      await handleIncomingMsg(incoming);
+    }
+
+    const applied = Math.max(0, data.countMessagesInChat(chatId) - messagesBefore);
+    return { listed: listed.length, applied };
   }
 
   async function handleSystemMsg(
@@ -923,6 +988,7 @@ export async function chatService(
     getAppDeviceId,
     logFromGui,
     handleIncomingMsg,
+    forceRefreshChat,
     createOneToOneChat,
     acceptChatInvitation,
     createGroupChat,

@@ -166,6 +166,7 @@
     <chat-header-actions
       :chat="chat"
       :chat-with-call="chatWithCall"
+      :all-others-blocked="blockingState.allOthersBlocked"
       :disabled="isIncomingCall"
       @select:action="selectAction"
     />

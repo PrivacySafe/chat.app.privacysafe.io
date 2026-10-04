@@ -24,7 +24,12 @@ import { toCanonicalAddress } from '@shared/address-utils';
 import { ChatListItemView, ChatMenuItem, SingleChatView } from '~/index';
 
 export function useChatHeaderActions(
-  props: ComputedRef<{ chat: ChatListItemView; chatWithCall?: boolean; disabled?: boolean }>,
+  props: ComputedRef<{
+    chat: ChatListItemView;
+    chatWithCall?: boolean;
+    disabled?: boolean;
+    allOthersBlocked?: boolean;
+  }>,
   emits: { (event: 'select:action', value: string): void },
 ) {
   const { t } = useI18n();
@@ -133,7 +138,17 @@ export function useChatHeaderActions(
       return true;
     }
 
-    return !!(props.value.chatWithCall && item.disable?.includes('chat-with-call'));
+    if (props.value.chatWithCall && item.disable?.includes('chat-with-call')) {
+      return true;
+    }
+
+    // A chat whose every other participant is blocked is shut: there is nobody
+    // left to fetch anything from, so force-refresh has nothing to do in it.
+    if (props.value.allOthersBlocked && item.disable?.includes('blocked-chat')) {
+      return true;
+    }
+
+    return false;
   }
 
   function initialSubMenusState(): Record<string, boolean> {

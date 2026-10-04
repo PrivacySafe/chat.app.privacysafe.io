@@ -28,6 +28,7 @@ import type { RecordingKind } from '../shared-libs/constants/media-recording.ts'
 
 export type ChatMenuAction =
   | 'chat:info'
+  | 'chat:refresh'
   | 'chat:rename'
   | 'history:export'
   | 'history:clean'
@@ -43,7 +44,7 @@ export interface ChatMenuItem {
   action: string; // the composite action -> entity:action:value
   text: string;
   chatTypes: ('single' | 'group' | 'group&admin')[];
-  disable?: ('chat-with-call' | 'incoming-call')[];
+  disable?: ('chat-with-call' | 'incoming-call' | 'blocked-chat')[];
   isAccent?: boolean;
   margin?: boolean;
   subMenu?: ChatMenuItem[];

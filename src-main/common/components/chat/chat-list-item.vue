@@ -72,18 +72,18 @@
   );
 
   const isLastMsgIncoming = computed(() => {
-    if (!props.data.lastMsg) return true;
+    if (!props.data.lastMsg) { return true; }
     return props.data.lastMsg.isIncomingMsg;
   });
   const lastMsgStatus = computed(() => {
-    if (isLastMsgIncoming.value || props.data.lastMsg?.chatMessageType !== 'regular') return undefined;
+    if (isLastMsgIncoming.value || props.data.lastMsg?.chatMessageType !== 'regular') { return undefined; }
 
     return props.data.lastMsg?.status as OutgoingMessageStatus;
   });
 
   const message = computed<string>(() => {
     const lastMsg = props.data.lastMsg;
-    if (!lastMsg) return ' ';
+    if (!lastMsg) { return ' '; }
 
     switch (lastMsg.chatMessageType) {
       case 'regular': {

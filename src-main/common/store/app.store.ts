@@ -91,6 +91,10 @@ export const useAppStore = defineStore('app', () => {
     isMobileMode.value = value;
   }
 
+  function setCommonLoading(value: boolean) {
+    commonLoading.value = value;
+  }
+
   function setAppWindowSize(value: Ui3nResizeCbArg) {
     appWindowSize.value = {
       width: value.width,
@@ -156,6 +160,7 @@ export const useAppStore = defineStore('app', () => {
     ...sync,
     refreshRecordingSupport,
     setMobileMode,
+    setCommonLoading,
     setAppWindowSize,
     initialize,
     stopWatching,

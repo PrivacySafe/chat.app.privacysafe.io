@@ -30,6 +30,7 @@ import { toCanonicalAddress } from '@shared/address-utils';
 import { exportChatMessages } from '@main/common/utils/chats.helper';
 import { useAppStore } from '@main/common/store/app.store';
 import { useContactBlocking } from '@main/common/composables/useContactBlocking';
+import { useForceRefreshChat } from '@main/common/composables/useForceRefreshChat';
 import { useUiIncomingStore } from '@main/common/store/ui.incoming.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useChatStore } from '@main/common/store/chat.store';
@@ -48,6 +49,7 @@ interface ChatActionHandlers {
   };
   chat: {
     info: () => Promise<void> | void;
+    refresh: () => Promise<void>;
     rename: () => Promise<void> | void;
     close: () => Promise<void>;
     delete: () => Promise<void> | void;
@@ -79,6 +81,7 @@ export function useChatHeader({
   const { user } = storeToRefs(useAppStore());
 
   const { runContactBlocking } = useContactBlocking();
+  const { forceRefreshChat } = useForceRefreshChat();
 
   const uiIncomingStore = useUiIncomingStore();
   const { joinIncomingCall, dismissIncomingCall, startCall, endCall, rejoinCall } = uiIncomingStore;
@@ -270,6 +273,7 @@ export function useChatHeader({
     },
     chat: {
       info: openChatInfoDialog,
+      refresh: forceRefreshChat,
       rename: runChatRenaming,
       close: closeChat,
       delete: runChatDeleting,

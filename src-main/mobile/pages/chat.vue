@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { onBeforeUnmount, onMounted } from 'vue';
+  import { computed, onBeforeUnmount, onMounted } from 'vue';
   import { onBeforeRouteUpdate } from 'vue-router';
   import { storeToRefs } from 'pinia';
   import isEmpty from 'lodash/isEmpty';
@@ -26,6 +26,7 @@
   import { useAppStore } from '@main/common/store/app.store';
   import { useContactsStore } from '@main/common/store/contacts.store';
   import { useNavigation } from '@main/mobile/composables/useNavigation';
+  import { useChatPullToRefresh } from '@main/mobile/composables/useChatPullToRefresh';
   import ChatHeader from '@main/mobile/components/chat/chat-header.vue';
   import EmoticonsDialog from '@main/common/components/dialogs/emoticons-dialog.vue';
   import ChatAttachmentItem from '@main/common/components/chat/chat-attachment-item.vue';
@@ -65,6 +66,7 @@
     activeSuggestionIndex,
     blockedMembers,
     blockingState,
+    messageListElement,
     onInput,
     selectMention,
     hideSuggestions,
@@ -90,6 +92,8 @@
     doBeforeRouteUpdate,
     doBeforeUnMount,
   } = useChatView(useNavigation);
+
+  useChatPullToRefresh(messageListElement, computed(() => blockingState.value.allOthersBlocked));
 
   onMounted(doAfterMount);
   onBeforeRouteUpdate(doBeforeRouteUpdate);

@@ -500,6 +500,23 @@ export async function msgsDb({
     return sqlValue ? objectFromQueryExecResult<{ count: number }>(sqlValue)[0].count : 0;
   }
 
+  /**
+   * How many message rows a chat holds. force-refresh compares it across its
+   * pass to tell new messages from re-reads and from update-only system events,
+   * which change a row without adding one.
+   */
+  function countMessagesInChat({ isGroupChat, chatId }: ChatIdObj): number {
+    const chatColumn = isGroupChat ? 'groupChatId' : 'otoPeerCAddr';
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT COUNT(*) AS count
+      FROM messages
+      WHERE ${chatColumn} = $chatId`,
+      { $chatId: chatId },
+    );
+    return sqlValue ? objectFromQueryExecResult<{ count: number }>(sqlValue)[0].count : 0;
+  }
+
   async function getMessagesInOneToOneChat(otoPeerCAddr: string) {
     const whereParams = queryParamsFrom<Pick<MsgDbEntry, 'otoPeerCAddr'>>({ otoPeerCAddr }, msgsTabFields);
     const whereClause = andEqualExprFor(whereParams);
@@ -700,6 +717,28 @@ export async function msgsDb({
     if (!sqlValue) {
       return;
     }
+
+    const { maxTS } = objectFromQueryExecResult<{ maxTS: number | null }>(sqlValue)[0];
+
+    return maxTS === null ? undefined : maxTS;
+  }
+
+  /**
+   * Latest incoming message of a chat, for the force-refresh scan: the scan
+   * lists the shared inbox from this deliveryTS onwards, and incoming records
+   * keep the delivery timestamp as their own (see handleRegularMsg), so this is
+   * the exact floor the inbox listing understands.
+   */
+  function getLatestIncomingMsgTimestampInChat({ isGroupChat, chatId }: ChatIdObj): number | undefined {
+    const chatColumn = isGroupChat ? 'groupChatId' : 'otoPeerCAddr';
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT max(timestamp) as maxTS
+      FROM messages
+      WHERE isIncomingMsg = 1 AND ${chatColumn} = $chatId`,
+      { $chatId: chatId },
+    );
+    if (!sqlValue) { return; }
 
     const { maxTS } = objectFromQueryExecResult<{ maxTS: number | null }>(sqlValue)[0];
 
@@ -1437,12 +1476,14 @@ export async function msgsDb({
     isMsgKeptForInboxMsg,
     getAllMessages,
     countMessages,
+    countMessagesInChat,
     getExpiredMessages,
     getMessagesByChat,
     getMessagesPageInChat,
     getNotRegularMessagesByChat,
     getMessagesWithSyncingSelfStatus,
     getLatestIncomingMsgTimestamp,
+    getLatestIncomingMsgTimestampInChat,
     getLatestMsgInChat,
     getUnreadMsgsCountIn,
     getRecentReactions,

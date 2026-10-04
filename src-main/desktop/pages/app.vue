@@ -15,7 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { Ui3nDialogProvider, Ui3nProgressLinear, Ui3nResize as vUi3nResize } from '@v1nt1248/3nclient-lib';
+  import {
+    Ui3nDialogProvider,
+    Ui3nProgressLinear,
+    Ui3nProgressCircular,
+    Ui3nResize as vUi3nResize,
+  } from '@v1nt1248/3nclient-lib';
   import prLogo from '@main/common/assets/images/privacysafe-logo-new.svg';
   import { useAppView } from '@main/common/composables/useAppView';
   import ContactIcon from '@main/common/components/contacts/contact-icon.vue';
@@ -23,6 +28,7 @@
   import BackendUnreachable from '@main/common/components/app-shell/backend-unreachable.vue';
 
   const {
+    commonLoading,
     me,
     customLogoSrc,
     appVersion,
@@ -122,6 +128,17 @@
     <backend-unreachable />
 
     <ui3n-dialog-provider />
+
+    <div
+      v-if="commonLoading"
+      :class="$style.loading"
+    >
+      <ui3n-progress-circular
+        indeterminate
+        size="120"
+        width="6"
+      />
+    </div>
   </div>
 </template>
 
@@ -260,5 +277,15 @@
     display: flex;
     justify-content: center;
     align-content: flex-end;
+  }
+
+  .loading {
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(4px);
   }
 </style>

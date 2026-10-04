@@ -190,6 +190,7 @@ export interface MsgsDb {
   /** Every row there is, oldest first. Read by a backup, and by nothing else. */
   getAllMessages(): MsgDbEntry[];
   countMessages(): number;
+  countMessagesInChat(chatIdObj: ChatIdObj): number;
   getExpiredMessages(now: number): Promise<MsgDbEntry[]>;
   getMessagesByChat(chatIdObj: ChatIdObj): Promise<MsgDbEntry[]>;
   /**
@@ -200,6 +201,7 @@ export interface MsgsDb {
   getNotRegularMessagesByChat(chatId: ChatIdObj): MsgDbEntry[];
   getMessagesWithSyncingSelfStatus(): MsgDbEntry[];
   getLatestIncomingMsgTimestamp(): number | undefined;
+  getLatestIncomingMsgTimestampInChat(chatIdObj: ChatIdObj): number | undefined;
   getLatestMsgInChat(chatIdObj: ChatIdObj): MsgDbEntry | null;
   getUnreadMsgsCountIn(chatIdObj: ChatIdObj): number;
   getRecentReactions(quantity: number): Promise<string[]>;

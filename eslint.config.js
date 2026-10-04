@@ -62,6 +62,8 @@ export default [
       'no-param-reassign': 'off',
       'no-return-assign': 'off',
       'arrow-parens': ['error', 'as-needed'],
+      'curly': ['error', 'all'],
+      'block-spacing': ['error', 'always'],
       'object-curly-newline': [
         'error',
         {
@@ -113,6 +115,8 @@ export default [
     rules: {
       'no-undef': 'off',
       'no-unsafe-optional-chaining': ['error'],
+      'curly': ['error', 'all'],
+      'block-spacing': ['error', 'always'],
 
       '@typescript-eslint/triple-slash-reference': 'off',
       '@typescript-eslint/no-inferrable-types': [

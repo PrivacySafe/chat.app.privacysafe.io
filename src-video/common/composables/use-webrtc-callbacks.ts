@@ -465,10 +465,10 @@ export function useWebRtcCallbacks(params: UseWebRtcCallbacksParams) {
     const signalingChannel = streams.hostSignalingChannel;
     if (signalingChannel) {
       for (const [addr, participant] of streams.remoteParticipants.entries()) {
-        if (addr === clientAddr) continue;
+        if (addr === clientAddr) { continue; }
         // Skip peers without media yet (e.g. seeded 'invited' roster entries) —
         // otherwise the new client is told a fabricated mic/cam state for them.
-        if (!participant.stream) continue;
+        if (!participant.stream) { continue; }
 
         const state = {
           audio: !participant.audioMuted,

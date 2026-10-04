@@ -323,6 +323,7 @@ export const en = {
       menu: {
         txt: {
           info: 'Chat Info',
+          refresh: 'Force-refresh chat',
           rename: 'Rename Chat',
           history: {
             export: 'Export History',
@@ -475,6 +476,7 @@ export const en = {
       },
     },
     notification: {
+      noNewMessages: 'No new messages',
       callActive: {
         title: 'Active Call',
         message: 'A call is in progress in {chatName}. Tap to join.',

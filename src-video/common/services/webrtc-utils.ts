@@ -183,10 +183,7 @@ export function sdpDirectionsByMid(sdp: string | undefined): Map<string, SdpMedi
       direction = 'sendrecv';
     } else if (line.startsWith('a=mid:')) {
       mid = line.slice('a=mid:'.length);
-    } else if (
-      (line === 'a=sendrecv') || (line === 'a=sendonly')
-      || (line === 'a=recvonly') || (line === 'a=inactive')
-    ) {
+    } else if (line === 'a=sendrecv' || line === 'a=sendonly' || line === 'a=recvonly' || line === 'a=inactive') {
       direction = line.slice('a='.length) as SdpMediaDirection;
     }
   }
@@ -246,16 +243,18 @@ export function attemptIceRestartWithRecovery(
   // is a glare generator rather than a recovery. Wait out the first slow
   // retry interval before treating the offer as lost.
   const offerAge = strandedOfferAgeMillis?.() ?? null;
-  if ((offerAge !== null) && (offerAge < STRANDED_OFFER_ROLLBACK_AGE_MILLIS)) {
+  if (offerAge !== null && offerAge < STRANDED_OFFER_ROLLBACK_AGE_MILLIS) {
     console.log(
-      `[ICE Restart] ${label}: local offer is only ${offerAge}ms old; leaving it in flight `
-      + `(rollback only past ${STRANDED_OFFER_ROLLBACK_AGE_MILLIS}ms)`,
+      `[ICE Restart] ${label}: local offer is only ${offerAge}ms old; leaving it in flight ` +
+        `(rollback only past ${STRANDED_OFFER_ROLLBACK_AGE_MILLIS}ms)`,
     );
     return;
   }
   pc.setLocalDescription({ type: 'rollback' }).then(
     () => {
-      console.log(`[ICE Restart] ${label}: rolled back stranded local offer to re-offer with fresh ICE credentials`);
+      console.log(
+        `[ICE Restart] ${label}: rolled back stranded local offer to re-offer with fresh ICE credentials`,
+      );
       requestRenegotiate();
     },
     err => {
@@ -324,22 +323,23 @@ export interface AudioRelayBridge {
  * `-` means the counter is absent (no inbound-rtp yet), `?` that this is the
  * first tick and there is nothing to subtract from.
  */
-export function audioEnergyGrowth(
-  now: number | undefined, before: number | undefined,
-): string {
+export function audioEnergyGrowth(now: number | undefined, before: number | undefined): string {
   if (now === undefined) {
     return '-';
   }
-  return (before === undefined) ? '?' : `+${(now - before).toExponential(1)}`;
+  return before === undefined ? '?' : `+${(now - before).toExponential(1)}`;
 }
 
 export function createAudioRelayBridge(label: string): AudioRelayBridge {
   let ctx: AudioContext | null = null;
-  const bridges = new Map<MediaStreamTrack, {
-    copy: MediaStreamTrack;
-    source: MediaStreamAudioSourceNode;
-    destination: MediaStreamAudioDestinationNode;
-  }>();
+  const bridges = new Map<
+    MediaStreamTrack,
+    {
+      copy: MediaStreamTrack;
+      source: MediaStreamAudioSourceNode;
+      destination: MediaStreamAudioDestinationNode;
+    }
+  >();
   const originals = new Map<MediaStreamTrack, MediaStreamTrack>();
 
   /**
@@ -391,10 +391,15 @@ export function createAudioRelayBridge(label: string): AudioRelayBridge {
         // the very failure this bridge exists to fix. Nothing to await: resuming
         // is quick and the sender tolerates the first moments being quiet.
         if (ctx.state === 'suspended') {
-          void ctx.resume().catch(err => relayLog.error(
-            `${label}: audio context refused to resume - relayed audio is silence `
-            + `until a user gesture wakes it`, err,
-          ));
+          void ctx
+            .resume()
+            .catch(err =>
+              relayLog.error(
+                `${label}: audio context refused to resume - relayed audio is silence ` +
+                  `until a user gesture wakes it`,
+                err,
+              ),
+            );
         }
         const source = ctx.createMediaStreamSource(new MediaStream([track]));
         const destination = ctx.createMediaStreamDestination();
@@ -486,7 +491,7 @@ export function encodableSenderTrackIds(pc: RTCPeerConnection): Set<string> {
   const ids = new Set<string>();
   for (const sender of pc.getSenders()) {
     const track = sender.track;
-    if (!track?.id || (track.readyState !== 'live') || track.muted || !track.enabled) {
+    if (!track?.id || track.readyState !== 'live' || track.muted || !track.enabled) {
       continue;
     }
     ids.add(track.id);
@@ -505,7 +510,7 @@ export function startQualityMonitor(
   onQualityDegraded?: () => void,
 ): () => void {
   const INTERVAL = 5000;
-  const CRITICAL_LOSS = 0.10;
+  const CRITICAL_LOSS = 0.1;
   let degradedFired = false;
   // framesEncoded per outbound video ssrc from the previous tick: a live
   // video sender whose counter does not move is sending no frames - the exact
@@ -573,7 +578,9 @@ export function startQualityMonitor(
         if (r.type === 'inbound-rtp' && r.kind === 'video') {
           totalLost += r.packetsLost ?? 0;
           totalRecv += (r.packetsReceived ?? 0) + (r.packetsLost ?? 0);
-          if (r.jitter > maxJitter) maxJitter = r.jitter;
+          if (r.jitter > maxJitter) {
+            maxJitter = r.jitter;
+          }
         }
         if (r.type === 'outbound-rtp' && r.kind === 'video') {
           outBytes += r.bytesSent ?? 0;
@@ -582,8 +589,12 @@ export function startQualityMonitor(
           const prev = lastFramesEncoded.get(r.ssrc);
           if (outboundHasLiveTrack(r, stats, encodableTrackIds)) {
             encodableNow.add(r.ssrc);
-            if (wasEncodable.has(r.ssrc)
-              && (prev !== undefined) && ((r.framesEncoded ?? 0) <= prev) && r.active !== false) {
+            if (
+              wasEncodable.has(r.ssrc) &&
+              prev !== undefined &&
+              (r.framesEncoded ?? 0) <= prev &&
+              r.active !== false
+            ) {
               stalledSenders += 1;
             }
           } else {
@@ -602,7 +613,7 @@ export function startQualityMonitor(
             // A receiver that had already started and then stopped: not "waiting
             // for the sender", which is what an unfilled slot looks like, but a
             // stream that went quiet with nobody reporting it.
-            if ((delta <= 0) && (prev > 0)) {
+            if (delta <= 0 && prev > 0) {
               silentAudioReceivers += 1;
             }
           }
@@ -617,8 +628,7 @@ export function startQualityMonitor(
             audioEncodableNow.add(r.ssrc);
             // Same hysteresis as video: the tick a track becomes encodable in has
             // no previous counter to be compared against.
-            if (audioWasEncodable.has(r.ssrc)
-              && (prev !== undefined) && (sent <= prev) && r.active !== false) {
+            if (audioWasEncodable.has(r.ssrc) && prev !== undefined && sent <= prev && r.active !== false) {
               silentAudioSenders += 1;
             }
           } else {
@@ -658,30 +668,30 @@ export function startQualityMonitor(
       // media actually moved (see log-relay.ts).
       log.info(
         `${label}: loss=${(lossRate * 100).toFixed(1)}% ` +
-        `rtt=${minRtt !== Infinity ? Math.round(minRtt * 1000) + 'ms' : 'N/A'} ` +
-        `jitter=${maxJitter.toFixed(3)}s ` +
-        `out(video)=${outBytes}B/${outFrames}f idle=${idleSenders} ` +
-        `audio(out)=${audioOutPackets}pkt idle=${idleAudioSenders} ` +
-        `nrg=${audioEnergyGrowth(audioSourceEnergy, lastAudioSourceEnergy)} ` +
-        `audio(in)=${audioInPackets}pkt/+${audioInDelta} on ${audioReceivers} receiver(s)`,
+          `rtt=${minRtt !== Infinity ? Math.round(minRtt * 1000) + 'ms' : 'N/A'} ` +
+          `jitter=${maxJitter.toFixed(3)}s ` +
+          `out(video)=${outBytes}B/${outFrames}f idle=${idleSenders} ` +
+          `audio(out)=${audioOutPackets}pkt idle=${idleAudioSenders} ` +
+          `nrg=${audioEnergyGrowth(audioSourceEnergy, lastAudioSourceEnergy)} ` +
+          `audio(in)=${audioInPackets}pkt/+${audioInDelta} on ${audioReceivers} receiver(s)`,
       );
       lastAudioSourceEnergy = audioSourceEnergy;
       if (stalledSenders > 0) {
         log.warn(
-          `${label}: ${stalledSenders} video sender(s) encoded no frames in the last `
-            + `${INTERVAL}ms - live track with no RTP (unfinished negotiation?)`,
+          `${label}: ${stalledSenders} video sender(s) encoded no frames in the last ` +
+            `${INTERVAL}ms - live track with no RTP (unfinished negotiation?)`,
         );
       }
       if (silentAudioSenders > 0) {
         log.warn(
-          `${label}: ${silentAudioSenders} audio sender(s) sent no packets in the last `
-            + `${INTERVAL}ms - live track with no RTP (a relay slot that never started?)`,
+          `${label}: ${silentAudioSenders} audio sender(s) sent no packets in the last ` +
+            `${INTERVAL}ms - live track with no RTP (a relay slot that never started?)`,
         );
       }
       if (silentAudioReceivers > 0) {
         log.warn(
-          `${label}: ${silentAudioReceivers} audio receiver(s) that had been receiving `
-            + `got nothing in the last ${INTERVAL}ms`,
+          `${label}: ${silentAudioReceivers} audio receiver(s) that had been receiving ` +
+            `got nothing in the last ${INTERVAL}ms`,
         );
       }
 
@@ -778,13 +788,7 @@ export async function logSelectedCandidatePair(pc: RTCPeerConnection, label: str
  */
 export function describeIceCandidate(candidate: RTCIceCandidate): string {
   const type = candidate.type ?? 'unknown';
-  const origin = type === 'srflx'
-    ? 'STUN'
-    : type === 'relay'
-      ? 'TURN'
-      : type === 'host'
-        ? 'local'
-        : 'unknown';
+  const origin = type === 'srflx' ? 'STUN' : type === 'relay' ? 'TURN' : type === 'host' ? 'local' : 'unknown';
   const parts = [
     `origin=${origin}`,
     `type=${type}`,
@@ -843,15 +847,12 @@ export function logTrackMuteState(track: MediaStreamTrack, label: string, from: 
  * and 'maintain-resolution', not the camera cap passed in - which used to
  * starve a native-resolution window capture down to the camera's 500 Kbps.
  */
-export async function applyVideoBitrateLimit(
-  sender: RTCRtpSender,
-  quality: VideoQualityConfig,
-): Promise<void> {
+export async function applyVideoBitrateLimit(sender: RTCRtpSender, quality: VideoQualityConfig): Promise<void> {
   if (!sender.track || sender.track.kind !== 'video') {
     return;
   }
   const hint = sender.track.contentHint;
-  const isScreenContent = (hint === 'detail') || (hint === 'text');
+  const isScreenContent = hint === 'detail' || hint === 'text';
   const effectiveQuality = isScreenContent ? SCREEN_SHARE_QUALITY : quality;
   try {
     const params = sender.getParameters();
@@ -1019,16 +1020,14 @@ const AUX_AUDIO_CODECS = ['audio/cn', 'audio/telephone-event'];
  * caller skips `setCodecPreferences()` and leaves the browser's own choice
  * alone rather than imposing a list of leftovers.
  */
-export function buildPreferredCodecs(
-  codecs: RTCRtpCodec[],
-  kind: 'audio' | 'video',
-): RTCRtpCodec[] {
-  const preferredOrder = (kind === 'video') ? PREFERRED_VIDEO_CODECS : PREFERRED_AUDIO_CODECS;
-  const auxOrder = (kind === 'video') ? AUX_VIDEO_CODECS : AUX_AUDIO_CODECS;
+export function buildPreferredCodecs(codecs: RTCRtpCodec[], kind: 'audio' | 'video'): RTCRtpCodec[] {
+  const preferredOrder = kind === 'video' ? PREFERRED_VIDEO_CODECS : PREFERRED_AUDIO_CODECS;
+  const auxOrder = kind === 'video' ? AUX_VIDEO_CODECS : AUX_AUDIO_CODECS;
 
-  const firstOfEach = (mimeTypes: string[]) => mimeTypes
-    .map(wanted => codecs.find(c => (c.mimeType ?? '').toLowerCase() === wanted))
-    .filter((c): c is RTCRtpCodec => !!c);
+  const firstOfEach = (mimeTypes: string[]) =>
+    mimeTypes
+      .map(wanted => codecs.find(c => (c.mimeType ?? '').toLowerCase() === wanted))
+      .filter((c): c is RTCRtpCodec => !!c);
 
   const primary = firstOfEach(preferredOrder);
   if (primary.length === 0) {
@@ -1220,9 +1219,11 @@ export function createRetryWatcher(opts: RetryWatcherOptions): {
       // Diagnostics must never be able to cancel a retry.
       state = ' [state unavailable]';
     }
-    console.log(fastRetry
-      ? `${opts.label}: Scheduling FAST retry ${fastRetryCount + 1}/${opts.maxFastRetries} in ${delay}ms${state}`
-      : `${opts.label}: Scheduling retry ${retryCount + 1}/${opts.maxRetries} in ${delay}ms${state}`);
+    console.log(
+      fastRetry
+        ? `${opts.label}: Scheduling FAST retry ${fastRetryCount + 1}/${opts.maxFastRetries} in ${delay}ms${state}`
+        : `${opts.label}: Scheduling retry ${retryCount + 1}/${opts.maxRetries} in ${delay}ms${state}`,
+    );
 
     timer = setTimeout(async () => {
       if (opts.shouldSkip()) {
@@ -1334,10 +1335,12 @@ const answerRecoveryFailures = new WeakMap<RTCPeerConnection, number>();
 export function isUnapplicableOnThisPc(err: unknown): boolean {
   const name = (err as Error | undefined)?.name;
   const message = String((err as Error | undefined)?.message ?? err ?? '');
-  return (name === 'InvalidAccessError')
-    || (name === 'InvalidModificationError')
-    || /ssl role/i.test(message)
-    || /m[- =]?lines?/i.test(message);
+  return (
+    name === 'InvalidAccessError' ||
+    name === 'InvalidModificationError' ||
+    /ssl role/i.test(message) ||
+    /m[- =]?lines?/i.test(message)
+  );
 }
 
 export async function applyAnswerWithRecovery(
@@ -1376,7 +1379,9 @@ export async function applyAnswerWithRecovery(
       // answer apply, and the re-offer path swallows its own errors, so the
       // default first-failure branch would just mint another doomed offer.
       // Escalate straight to a recreate, which starts a fresh DTLS session.
-      console.warn(`${label}: Answer can never apply to this pc (DTLS role / m-line mismatch); escalating to recreate`);
+      console.warn(
+        `${label}: Answer can never apply to this pc (DTLS role / m-line mismatch); escalating to recreate`,
+      );
       await onRecreate();
       return;
     }

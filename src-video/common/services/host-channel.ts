@@ -77,7 +77,7 @@ import {
   createProxyStreamForScreen,
   isScreenShareAddr,
   extractSrcIdFromScreenAddr,
-  extractMailerIdFromScreenAddr,
+  // extractMailerIdFromScreenAddr,
   mayActFor,
 } from './shared-screen-share';
 
@@ -580,7 +580,7 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
     opts?: { force?: boolean; mid?: string },
   ): void {
     const clientConn = clients.get(clientAddr);
-    if (!clientConn) return;
+    if (!clientConn) { return; }
 
     // A slot's mapping is addressed by mid: its stream id is fixed at
     // negotiation and stays the same however many participants pass through the
@@ -1024,9 +1024,9 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
       maxFastRetries: MAX_NEGOTIATION_FAST_RETRIES,
       fastRetryDelay: NEGOTIATION_FAST_RETRY_DELAY,
       shouldSkip: () => {
-        if (isClosed) return true;
+        if (isClosed) { return true; }
         const conn = clients.get(clientAddr);
-        if (!conn) return true;
+        if (!conn) { return true; }
         // Answer already arrived (state back to 'stable') — nothing to retry.
         // An open signaling DC is deliberately NOT a reason to skip: the DC
         // guarantees delivery of the offer, not that an answer comes back.
@@ -1040,9 +1040,9 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
       },
       retry: async () => {
         const conn = clients.get(clientAddr);
-        if (!conn) return true;
+        if (!conn) { return true; }
         const desc = conn.peerConnection.localDescription;
-        if (!desc) return true;
+        if (!desc) { return true; }
         console.log(`[Host] Retrying renegotiation offer to ${clientAddr}`);
         return await signalingChannel.sendSignalToClient(clientAddr, {
           type: 'offer',
@@ -1053,7 +1053,7 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
       },
       onExhausted: () => {
         const conn = clients.get(clientAddr);
-        if (!conn || isClosed) return;
+        if (!conn || isClosed) { return; }
         // No recreate here: unanswered retries mean slow delivery far more
         // often than a dead peer, and recreating orphans the client's
         // in-flight answer (cross-generation glare, 2026-08-11 revision).
@@ -1090,14 +1090,14 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
       maxFastRetries: MAX_ANSWER_FAST_RETRIES,
       fastRetryDelay: ANSWER_FAST_RETRY_DELAY,
       shouldSkip: () => {
-        if (isClosed) return true;
+        if (isClosed) { return true; }
         const conn = clients.get(clientAddr);
-        if (!conn) return true;
+        if (!conn) { return true; }
         const pc = conn.peerConnection;
         // The client evidently received the answer: media/ICE went through,
         // or the low-latency signaling DC (opened by that very connection)
         // is up and any resend would ride it pointlessly.
-        if (pc.connectionState === 'connected') return true;
+        if (pc.connectionState === 'connected') { return true; }
         if (conn.signalingDataChannel && conn.signalingDataChannel.readyState === 'open') {
           return true;
         }
@@ -1107,9 +1107,9 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
       },
       retry: async () => {
         const conn = clients.get(clientAddr);
-        if (!conn) return true;
+        if (!conn) { return true; }
         const desc = conn.peerConnection.localDescription;
-        if (!desc || desc.type !== 'answer') return true;
+        if (!desc || desc.type !== 'answer') { return true; }
         console.log(`[Host] Retrying SDP answer to ${clientAddr}`);
         // Stamped, not gated: this watcher has one slow retry in its whole
         // budget, so suppressing it would spend the recovery rather than a
@@ -1961,7 +1961,7 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
    */
   async function recreateClientConnection(clientAddr: string): Promise<void> {
     const oldConn = clients.get(clientAddr);
-    if (!oldConn || isClosed) return;
+    if (!oldConn || isClosed) { return; }
 
     // Several independent paths can decide to recreate the same client at once
     // (a failed answer, a caught offer error, an exhausted watcher). Letting
@@ -2278,9 +2278,9 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
       // removeClient()/closeAll() all close a PC too, and must not be
       // mistaken for a fresh departure of the (by then already-superseded or
       // already-removed) client.
-      if (isClosed) return;
+      if (isClosed) { return; }
       const conn = clients.get(clientAddr);
-      if (!conn || conn.peerConnection !== pc) return;
+      if (!conn || conn.peerConnection !== pc) { return; }
       // A closing SCTP association is a departure only when the transport
       // itself is dead. The CLIENT closing its own pc (its recreate path)
       // fires this too, while its fresh offer still needs a full ASMail leg
@@ -3160,7 +3160,7 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
     screenName?: string;
     logLabel: string;
   }): Promise<void> {
-    if (isClosed) return;
+    if (isClosed) { return; }
 
     const {
       track, proxyStream, senderKey, senderAddr, excludeAddr, onlyAddr, screenName, logLabel,
@@ -3184,8 +3184,8 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
     }
 
     for (const [clientAddr, clientConn] of clients.entries()) {
-      if (excludeAddr !== undefined && clientAddr === excludeAddr) continue;
-      if (onlyAddr !== undefined && clientAddr !== onlyAddr) continue;
+      if (excludeAddr !== undefined && clientAddr === excludeAddr) { continue; }
+      if (onlyAddr !== undefined && clientAddr !== onlyAddr) { continue; }
 
       try {
         const existingSenders = clientConn.outgoingTrackSenders.get(senderKey);
@@ -3811,7 +3811,7 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
 
   // Register handler for incoming signals from clients
   signalingChannel.registerClientHandler('*', (signal, authenticatedFrom) => {
-    if (isClosed) return;
+    if (isClosed) { return; }
 
     // The channel the signal arrived on, never `signal.fromAddr`. The body is
     // written by the sender, and reading the actor out of it let a connected
@@ -3828,7 +3828,7 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
       // sample signalingState before the other has finished mutating it (see
       // createSerialTaskQueue). Different clients stay independent.
       case 'offer':
-        if (isStaleClientSdp(clientAddr, signal, 'offer')) break;
+        if (isStaleClientSdp(clientAddr, signal, 'offer')) { break; }
         sdpQueueFor(clientAddr).run(
           () => handleClientOffer(clientAddr, signal.data as RTCSessionDescriptionInit, signal.msgTs),
         ).catch(err => {
@@ -3858,7 +3858,7 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
         break;
       case 'answer':
         // Renegotiation answer from client
-        if (isStaleClientSdp(clientAddr, signal, 'answer')) break;
+        if (isStaleClientSdp(clientAddr, signal, 'answer')) { break; }
         sdpQueueFor(clientAddr).run(
           () => handleClientAnswer(clientAddr, signal.data as RTCSessionDescriptionInit),
         ).catch(err => {
@@ -4319,14 +4319,14 @@ export function createHostChannel(params: HostChannelParams): HostWebRTCChannel 
 
     // Remove mis-forwarded senders under the VA key from other clients.
     for (const [otherAddr, cConn] of clients.entries()) {
-      if (otherAddr === clientAddr) continue;
+      if (otherAddr === clientAddr) { continue; }
       const vaSenders = cConn.outgoingTrackSenders.get(clientAddr);
-      if (!vaSenders) continue;
+      if (!vaSenders) { continue; }
       for (const s of [...vaSenders]) {
         if (s.track && tracks.some(t => t.id === s.track?.id)) {
           stopRelaySender(cConn, s);
           const idx = vaSenders.indexOf(s);
-          if (idx !== -1) vaSenders.splice(idx, 1);
+          if (idx !== -1) { vaSenders.splice(idx, 1); }
         }
       }
     }

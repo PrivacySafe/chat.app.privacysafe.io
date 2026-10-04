@@ -285,7 +285,7 @@ export function createClientChannel(params: ClientChannelParams): ClientWebRTCCh
     maxFastRetries: MAX_FAST_RETRIES,
     fastRetryDelay: FAST_RETRY_DELAY,
     shouldSkip: () => {
-      if (isClosed) return true;
+      if (isClosed) { return true; }
       // Retry only while our own offer is pending an answer (same semantics
       // as the host's watcher). Once the answer applied - or the offer rolled
       // back for a colliding one of the host's - the state left
@@ -1565,7 +1565,7 @@ export function createClientChannel(params: ClientChannelParams): ClientWebRTCCh
    * so a departing client never "replies" to the Host that ended the call.
    */
   function notifyHostOfLeaving(): Promise<void> {
-    if (isClosed) return Promise.resolve();
+    if (isClosed) { return Promise.resolve(); }
     // The returned promise settles once the signal is on its way (DC send, or
     // the ASMail delivery sub-system accepted it) — endCall() waits on it (with
     // a cap) before closeSelf(), so the window no longer closes 150ms after a
@@ -1587,7 +1587,7 @@ export function createClientChannel(params: ClientChannelParams): ClientWebRTCCh
    * gives up on its own timeout, and the request costs nothing to repeat.
    */
   function requestStreamMappings(): void {
-    if (isClosed) return;
+    if (isClosed) { return; }
     void signalingChannel.sendSignal('request-stream-info').catch(err => {
       console.error(`[Client ${ownAddr}] Failed to ask host for stream mappings:`, err);
     });
@@ -1976,7 +1976,7 @@ export function createClientChannel(params: ClientChannelParams): ClientWebRTCCh
 
   // Register handler for incoming signals from Host
   signalingChannel.onSignal(signal => {
-    if (isClosed) return;
+    if (isClosed) { return; }
 
     // Any signal from the host is a sign of life for the silence watchdog,
     // whichever transport (ASMail or DC) it rode in on.
@@ -1988,7 +1988,7 @@ export function createClientChannel(params: ClientChannelParams): ClientWebRTCCh
       // signalingState before the other one has finished mutating it (see
       // createSerialTaskQueue).
       case 'offer':
-        if (isStaleHostSdp(signal, 'offer')) break;
+        if (isStaleHostSdp(signal, 'offer')) { break; }
         sdpQueue.run(
           () => handleRenegotiationOffer(signal.data as RTCSessionDescriptionInit, signal.msgTs),
         ).catch(err => {
@@ -1996,7 +1996,7 @@ export function createClientChannel(params: ClientChannelParams): ClientWebRTCCh
         });
         break;
       case 'answer':
-        if (isStaleHostSdp(signal, 'answer')) break;
+        if (isStaleHostSdp(signal, 'answer')) { break; }
         sdpQueue.run(
           () => applyAnswer(signal.data as RTCSessionDescriptionInit),
         ).catch(err => {

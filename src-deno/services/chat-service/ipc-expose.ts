@@ -72,6 +72,7 @@ const REQ_REPLY_METHODS: (keyof ChatSrv)[] = [
   // stand has no second device of the same user, so there is no other way to
   // exercise the receiving side of synchronization (P2-8).
   'handleIncomingMsg',
+  'forceRefreshChat',
 ];
 
 const OBSERVABLE_METHODS: (keyof ChatSrv)[] = ['watch'];

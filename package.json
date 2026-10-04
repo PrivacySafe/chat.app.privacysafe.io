@@ -1,6 +1,6 @@
 {
   "name": "chat.app.privacysafe.io",
-  "version": "0.12.25",
+  "version": "0.12.26",
   "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@v1nt1248/3nclient-lib": "0.4.3",
+    "@vueuse/core": "^15.0.0",
     "dayjs": "1.11.23",
     "fflate": "0.8.3",
     "lodash": "4.18.1",

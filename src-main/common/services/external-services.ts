@@ -157,6 +157,7 @@ export async function initializeServices() {
               'previewRestore',
               'restoreBackupArchive',
               'handleIncomingMsg',
+              'forceRefreshChat',
             ],
             ['watch'],
           ) as ChatSrvOverIPC,

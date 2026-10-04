@@ -90,7 +90,7 @@
   });
 
   const replyMessageText = computed(() => {
-    if (!replyMessage.value) return '';
+    if (!replyMessage.value) { return ''; }
 
     const body = replyMessage.value.body;
     const attachments = replyMessage.value.attachments;

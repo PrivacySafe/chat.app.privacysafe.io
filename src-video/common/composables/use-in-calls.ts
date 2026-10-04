@@ -357,7 +357,7 @@ export function useInCalls() {
       onParticipantReconnecting: handleParticipantReconnecting,
       participantCount: streams.participantCount,
       getOwnScreenTracks: () => {
-        if (!ownScreens.value) return [];
+        if (!ownScreens.value) { return []; }
         return ownScreens.value.flatMap(s =>
           s.stream.getTracks().map(track => ({
             track,

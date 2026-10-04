@@ -25,6 +25,7 @@
     chat: ChatListItemView;
     chatWithCall?: boolean;
     disabled?: boolean;
+    allOthersBlocked?: boolean;
   }>();
   const emits = defineEmits<{
     (event: 'select:action', value: string): void;

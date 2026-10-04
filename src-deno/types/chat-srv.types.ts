@@ -98,6 +98,17 @@ export interface ChatSrv {
   handleIncomingMsg(msg: ChatIncomingMessage): Promise<void>;
 
   /**
+   * Pulls messages still sitting in the shared inbox for one chat, in bypass of
+   * the live inbox subscription, for the user's "Force-refresh chat" action.
+   *
+   * Lists the inbox from the chat's last incoming message (incoming records
+   * keep the delivery timestamp, which is the unit the listing reads) and runs
+   * every matching message through the ordinary incoming path. Returns what the
+   * listing held and how many new message records the chat gained.
+   */
+  forceRefreshChat(chatId: ChatIdObj): Promise<{ listed: number; applied: number }>;
+
+  /**
    * Creates new one-to-one chat. In case of an error it throws quite soon.
    * When local data allows chat creation, this returns id of created chat.
    * New chat object is pushed in event, observable via watch() method.

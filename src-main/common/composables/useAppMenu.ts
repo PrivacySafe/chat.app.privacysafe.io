@@ -28,8 +28,6 @@ export function useAppMenuItems() {
   const { t } = useI18n();
 
   return computed<AppMenuItem[]>(() => [
-    // Note that the icon set is not open-ended: a name it does not define
-    // renders as nothing at all, and silently.
     { id: 'make-backup', icon: 'outline-file-download', label: t('app.menu.makeBackup') },
     { id: 'restore-backup', icon: 'outline-file-upload', label: t('app.menu.restoreBackup') },
     { id: 'exit', icon: 'round-logout', label: t('app.menu.exit') },

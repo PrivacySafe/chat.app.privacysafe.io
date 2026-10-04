@@ -58,6 +58,13 @@ export const chatMenuItems: ChatMenuItem[] = [
     chatTypes: ['single', 'group'],
   },
   {
+    icon: 'round-refresh',
+    action: 'chat:refresh',
+    text: 'chat.action.menu.txt.refresh',
+    chatTypes: ['single', 'group'],
+    disable: ['blocked-chat'],
+  },
+  {
     icon: 'outline-timer',
     action: 'chat:timer',
     text: 'chat.action.menu.txt.timer.label',

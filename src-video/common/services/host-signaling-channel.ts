@@ -229,7 +229,7 @@ export function createHostSignalingChannel(
     let dcSentCount = 0;
 
     for (const clientAddr of knownClients) {
-      if (clientAddr === excludeAddr) continue;
+      if (clientAddr === excludeAddr) { continue; }
 
       // Try low-latency DataChannel first; fall back to ASMail if not open/fails.
       if (trySendViaDataChannel(clientDataChannels.get(clientAddr), signal, LOG_LABEL)) {
