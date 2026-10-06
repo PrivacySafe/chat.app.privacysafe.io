@@ -25,12 +25,23 @@ import { useForceRefreshChat } from '@main/common/composables/useForceRefreshCha
  */
 const PULL_TO_REFRESH_THRESHOLD_PX = 60;
 
+/**
+ * Slack for "scrolled to the end": Android WebView reports fractional scrollTop
+ * that can stop just short of the exact maximum.
+ */
+const BOTTOM_TOLERANCE_PX = 2;
+
+function isAtBottom(el: HTMLDivElement): boolean {
+  return el.scrollHeight - el.clientHeight - el.scrollTop <= BOTTOM_TOLERANCE_PX;
+}
+
 export function useChatPullToRefresh(
   messageListElement: Ref<Nullable<HTMLDivElement>>,
   disabled: ComputedRef<boolean>,
 ) {
   const { forceRefreshChat } = useForceRefreshChat();
   let refreshing = false;
+  let startedAtBottom = false;
 
   async function refresh() {
     if (refreshing || disabled.value) {
@@ -46,15 +57,21 @@ export function useChatPullToRefresh(
 
   useSwipe(messageListElement, {
     threshold: PULL_TO_REFRESH_THRESHOLD_PX,
+    onSwipeStart: () => {
+      const el = messageListElement.value;
+      startedAtBottom = !!el && isAtBottom(el);
+    },
     onSwipeEnd: (_e, direction) => {
-      if (direction !== 'down') {
+      if (direction !== 'up') {
         return;
       }
 
-      // Only from the top, as Gmail does it: lower down, a downward drag is
-      // ordinary scrolling through older messages, not a request to fetch.
+      // Only from the bottom: that is where the user usually is, at the latest
+      // messages. Higher up, an upward drag is ordinary scrolling towards newer
+      // messages - and such a scroll can coast to the end before the finger
+      // lifts, hence the list must have been at the bottom when the drag began.
       const el = messageListElement.value;
-      if (el && el.scrollTop > 0) {
+      if (!el || !startedAtBottom || !isAtBottom(el)) {
         return;
       }
 
