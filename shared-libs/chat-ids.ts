@@ -14,8 +14,6 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-
-import { randomStr } from './randomStr.ts';
 import { ChatMessageView } from '../types/chat.types.ts';
 import { ChatIdObj } from '../types/asmail-msgs.types.ts';
 import { generateFastRandomString } from './generate-random-string.ts';
@@ -100,7 +98,7 @@ export function generateChatMessageId(): Pick<
  * here must stay inside [A-Za-z0-9_-].
  */
 export function chatMessageIdForCallEvent(
-  kind: 'call' | 'call-cancelled' | 'call-withdrawn',
+  kind: 'call' | 'call-cancelled' | 'call-withdrawn' | 'call-collision-failed',
   callSessionId: string,
   by?: string,
 ): string {

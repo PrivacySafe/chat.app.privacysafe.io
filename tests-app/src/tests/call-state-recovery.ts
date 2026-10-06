@@ -24,7 +24,7 @@
  * clear, and which did nothing when pressed.
  */
 
-import { itCond } from '../libs-for-tests/jasmine-utils.js';
+import { itCond, pendingBecauseUnreachable } from '../libs-for-tests/jasmine-utils.js';
 import { chatService } from '../libs-for-tests/guarded-chat-service.ts';
 import { videoOpenerSrv } from '@main/common/services/external-services.ts';
 import type { ChatIdObj } from '~/asmail-msgs.types';
@@ -38,6 +38,20 @@ function uniqueName(prefix: string): string {
 describe(`Call state recovery`, () => {
 
   let chatId: ChatIdObj | undefined = undefined;
+
+  /**
+   * The chat beforeAll made. Without one - its creation went pending on an
+   * unreachable server - a spec is not run at all: called with `undefined`, the
+   * service threw on it, and the run read that as a defect of the call state.
+   */
+  function chatOfThisSuite(): ChatIdObj {
+    if (!chatId) {
+      pendingBecauseUnreachable(
+        'the ASMail server', 'The chat this suite needs could not be created in beforeAll.',
+      );
+    }
+    return chatId;
+  }
 
   beforeAll(async () => {
     const peerAddr = await w3n.testStand.idOfTestUser(2);
@@ -53,7 +67,8 @@ describe(`Call state recovery`, () => {
     expect(Array.isArray(snapshot))
       .withContext(`a snapshot is always a list, empty or not`)
       .toBeTrue();
-    expect(snapshot.some(s => (s.chatId.chatId === chatId!.chatId)))
+    const ownChat = chatOfThisSuite();
+    expect(snapshot.some(s => (s.chatId.chatId === ownChat.chatId)))
       .withContext(`this chat has no call in it`)
       .toBeFalse();
   });
@@ -62,10 +77,11 @@ describe(`Call state recovery`, () => {
     // The exact shape of the incident's dead button: the chat is armed with
     // an End Call that nothing here backs. It used to return silently, so
     // nothing ever cleared the button.
-    await videoOpenerSrv.endVideoCallInChatRoom(chatId!);
+    const ownChat = chatOfThisSuite();
+    await videoOpenerSrv.endVideoCallInChatRoom(ownChat);
 
     const snapshot = await videoOpenerSrv.getCallsState();
-    expect(snapshot.some(s => (s.chatId.chatId === chatId!.chatId)))
+    expect(snapshot.some(s => (s.chatId.chatId === ownChat.chatId)))
       .withContext(`no live session may remain in this chat`)
       .toBeFalse();
   });

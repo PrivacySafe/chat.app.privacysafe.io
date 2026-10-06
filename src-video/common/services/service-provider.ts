@@ -41,6 +41,7 @@ export const VIDEO_WINDOW_IPC_METHODS: (keyof VideoChatComponent)[] = [
   'handleWebRTCSignal',
   'notifyOfUndeliveredSignal',
   'notifyOfRejoiningPeer',
+  'switchToClientOf',
 ];
 
 export async function initializationServices() {

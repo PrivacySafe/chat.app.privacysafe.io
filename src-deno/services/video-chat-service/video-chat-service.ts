@@ -33,6 +33,8 @@ import {
   REJOIN_NOTICE_REPEAT_DELAYS_MILLIS,
   rejoinNoticeMsg,
   relayRejoinHeartbeat,
+  sendCallCollision,
+  sendSystemMsgAboutFailedCallCollision,
   sendCallDeclined,
   sendCallHandledElsewhere,
   sendWebRTCMsg,
@@ -40,14 +42,19 @@ import {
 } from './utils/_common.ts';
 import { callInChat } from './utils/call.ts';
 import { pickCallRecordToStamp } from './utils/call-record.ts';
-import type { CallCancelSysMsgVerdict, CallSessionPatch, CallState, SignalAge, SignalVerdict } from './utils/call-state.ts';
+import type {
+  CallCancelSysMsgVerdict, CallCollisionParty, CallSessionPatch, CallState, SignalAge, SignalVerdict,
+} from './utils/call-state.ts';
 import {
   admitsCallCancelSysMsg,
+  callCollisionWinner,
   createCallSessions,
   isHostEndingRingingCall,
   callHandledElsewhereOutcome,
   isLiveState,
   isSignallingState,
+  isStaleAge,
+  MAX_SIGNAL_AGE_MILLIS,
   rejoinTargetOf,
   shouldRelayRejoinBeat,
   RINGING_NO_ANSWER_TIMEOUT_MILLIS,
@@ -60,6 +67,7 @@ import {
 } from './constants.ts';
 import { iceConfigForNewCall } from './ice-config.ts';
 import { AppSettings } from '../../utils/app-settings.ts';
+import { replaceSystemNotification } from '../../utils/system-notifications.ts';
 import { LOGO_ICON_AS_ARRAY } from '../../../src-main/common/constants/files.ts';
 import { makeLogger } from '../../../shared-libs/logger.ts';
 
@@ -90,6 +98,12 @@ const PENDING_SIGNAL_TTL_MILLIS = 120_000;
 const TEARDOWN_STAR_SIGNALS: ReadonlySet<string> = new Set([
   'disconnect', 'dropped', 'participant-left', 'call-full',
 ]);
+
+/** `startedAt` of a 'start', when the sender's build puts one there. */
+function startedAtOf(webrtcMsg: WebRTCMsg): number | undefined {
+  const data = Array.isArray(webrtcMsg.data) ? webrtcMsg.data[0] : webrtcMsg.data;
+  return (typeof data?.startedAt === 'number') ? data.startedAt : undefined;
+}
 
 /**
  * Exposes the video GUI opener on IPC. Takes a promise so that exposure can
@@ -183,6 +197,14 @@ export async function videoChatService(
    * pains to keep clear during a call.
    */
   const answeredAsInCall = new Set<string>();
+
+  /**
+   * Rival calls this device has already sent its collision notice to, as
+   * `<chatKey>:<rival session>` (see resolveCallCollision). The rival's 'start'
+   * comes in up to four copies and its notice in two; one notice from us per
+   * rival is all the tie-break needs.
+   */
+  const collisionNoticesSent = new Set<string>();
 
   /**
    * When this device last passed a host's heartbeat on to the user's other
@@ -352,7 +374,7 @@ export async function videoChatService(
     const title = await appSettings.t('chat.notification.callEndedByHost.title');
     const body = await appSettings.t('chat.notification.callEndedByHost.message', { chatName });
 
-    await w3n.shell?.userNotifications?.addNotification({
+    await replaceSystemNotification({
       icon,
       title: title ?? 'Call Ended',
       body: body ?? '',
@@ -850,6 +872,7 @@ export async function videoChatService(
       direction,
       hostAddr,
       callSessionId,
+      startedAt,
     }: {
       /** State the chat enters as this call is created. */
       initialState: CallState;
@@ -857,6 +880,8 @@ export async function videoChatService(
       direction?: 'incoming' | 'outgoing';
       hostAddr?: string;
       callSessionId?: string;
+      /** When the host sent its 'start'; kept for the collision tie-break. */
+      startedAt?: number;
     },
   ): Promise<CallInChat> {
     const chatKey = chatIdToString(chatId);
@@ -900,6 +925,11 @@ export async function videoChatService(
           for (const key of answeredAsInCall) {
             if (key.startsWith(`${chatKey}:`)) {
               answeredAsInCall.delete(key);
+            }
+          }
+          for (const key of collisionNoticesSent) {
+            if (key.startsWith(`${chatKey}:`)) {
+              collisionNoticesSent.delete(key);
             }
           }
 
@@ -973,6 +1003,9 @@ export async function videoChatService(
         }
       },
       postProcessingForVideoChat,
+      onCollisionUnresolved: rival => reportFailedCallCollision(
+        chatId, rival, callInfo.callSessionId,
+      ),
     });
 
     calls.set(chatKey, call);
@@ -980,6 +1013,7 @@ export async function videoChatService(
       role: (direction === 'outgoing') ? 'host' : 'client',
       hostAddr,
       callSessionId,
+      startedAt,
       endedBy: undefined,
       provisional: undefined,
     });
@@ -993,7 +1027,16 @@ export async function videoChatService(
     chatId: ChatIdObj,
     peer: string,
     webrtcMsg: WebRTCMsg,
-    msgId: string,
+    msgId: string | undefined,
+    { showIncomingUI = true }: {
+      /**
+       * False when this device is about to join the call on its own, without
+       * the user's answer (see yieldToRivalCall): the user already asked for a
+       * call in this chat, and Join/Decline buttons for it would only get in
+       * the way.
+       */
+      showIncomingUI?: boolean;
+    } = {},
   ): Promise<void> {
     // At `info`, in two lines around startAppWithParams(), because "it only rang
     // on one of my devices" is answered by which of them is missing: the first
@@ -1015,6 +1058,7 @@ export async function videoChatService(
       direction: 'incoming',
       hostAddr: peer,
       callSessionId: webrtcMsg.callSessionId,
+      startedAt: startedAtOf(webrtcMsg),
     });
     call.handleWebRTCSignalFrom(peer, webrtcMsg);
 
@@ -1024,7 +1068,13 @@ export async function videoChatService(
     // call's 'start' was never removed at all, and its replay - by a later
     // catch-up scan or with a skewed sender clock - re-opened the incoming
     // call UI for a call that was long over.
-    rememberSignalLeftInInbox(chatId, msgId);
+    if (msgId) {
+      rememberSignalLeftInInbox(chatId, msgId);
+    }
+
+    if (!showIncomingUI) {
+      return;
+    }
 
     const cmdArg: IncomingCallCmdArg = {
       chatId,
@@ -1044,6 +1094,288 @@ export async function videoChatService(
         err,
       );
     }
+  }
+
+  /**
+   * Two calls in one chat: ours, which we host and nobody may have answered
+   * yet, and the rival's, of which we just learned - by its 'start' or by its
+   * host's collision notice. Settles which of the two stays (the rule and its
+   * reasons: callCollisionWinner in call-state.ts) and acts on it here.
+   *
+   * Until this existed, the rival's 'start' went into our host call object,
+   * which has nothing to do with a 'start', and both people stared at
+   * "Calling..." until the no-answer timeout - each waiting for an offer from the
+   * other, which neither was ever going to send.
+   */
+  async function resolveCallCollision(
+    chat: ChatDbEntry,
+    chatId: ChatIdObj,
+    call: CallInChat,
+    rival: CallCollisionParty,
+    startMsgId: string | undefined,
+  ): Promise<void> {
+    const chatKey = chatIdToString(chatId);
+    const own: CallCollisionParty = {
+      hostAddr: ownAddr,
+      callSessionId: call.getCallSessionId?.(),
+      startedAt: call.getStartedAt?.(),
+      established: !!call.isEstablished?.(),
+    };
+
+    // Still on the media setup screen: nobody has been invited, so there is
+    // nothing to weigh and nobody to tell. The rival will see us arrive as an
+    // ordinary client.
+    const notStartedYet = (own.startedAt === undefined) && !own.established;
+    const winner = notStartedYet ? 'b' : callCollisionWinner(own, rival);
+    log.info(
+      `[${ownAddr}] Calls collide in chat ${chatId.chatId}: ours (session `
+        + `${own.callSessionId ?? 'n/a'}, started ${own.startedAt ?? 'not yet'}, `
+        + `established ${own.established}) and ${rival.hostAddr}'s (session `
+        + `${rival.callSessionId ?? 'n/a'}, started ${rival.startedAt ?? 'unknown'}, `
+        + `established ${rival.established}); ${winner === 'a' ? 'ours' : 'theirs'} stays`,
+    );
+
+    // Ours went out, so the rival has it or will: our facts go along, as the
+    // rival cannot otherwise know whether someone has answered us since.
+    const noticeKey = `${chatKey}:${rival.callSessionId ?? rival.hostAddr}`;
+    if (!notStartedYet && !collisionNoticesSent.has(noticeKey)) {
+      collisionNoticesSent.add(noticeKey);
+      sendCallCollision(chatId, rival.hostAddr, ownAddr, own.callSessionId, {
+        startedAt: own.startedAt, established: own.established,
+      }).catch(err => {
+        w3n.log('error', `Failed to tell ${rival.hostAddr} of the colliding call`, err);
+      });
+    }
+
+    if ((winner === 'a') || own.established) {
+      // Someone is already in our call: it is not ours to give up, even if the
+      // rival is too and started first. The two calls then go on apart, and the
+      // timer below is what says so to the user.
+      call.noteCollisionWon?.(rival.hostAddr, rival.callSessionId);
+      if (startMsgId) {
+        rememberSignalLeftInInbox(chatId, startMsgId);
+      }
+      return;
+    }
+
+    await yieldToRivalCall(chat, chatId, call, rival, startMsgId);
+  }
+
+  /**
+   * Withdraws our call in favour of the rival's and joins that one as a client.
+   * Everything after the withdrawal is the ordinary path of an answered call:
+   * the same record, the same window, the same notice to our other devices.
+   */
+  async function yieldToRivalCall(
+    chat: ChatDbEntry,
+    chatId: ChatIdObj,
+    call: CallInChat,
+    rival: CallCollisionParty,
+    startMsgId: string | undefined,
+  ): Promise<void> {
+    const chatKey = chatIdToString(chatId);
+    if (!call.yieldToRivalCall) {
+      return;
+    }
+
+    // The outgoing record our call put into the history is taken back: that
+    // call never ran, and the call we are joining makes a record of its own.
+    const ownRecordId = callRecordIds.get(chatKey);
+    callRecordIds.delete(chatKey);
+    const dropOwnRecord = () => {
+      if (ownRecordId) {
+        chatSrv.deleteMessage({ chatId, chatMessageId: ownRecordId }, false).catch(err => {
+          w3n.log('error', `Failed to remove the record of a withdrawn call`, err);
+        });
+      }
+    };
+    const winner = {
+      hostAddr: rival.hostAddr,
+      callSessionId: rival.callSessionId,
+      startedAt: rival.startedAt,
+    };
+
+    // In place first: the window stays, with the devices the user picked, and
+    // only changes sides. The call window says so itself, so the main window
+    // has nothing to add.
+    if (await call.switchToClientOf?.(winner)) {
+      sessions.transit(chatId, 'connecting', Date.now(), {
+        role: 'client',
+        hostAddr: rival.hostAddr,
+        callSessionId: rival.callSessionId,
+        startedAt: rival.startedAt,
+      });
+      if (startMsgId) {
+        rememberSignalLeftInInbox(chatId, startMsgId);
+      }
+      dropOwnRecord();
+      // What answering an incoming call does (joinOrDismissCallInRoom): our
+      // other devices stop ringing for this call, and the history gets the
+      // record of it.
+      sendCallHandledElsewhere(
+        chatId, ownAddr, localDataStore.getAppDeviceId(), true, rival.callSessionId,
+      ).catch(err => {
+        w3n.log('error', `Failed to tell own devices that the call was taken here`, err);
+      });
+      const { doAfterStartCall } = postProcessingForVideoChat();
+      await doAfterStartCall({
+        chatId, direction: 'incoming', sender: rival.hostAddr, callSessionId: rival.callSessionId,
+      });
+      return;
+    }
+
+    // The window could not be asked: close it and open a client one, the way
+    // an answered incoming call opens.
+    log.info(
+      `[${ownAddr}] Could not switch the call window in chat ${chatId.chatId} in place; `
+        + `reopening it as a client of ${rival.hostAddr}`,
+    );
+    await call.yieldToRivalCall(winner);
+    dropOwnRecord();
+
+    sinkGUIEvents({
+      type: 'call-collision',
+      chatId,
+      peerAddr: rival.hostAddr,
+      collisionOutcome: 'joining',
+    });
+
+    const startMsg: WebRTCMsg = {
+      stage: 'start',
+      id: Date.now(),
+      callSessionId: rival.callSessionId,
+      data: (typeof rival.startedAt === 'number') ? { startedAt: rival.startedAt } : {},
+    };
+    await handleIncomingCall(chat, chatId, rival.hostAddr, startMsg, startMsgId, {
+      showIncomingUI: false,
+    });
+    await joinOrDismissCallInRoom(chatId, true, rival.hostAddr, rival.callSessionId);
+  }
+
+  /**
+   * Puts "the call with X did not take place - you were calling each other at
+   * the same moment" into this chat's history, and onto the user's other
+   * devices.
+   *
+   * The record names the other side (`sender`) and that side's call, and its id
+   * is derived from both, so every device of ours that writes it - from its own
+   * timer, from the rival's system message, from a phantom - writes the same
+   * one, and a second write is a no-op.
+   */
+  async function recordFailedCallCollision(
+    chatId: ChatIdObj, otherAddr: string, otherSessionId: string | undefined,
+  ): Promise<void> {
+    const chatSystemData: ChatSystemMessageData = {
+      event: 'webrtc-call',
+      value: {
+        sender: otherAddr,
+        subType: 'call-collision-failed',
+        chatId,
+        callSessionId: otherSessionId,
+      },
+    };
+    const { chatMessageId, timestamp } = otherSessionId
+      ? {
+        chatMessageId: chatMessageIdForCallEvent('call-collision-failed', otherSessionId, otherAddr),
+        timestamp: Date.now(),
+      }
+      : generateChatMessageId();
+    if (otherSessionId && (await db.getMessage({ chatId, chatMessageId }))) {
+      return;
+    }
+    const msg: MsgDbEntry = {
+      groupChatId: chatId.isGroupChat ? chatId.chatId : null,
+      otoPeerCAddr: chatId.isGroupChat ? null : chatId.chatId,
+      chatMessageId,
+      isIncomingMsg: false,
+      incomingMsgId: null,
+      groupSender: chatId.isGroupChat ? otherAddr : null,
+      body: JSON.stringify(chatSystemData),
+      attachments: null,
+      chatMessageType: 'system',
+      relatedMessage: null,
+      status: null,
+      timestamp,
+      removeAfter: 0,
+      history: null,
+      reactions: null,
+      settings: null,
+    };
+    await db.addMessage(msg);
+    emit.message.added(msg);
+    // Only with a derived id, for the reason given at recordCallEvent in the
+    // GUI's chats.store.ts: a generated one cannot be agreed upon, and the
+    // other devices would end up with a second line about one failure.
+    if (otherSessionId) {
+      await chatSrv.syncLocallyMadeSystemEvent(chatId, chatMessageId, chatSystemData);
+    }
+  }
+
+  /**
+   * Our call won a collision, and the other host never came in (see
+   * noteCollisionWon in call.ts): a build that cannot step aside, a notice lost
+   * on the way, or both calls already answered. Said in three places, because
+   * each reaches someone the others do not: a notice for the user looking at
+   * the screen now, a record in our history, and a system message that puts
+   * the same record into the rival's history - its call went nowhere as well.
+   */
+  function reportFailedCallCollision(
+    chatId: ChatIdObj,
+    rival: { hostAddr: string; callSessionId?: string },
+    ownSessionId: string | undefined,
+  ): void {
+    sinkGUIEvents({
+      type: 'call-collision',
+      chatId,
+      peerAddr: rival.hostAddr,
+      collisionOutcome: 'unresolved',
+    });
+    recordFailedCallCollision(chatId, rival.hostAddr, rival.callSessionId).catch(err => {
+      w3n.log('error', `Failed to record the failed call collision in chat ${chatId.chatId}`, err);
+    });
+    sendSystemMsgAboutFailedCallCollision({
+      ownAddr, chatId, rivalHostAddr: rival.hostAddr, callSessionId: ownSessionId,
+    }).catch(err => {
+      w3n.log('error', `Failed to tell ${rival.hostAddr} that the calls did not meet`, err);
+    });
+  }
+
+  /**
+   * The rival host's collision notice. It may come before its 'start' - both
+   * travel separately - or after we have settled on its 'start' alone; either
+   * way the decision is taken again with the one fact only the notice carries,
+   * `established`.
+   */
+  async function handleCallCollisionNotice(
+    chat: ChatDbEntry,
+    chatId: ChatIdObj,
+    sender: string,
+    webrtcMsg: WebRTCMsg,
+    notice: NonNullable<WebRTCOffBandMessage['callCollision']>,
+    msgId: string,
+  ): Promise<void> {
+    removeMessageFromInbox(msgId).catch(err => {
+      w3n.log('error', `Failed to remove a collision notice from inbox`, err);
+    });
+    const call = calls.get(chatIdToString(chatId));
+    const ownSession = call?.getCallSessionId?.();
+    const ownState = sessions.state(chatId);
+    if (!call || (call.getRole?.() !== 'host') || !ownState || !isSignallingState(ownState)
+      || (webrtcMsg.callSessionId && ownSession && (webrtcMsg.callSessionId === ownSession))) {
+      // No call of ours to weigh against theirs: we have already joined it,
+      // or ours is over. Nothing to do.
+      log.info(
+        `[${ownAddr}] Collision notice from ${sender} in chat ${chatId.chatId}: `
+          + `no call of ours hosted here (role: ${call?.getRole?.() ?? 'none'}); ignoring`,
+      );
+      return;
+    }
+    await resolveCallCollision(chat, chatId, call, {
+      hostAddr: sender,
+      callSessionId: webrtcMsg.callSessionId,
+      startedAt: notice.startedAt,
+      established: !!notice.established,
+    }, undefined);
   }
 
   /**
@@ -1379,6 +1711,7 @@ export async function videoChatService(
       || (webrtcMsg.stage === 'disconnect')
       || !!firstBodyItem?.callDeclined
       || !!firstBodyItem?.callHandledElsewhere
+      || !!firstBodyItem?.callCollision
       || !!firstBodyItem?.callFull;
     const incomingMsgLine = `[${ownAddr}] Incoming WebRTC msg from ${sender}, stage: ${webrtcMsg.stage}, chatId: ${chatId.chatId}, isGroup: ${chatId.isGroupChat}, ownDevice: ${fromOwnDevice}`;
     if (isLifecycleSignal) {
@@ -1480,7 +1813,9 @@ export async function videoChatService(
               stage: 'start',
               id: Date.now(),
               callSessionId: call?.getCallSessionId?.(),
-              data: {},
+              data: (typeof call?.getStartedAt?.() === 'number')
+                ? { startedAt: call.getStartedAt!() }
+                : {},
             };
             sendWebRTCMsg(chatId, requester, ownAddr, startMsg, {
               // Literally the same gate as the initial invitation, asked of the
@@ -1656,7 +1991,46 @@ export async function videoChatService(
         // old that it cannot be a live call" (e.g. delivered late after the app
         // was offline — without this, opening the app would pop up an incoming
         // call for a call that is long over).
-        const verdict = sessions.admitsStart(chatId, sessionId, msgAge, now);
+        const verdict = sessions.admitsStart(
+          chatId, sessionId, msgAge, now, { hostAddr: sender, startedAt: startedAtOf(webrtcMsg) },
+        );
+        if (verdict === 'accept-superseding') {
+          // Two hosts invited us at the same moment, and the call ringing here is
+          // the one both of them are going to give up. Ring for this one instead:
+          // its host's withdrawal of the other may take a while yet, and nothing
+          // would repeat this 'start' in time to be heard.
+          log.info(
+            `[${ownAddr}] Call of ${sender} (session ${sessionId ?? 'n/a'}) supersedes the one `
+              + `ringing in chat ${chatId.chatId}; ringing for it instead`,
+          );
+          if (call) {
+            await call.end({ silent: true });
+          }
+          sinkGUIEvents({ type: 'call-ended', chatId });
+          await handleIncomingCall(chat, chatId, sender, webrtcMsg, msgId);
+          return;
+        }
+        // We host a call of our own in this chat, and someone else has just
+        // started another one: the two must become one (see resolveCallCollision).
+        // Also when ours is already under way ('drop-in-call'): ours then stays,
+        // but the rival host has to be told so - nothing else would make it give
+        // way. Not when the sender is already in our call: that is a leftover
+        // copy of the 'start' of a call it has since given up for ours.
+        const ownState = sessions.state(chatId);
+        const isRivalCall = !!call && (call.getRole?.() === 'host')
+          && !!ownState && isSignallingState(ownState)
+          && !areAddressesEqual(sender, ownAddr)
+          && !!sessionId && (sessionId !== call.getCallSessionId?.())
+          && !call.getConnectedClients?.().some(c => areAddressesEqual(c.addr, sender));
+        if (isRivalCall && ((verdict === 'accept') || (verdict === 'drop-in-call'))) {
+          await resolveCallCollision(chat, chatId, call!, {
+            hostAddr: sender,
+            callSessionId: sessionId,
+            startedAt: startedAtOf(webrtcMsg),
+            established: false,
+          }, msgId);
+          return;
+        }
         if (verdict !== 'accept') {
           await dropSignal(
             verdict,
@@ -1676,6 +2050,14 @@ export async function videoChatService(
         return;
       }
 
+      // Taken before admitsSignal: the notice names the sender's own call, which
+      // by definition is a session other than the one going on here.
+      if (firstBodyItem?.callCollision && !fromOwnDevice) {
+        return await handleCallCollisionNotice(
+          chat, chatId, sender, webrtcMsg, firstBodyItem.callCollision, msgId,
+        );
+      }
+
       const verdict = sessions.admitsSignal(chatId, sessionId, msgAge, now);
       if (verdict !== 'accept') {
         await dropSignal(
@@ -1692,7 +2074,26 @@ export async function videoChatService(
       // answers), leaving the ringtone playing, so it is handled outside of it.
       if (call && (webrtcMsg.stage === 'disconnect')
         && isHostEndingRingingCall(sessions.get(chatId), sender, sessionId)) {
-        return await handleHostEndedRingingCall(chatId, sender, sessionId, call, msgId);
+        await handleHostEndedRingingCall(chatId, sender, sessionId, call, msgId);
+        // The host withdrew its call for another one started at the same
+        // moment: ring for that one. Its own 'start' may have been refused while
+        // this one rang, and the next copy of it can be half a minute away.
+        const by = firstBodyItem?.supersededBy;
+        if (by && !calls.has(chatKey) && !isStaleAge(msgAge)
+          && (!chat.isGroupChat || includesAddress(Object.keys(chat.members), by.hostAddr))
+          && !areAddressesEqual(by.hostAddr, ownAddr)) {
+          log.info(
+            `[${ownAddr}] Call of ${sender} in chat ${chatId.chatId} was withdrawn in favour `
+              + `of the call of ${by.hostAddr}; ringing for that one`,
+          );
+          await handleIncomingCall(chat, chatId, by.hostAddr, {
+            stage: 'start',
+            id: Date.now(),
+            callSessionId: by.callSessionId,
+            data: (typeof by.startedAt === 'number') ? { startedAt: by.startedAt } : {},
+          }, undefined);
+        }
+        return;
       }
 
       if (call) {
@@ -1993,6 +2394,15 @@ export async function videoChatService(
       });
 
     if (join) {
+      // The same notice a returning participant sends, for the same reason: the
+      // host otherwise learns of the answer only from our SDP offer, which goes
+      // out after the window has opened and the camera has started, and is the
+      // slowest message on the ASMail path. Until it lands, the caller sits on
+      // "waiting for participants" with the ringtone still playing. A host on an
+      // older build ignores the notice and waits for the offer, as before.
+      if (sender) {
+        sendRejoinNotice(chatId, sender, callSessionId);
+      }
       // Pre-set role as CLIENT before startCall() so it doesn't re-initialize as HOST.
       // sender is the host's mailerId (the call initiator).
       call.initializeRole('incoming', sender);
@@ -2049,6 +2459,23 @@ export async function videoChatService(
    */
   const stopCallSysMsgWatching = chatSrv.onIncomingCallSysMsg(params => {
     const { chatId, sender, subType, callSessionId, deliveryTS } = params;
+    if (subType === 'call-collision-failed') {
+      // The other host's report that our two calls never met. The record is
+      // written whenever the message is seen - its id makes a replay at
+      // start-up a no-op - but the notice only while it is news.
+      recordFailedCallCollision(chatId, sender, callSessionId).catch(err => {
+        w3n.log('error', `Failed to record the failed call collision in chat ${chatId.chatId}`, err);
+      });
+      if ((Date.now() - deliveryTS) <= MAX_SIGNAL_AGE_MILLIS) {
+        sinkGUIEvents({
+          type: 'call-collision',
+          chatId,
+          peerAddr: sender,
+          collisionOutcome: 'unresolved',
+        });
+      }
+      return;
+    }
     if ((subType !== 'incoming-call-cancelled') && (subType !== 'outgoing-call-cancelled')) {
       return;
     }

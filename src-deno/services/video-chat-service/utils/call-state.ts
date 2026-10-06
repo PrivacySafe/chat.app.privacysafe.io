@@ -242,13 +242,20 @@ export interface CallSessionRecord {
    * this instead of from `since`, so it lasts as long as the call does.
    */
   lastSignal?: number;
+  /**
+   * `ringing` only: when the host sent the invitation (`startedAt` of its
+   * 'start'), for the tie-break against another call started in this chat at
+   * the same moment (see callCollisionWinner).
+   */
+  startedAt?: number;
 }
 
 /** Fields a transition may set alongside the new state. */
 export type CallSessionPatch = Partial<
   Pick<
     CallSessionRecord,
-    'role' | 'hostAddr' | 'callSessionId' | 'provisional' | 'lastBeat' | 'endedBy' | 'lastSignal'
+    | 'role' | 'hostAddr' | 'callSessionId' | 'provisional' | 'lastBeat' | 'endedBy'
+    | 'lastSignal' | 'startedAt'
   >
 >;
 
@@ -448,6 +455,60 @@ export function inviteStillPending(
   return !Array.from(answered).some(isPeer) && !Array.from(declined).some(isPeer);
 }
 
+/** One of two calls started in the same chat at the same moment. */
+export interface CallCollisionParty {
+  hostAddr: string;
+  callSessionId?: string;
+  /** `startedAt` of its 'start'; absent while not sent, or from an older build. */
+  startedAt?: number;
+  /** Someone has already answered this call. */
+  established: boolean;
+}
+
+/**
+ * Which of two calls started in one chat at the same moment stays, the other's
+ * host stepping aside to join it as a client.
+ *
+ * The moment is wide: an invitation takes 7-20 s to cross ASMail, and two people
+ * pressing "call" inside that window both become hosts of calls that wait for
+ * each other's offer. Until this rule the second 'start' went into the first
+ * host's call object, which has nothing to do with a 'start', and both windows
+ * showed "Calling..." until their no-answer timeout.
+ *
+ * Every party - the two hosts and anybody both of them invited - runs this on
+ * the same pair of facts and so reaches the same answer without a round trip.
+ * The order of the rules is the order of what cannot be undone:
+ * - a call someone has already answered is never the one to go;
+ * - a call whose 'start' carries no `startedAt` comes from a build that cannot
+ *   step aside, so it is the one to join - its host accepts our offer like any
+ *   other client's;
+ * - otherwise the earlier call stays, which is also what the users expect: "who
+ *   called first";
+ * - a tie on time goes by a plain comparison of session ids. Not
+ *   `localeCompare`, for the reason given at callHandledElsewhereOutcome().
+ *
+ * Symmetric by construction: `callCollisionWinner(a, b)` and
+ * `callCollisionWinner(b, a)` name the same call.
+ */
+export function callCollisionWinner(
+  a: CallCollisionParty, b: CallCollisionParty,
+): 'a' | 'b' {
+  if (a.established !== b.established) {
+    return a.established ? 'a' : 'b';
+  }
+  const aKnown = (typeof a.startedAt === 'number');
+  const bKnown = (typeof b.startedAt === 'number');
+  if (aKnown !== bKnown) {
+    return aKnown ? 'b' : 'a';
+  }
+  if (aKnown && bKnown && (a.startedAt !== b.startedAt)) {
+    return (a.startedAt! < b.startedAt!) ? 'a' : 'b';
+  }
+  const aId = a.callSessionId ?? a.hostAddr;
+  const bId = b.callSessionId ?? b.hostAddr;
+  return (aId <= bId) ? 'a' : 'b';
+}
+
 /**
  * How rarely a device may re-send the host's heartbeat to its own neighbours.
  *
@@ -541,7 +602,7 @@ export interface SignalAge {
   sinceDelivery: number;
 }
 
-function isStaleAge(age: SignalAge): boolean {
+export function isStaleAge(age: SignalAge): boolean {
   return (age.fromSenderClock > MAX_SIGNAL_AGE_MILLIS)
     || (age.sinceDelivery > MAX_SIGNAL_AGE_MILLIS);
 }
@@ -580,7 +641,18 @@ export type SignalVerdict =
   /** The asking peer is not a participant of the call it asks about. */
   | 'drop-not-participant'
   /** Only the host of a call can re-send its 'start'. */
-  | 'drop-not-host';
+  | 'drop-not-host'
+  /**
+   * 'start' of a call that ran into the call ringing here and lost the
+   * tie-break (see callCollisionWinner).
+   */
+  | 'drop-superseded'
+  /**
+   * 'start' of a call that ran into the call ringing here and won the
+   * tie-break: act on it, in place of the ringing one. Not 'accept', because
+   * the caller has a call object to retire first.
+   */
+  | 'accept-superseding';
 
 /**
  * Where an address stands in a call, as only the call object knows.
@@ -739,9 +811,14 @@ export interface CallSessions {
     patch: { hostAddr: string; callSessionId?: string },
   ): void;
 
-  /** Whether a 'start' from `sessionId` should create a call. */
+  /**
+   * Whether a 'start' from `sessionId` should create a call. `caller` - who
+   * sent it and its `startedAt` - settles a collision with a call ringing here;
+   * without it such a 'start' is refused as `drop-in-call`, as it always was.
+   */
   admitsStart(
     chatId: ChatIdObj, sessionId: string | undefined, msgAge: SignalAge, now: number,
+    caller?: { hostAddr: string; startedAt?: number },
   ): SignalVerdict;
 
   /** Whether a non-'start' signal should be handled or buffered. */
@@ -956,6 +1033,7 @@ export function createCallSessions(
 
   function admitsStart(
     chatId: ChatIdObj, sessionId: string | undefined, msgAge: SignalAge, now: number,
+    caller?: { hostAddr: string; startedAt?: number },
   ): SignalVerdict {
     const record = get(chatId);
     if (!record) {
@@ -972,10 +1050,33 @@ export function createCallSessions(
           return 'accept';
         case 'different':
           // Someone is starting another call in a chat where we are already in
-          // one. While merely 'dialing' - our own call has no participants yet -
-          // the old behaviour of letting the call object absorb it is kept, so
-          // two people calling each other at the same moment still connect.
-          return (record.state === 'dialing') ? 'accept' : 'drop-in-call';
+          // one. While 'dialing' it is a collision of two hosts, and the caller
+          // settles it (it needs the call object's facts, which are not here).
+          if (record.state === 'dialing') {
+            return 'accept';
+          }
+          // Two hosts invited us at the same moment. Neither call has us yet,
+          // so the one to ring for is the one both hosts are going to settle
+          // on - not merely the one whose 'start' happened to arrive first.
+          if ((record.state === 'ringing') && caller && record.hostAddr
+            && !isStaleAge(msgAge)) {
+            const winner = callCollisionWinner(
+              {
+                hostAddr: record.hostAddr,
+                callSessionId: record.callSessionId,
+                startedAt: record.startedAt,
+                established: false,
+              },
+              {
+                hostAddr: caller.hostAddr,
+                callSessionId: sessionId,
+                startedAt: caller.startedAt,
+                established: false,
+              },
+            );
+            return (winner === 'b') ? 'accept-superseding' : 'drop-superseded';
+          }
+          return 'drop-in-call';
         case 'unknown':
           return 'accept';
       }

@@ -23,6 +23,7 @@ import { initializeServices } from '@main/common/services/external-services';
 import { defer } from '@tests/lib-common/processes/deferred';
 import { stringifyErr } from '@tests/lib-common/exceptions/error';
 import { logErr } from './test-page-utils';
+import { removeInboxLeftoversOfEarlierRuns } from '@tests/libs-for-tests/inbox-cleanup';
 
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
 const { promise, reject, resolve } = defer<void>();
@@ -42,7 +43,10 @@ const routerForTestApp = createRouter({
   ]
 });
 
-initializeServices()
+// The inbox first: see removeInboxLeftoversOfEarlierRuns for why, and why it
+// has to happen before initializeServices() starts the background component.
+removeInboxLeftoversOfEarlierRuns()
+.then(() => initializeServices())
 .then(() => {
   const app = createApp(TestApp, { reject, resolve });
   setupMainApp(app, routerForTestApp);

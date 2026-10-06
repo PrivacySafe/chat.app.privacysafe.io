@@ -23,6 +23,7 @@ import {
   notifications,
   storeVueBus,
   storeNotifications,
+  theme,
   vueBus,
 } from '@v1nt1248/3nclient-lib/plugins';
 
@@ -39,7 +40,11 @@ export function setupMainApp(app: App<Element>, router: Router) {
     return tag.startsWith('ui3n-');
   };
 
+  // The same plugin set as the real windows (src-main/desktop/main.ts): the
+  // app view syncs the launcher's theme through this one (useThemeSync), and
+  // without it every test setup failed before the first spec.
   app
+  .use(theme, { theme: 'dark' })
   .use(pinia)
   .use(i18n)
   .use(vueBus)

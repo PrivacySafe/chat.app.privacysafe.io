@@ -90,6 +90,7 @@ import { VIDEO_WINDOW_IPC_METHODS } from '@video/common/services/service-provide
 import { VIDEO_WINDOW_METHODS_CALLED_HERE } from '@deno/services/video-chat-service/video-component-instance.ts';
 import type {
   CallSessionRecord,
+  CallCollisionParty,
   CallSessions,
   CallState,
   ParticipantState,
@@ -107,6 +108,7 @@ import {
   REJOIN_RELAY_MIN_INTERVAL_MILLIS,
   RINGING_NO_ANSWER_TIMEOUT_MILLIS,
   admitsCallCancelSysMsg,
+  callCollisionWinner,
   callHandledElsewhereOutcome,
   canTransit,
   createCallSessions,
@@ -5051,6 +5053,115 @@ describe(`Video Chat Star Architecture`, () => {
         .withContext(`its own screen share is a legitimate sender`)
         .toContain(ownScreen);
     }, 15000);
+
+  });
+
+  // ===========================================================================
+  // Test Suite 29: two calls started in one chat at the same moment
+  // ===========================================================================
+
+  /**
+   * Two people pressing "call" within one ASMail delivery of each other (7-20 s)
+   * both become hosts. Until callCollisionWinner the second 'start' was handed to
+   * the first host's call object, which ignores a 'start', and both windows sat
+   * on "Calling..." waiting for an offer from the other. Every party now settles
+   * on the same call from the same facts - which is only true if the rule is
+   * symmetric, and that is the first thing pinned here.
+   */
+  describe(`Test Suite 29: two calls started in one chat at the same moment`, () => {
+
+    const A = 'alice@test.3nweb.com';
+    const B = 'bob@test.3nweb.com';
+    const T0 = 1_000_000;
+    const FRESH: SignalAge = { fromSenderClock: 0, sinceDelivery: 0 };
+    const CHAT: ChatIdObj = { isGroupChat: true, chatId: 'collision-chat' };
+
+    function party(
+      hostAddr: string, startedAt: number | undefined, established = false,
+    ): CallCollisionParty {
+      return { hostAddr, callSessionId: `${hostAddr}#dev-1`, startedAt, established };
+    }
+
+    /** Which host's call stays, as seen from both sides. */
+    function winners(a: CallCollisionParty, b: CallCollisionParty): [string, string] {
+      const fromA = (callCollisionWinner(a, b) === 'a') ? a.hostAddr : b.hostAddr;
+      const fromB = (callCollisionWinner(b, a) === 'a') ? b.hostAddr : a.hostAddr;
+      return [fromA, fromB];
+    }
+
+    itCond(`both hosts settle on the same call`, async () => {
+      for (const [a, b] of [
+        [party(A, T0), party(B, T0 + 1)],
+        [party(A, T0 + 1), party(B, T0)],
+        [party(A, T0), party(B, T0)],
+        [party(A, undefined), party(B, T0)],
+        [party(A, T0, true), party(B, T0 - 5000)],
+        [party(A, undefined), party(B, undefined)],
+      ] as const) {
+        const [fromA, fromB] = winners(a, b);
+        expect(fromA)
+          .withContext(`${JSON.stringify(a)} vs ${JSON.stringify(b)}`)
+          .toBe(fromB);
+      }
+    });
+
+    itCond(`the earlier call stays`, async () => {
+      expect(winners(party(A, T0), party(B, T0 + 1))[0]).toBe(A);
+      expect(winners(party(A, T0 + 1), party(B, T0))[0]).toBe(B);
+    });
+
+    itCond(`a call someone has answered never gives way`, async () => {
+      // Even to one started earlier: tearing down a call with a person in it to
+      // merge an empty one into it is the one outcome worse than no merge.
+      expect(winners(party(A, T0 + 5000, true), party(B, T0))[0]).toBe(A);
+      expect(winners(party(A, T0), party(B, T0 + 5000, true))[0]).toBe(B);
+    });
+
+    itCond(`a call from a build that cannot give way is the one to join`, async () => {
+      // No `startedAt` in its 'start': its host will never step aside, but it
+      // accepts our offer like any client's - so joining it is what connects.
+      expect(winners(party(A, T0), party(B, undefined))[0]).toBe(B);
+      expect(winners(party(A, undefined), party(B, T0))[0]).toBe(A);
+    });
+
+    itCond(`a tie on time goes by session id`, async () => {
+      const [fromA] = winners(party(A, T0), party(B, T0));
+      expect(fromA).toBe(A);
+    });
+
+    itCond(`an invitee ringing for one call rings for the one that stays`, async () => {
+      const reg = createCallSessions();
+      reg.transit(CHAT, 'ringing', T0, {
+        role: 'client', hostAddr: B, callSessionId: `${B}#dev-1`, startedAt: T0 + 1000,
+      });
+
+      expect(reg.admitsStart(CHAT, `${A}#dev-1`, FRESH, T0 + 2000, { hostAddr: A, startedAt: T0 }))
+        .withContext(`A called first: its call replaces the one ringing`)
+        .toBe('accept-superseding');
+      expect(reg.admitsStart(CHAT, `${A}#dev-1`, FRESH, T0 + 2000, { hostAddr: A, startedAt: T0 + 2000 }))
+        .withContext(`A called later: the ringing call stays`)
+        .toBe('drop-superseded');
+      expect(reg.admitsStart(CHAT, `${A}#dev-1`, FRESH, T0 + 2000))
+        .withContext(`with nothing to compare, the old refusal stands`)
+        .toBe('drop-in-call');
+    });
+
+    itCond(`two calls that never met are recorded as such`, async () => {
+      // Whichever side writes it - the winner on its timer, the rival off the
+      // winner's system message - the line names the other person, not a
+      // cancellation, and has no direction to point.
+      for (const own of [A, B]) {
+        expect(callCancelWording('call-collision-failed', `${A}#dev-1`, own, false))
+          .toEqual({ i18nKey: 'va.text.call_collision_failed', wasIncomingCall: false });
+      }
+    });
+
+    itCond(`a host only dialing lets the rival's 'start' through to be settled`, async () => {
+      const reg = createCallSessions();
+      reg.transit(CHAT, 'dialing', T0, { role: 'host', hostAddr: A, callSessionId: `${A}#dev-1` });
+      expect(reg.admitsStart(CHAT, `${B}#dev-1`, FRESH, T0 + 1000, { hostAddr: B, startedAt: T0 }))
+        .toBe('accept');
+    });
 
   });
 

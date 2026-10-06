@@ -96,7 +96,9 @@ export const en = {
     },
     notification: {
       new_message: '{sender} sent you a message',
+      new_group_message: "{sender} sent a message to the '{chatName}' chat",
       invite: '{sender} invites you',
+      group_invite: "{sender} invites you to the '{chatName}' chat",
     },
   },
 
@@ -488,6 +490,10 @@ export const en = {
       callAnsweredElsewhere: {
         message: 'You answered this call on another of your devices.',
       },
+      callCollision: {
+        joining: '{name} called at the same moment as you. Joining their call instead.',
+        unresolved: '{name} was calling you at the same moment, and the two calls did not connect. Please try calling again.',
+      },
     },
     message: {
       dialog: {
@@ -759,6 +765,9 @@ export const en = {
       outgoing_call: 'The outgoing call',
       outgoing_call_cancelled: 'The outgoing call was cancelled',
       outgoing_call_cancelled_by: 'The outgoing call was cancelled by {user}',
+      call_collision_joining: '{user} called you at the same moment. Joining their call.',
+      call_collision_failed:
+        'The call with {user} did not take place: you were calling each other at the same moment',
       user_left_call: '{user} left the call',
       participants: 'Participants',
       call_full: 'The call is full ({current}/{max} participants). Please try again later.',
@@ -805,6 +814,7 @@ export const en = {
       participant_securing: 'Securing the connection with {user}…',
       participant_establishing: 'Establishing the connection with {user}…',
       participant_reconnecting: 'Reconnecting to {user}…',
+      host: 'Call host',
       participant_no_response: '{user} is not responding',
       participant_not_reached: 'Could not deliver the invitation to {user}',
       participant_declined: '{user} declined the call',

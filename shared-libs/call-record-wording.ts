@@ -38,7 +38,8 @@
 import { areAddressesEqual } from './address-utils.ts';
 import { hostAddrOfCallSession } from './chat-ids.ts';
 
-export type CallCancelSubType = 'outgoing-call-cancelled' | 'incoming-call-cancelled';
+export type CallCancelSubType =
+  | 'outgoing-call-cancelled' | 'incoming-call-cancelled' | 'call-collision-failed';
 
 export interface CallCancelWording {
   /** i18n key of the line shown in the chat history. Never an empty string. */
@@ -54,7 +55,8 @@ export interface CallCancelWording {
 /**
  * @param subType which event the record is about: 'outgoing-call-cancelled' -
  * the caller withdrew the call before it was answered; 'incoming-call-cancelled'
- * - somebody declined a ringing call.
+ * - somebody declined a ringing call; 'call-collision-failed' - two calls started
+ * in the chat at the same moment never met.
  * @param callSessionId of the call the record is about; its host is the caller.
  * Undefined for records made by builds that predate the field.
  * @param ownAddr this user's address.
@@ -67,6 +69,13 @@ export function callCancelWording(
   ownAddr: string | undefined,
   isGroupChat: boolean,
 ): CallCancelWording {
+  if (subType === 'call-collision-failed') {
+    // Two calls started at the same moment that never met: neither went
+    // anywhere, so there is no direction to show - the arrow is ours, as the
+    // user did place a call.
+    return { i18nKey: 'va.text.call_collision_failed', wasIncomingCall: false };
+  }
+
   const hostAddr = hostAddrOfCallSession(callSessionId);
   // "Unknown" is not "theirs": without a session id nothing here knows who
   // called, so the answer has to come from the subtype alone (see below).

@@ -505,6 +505,7 @@ const SIGNALS_LOGGED_AT_INFO: ReadonlySet<string> = new Set([
   'dropped',
   'call-declined',
   'call-handled-elsewhere',
+  'call-collision',
   'request-start',
 ]);
 

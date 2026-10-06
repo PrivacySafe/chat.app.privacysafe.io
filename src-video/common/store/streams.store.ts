@@ -400,6 +400,16 @@ export const useStreamsStore = defineStore('streams', () => {
   }
 
   /**
+   * Whether `addr` is the host of this call. A screen share's address is
+   * `screen:<owner>:<srcId>`, never equal to the owner's, so a shared screen is
+   * not taken for the host's camera.
+   */
+  function isHostAddr(addr: string): boolean {
+    const host = hostAddress.value;
+    return !!host && areAddressesEqual(addr, host);
+  }
+
+  /**
    * Add or update a remote participant.
    */
   function addRemoteParticipant(addr: string, name: string, status: ConnectionStatus = 'connecting'): void {
@@ -790,6 +800,7 @@ export const useStreamsStore = defineStore('streams', () => {
     linkStatus,
     seedExpectedParticipants,
     getParticipant,
+    isHostAddr,
 
     // Signaling channels
     hostSignalingChannel,

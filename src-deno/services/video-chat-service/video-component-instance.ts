@@ -39,6 +39,7 @@ export const VIDEO_WINDOW_METHODS_CALLED_HERE: (keyof VideoChatComponent)[] = [
   'handleWebRTCSignal',
   'notifyOfUndeliveredSignal',
   'notifyOfRejoiningPeer',
+  'switchToClientOf',
 ];
 
 export async function videoComponentInstance(
@@ -94,6 +95,7 @@ export async function videoComponentInstance(
     getListenerForChannelTo,
     notifyOfUndeliveredSignal: (peer, stage) => guiSrv.notifyOfUndeliveredSignal(peer, stage),
     notifyOfRejoiningPeer: peer => guiSrv.notifyOfRejoiningPeer(peer),
+    switchToClientOf: target => guiSrv.switchToClientOf(target),
   };
 
   guiSrv.watchRequests(obs);

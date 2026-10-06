@@ -27,7 +27,7 @@ this program. If not, see <http://www.gnu.org/licenses/>.
  * with Host/Client role detection and connection handling.
  */
 
-import { computed, inject, onBeforeMount, onMounted, ref, useTemplateRef } from 'vue';
+import { computed, inject, onBeforeMount, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
@@ -35,6 +35,7 @@ import { NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/p
 import type { DeviceOption } from '@video/common/types';
 import { useAppStore } from '@video/common/store/app.store';
 import { useStreamsStore } from '@video/common/store/streams.store';
+import { registerRoleSwitchHandler } from '@video/common/services/video-chat-service/video-chat-srv';
 import { makeLogger } from '@shared/logger';
 
 const log = makeLogger('VASetup');
@@ -231,12 +232,34 @@ export function useVaSetup() {
     }
   });
 
+  /**
+   * The other person started a call in this chat at the same moment, and theirs
+   * is the one that stays. Nothing has been sent from here yet, so all there is
+   * to do is to turn "Start" into "Join" - the devices the user picked stay.
+   */
+  function switchToClientOf({ hostAddr }: { hostAddr: string }): void {
+    streams.pendingDirection = 'incoming';
+    streams.pendingHostAddr = hostAddr;
+    const name = streams.expectedPeers.find(p => p.addr === hostAddr)?.name || hostAddr;
+    notification.$createNotice({
+      type: 'info',
+      content: t('va.text.call_collision_joining', { user: name }),
+      duration: 7000,
+    });
+  }
+
+  const unregisterRoleSwitchHandler = registerRoleSwitchHandler(switchToClientOf);
+
   onMounted(async () => {
     try {
       await setupDeviceChoices();
     } catch (err) {
       notifyMediaAccessFailure(err);
     }
+  });
+
+  onBeforeUnmount(() => {
+    unregisterRoleSwitchHandler();
   });
 
   return {

@@ -22,6 +22,7 @@ import { useAppStore } from '@main/common/store/app.store';
 import { useChatsStore } from '@main/common/store/chats.store';
 import { useMessagesStore } from '@main/common/store/messages.store';
 import { useBackupStore } from '@main/common/store/backup.store';
+import { useContactsStore } from '@main/common/store/contacts.store';
 import type { UpdateEvent } from '~/services.types';
 import { SingleProc } from '@shared/processes/single';
 import { makeLogger } from '@shared/logger';
@@ -196,6 +197,22 @@ export function useInitialize() {
               type: 'info',
               content: `${t('chat.notification.callEndedByHost.title')} \n ${t('chat.notification.callEndedByHost.message', { chatName: chat?.name ?? '' })}`,
               duration: 5000,
+            });
+            break;
+          }
+
+          // Two calls were started in this chat at the same moment. Either ours
+          // gave way and the call window that just closed is replaced by the one
+          // of the other caller, or theirs never came in - both need saying, as
+          // neither explains itself on screen.
+          case 'call-collision': {
+            const name = data.peerAddr ? useContactsStore().getContactName(data.peerAddr) : '';
+            notifications?.$createNotice({
+              type: 'info',
+              content: (data.collisionOutcome === 'joining')
+                ? t('chat.notification.callCollision.joining', { name })
+                : t('chat.notification.callCollision.unresolved', { name }),
+              duration: (data.collisionOutcome === 'joining') ? 7000 : 15000,
             });
             break;
           }

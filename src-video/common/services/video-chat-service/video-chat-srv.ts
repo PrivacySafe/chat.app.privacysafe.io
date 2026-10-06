@@ -237,6 +237,36 @@ export function registerRejoiningPeerHandler(
   };
 }
 
+/** Whom a window that gave way to another call now joins; see switchToClientOf. */
+export interface RoleSwitchTarget {
+  hostAddr: string;
+  callSessionId?: string;
+}
+
+/**
+ * Handler of the page currently mounted - the media setup screen or the call
+ * page - for turning this window from the host of its own call into a client of
+ * the call that won a collision with it. The two pages do different things (one
+ * relabels a button, the other swaps its WebRTC channel), and only one of them
+ * is mounted at a time.
+ */
+let roleSwitchHandler: ((target: RoleSwitchTarget) => void) | undefined;
+
+/**
+ * Register the mounted page's handler for switching to a client. Returns
+ * unregister.
+ */
+export function registerRoleSwitchHandler(
+  handler: (target: RoleSwitchTarget) => void,
+): () => void {
+  roleSwitchHandler = handler;
+  return () => {
+    if (roleSwitchHandler === handler) {
+      roleSwitchHandler = undefined;
+    }
+  };
+}
+
 export function useVideoChatSrv(): VideoChatComponent {
   const streamsStore = useStreamsStore();
 
@@ -441,6 +471,40 @@ export function useVideoChatSrv(): VideoChatComponent {
     }
   }
 
+  /**
+   * Our call lost a collision with another one started in this chat at the same
+   * moment, and the background has already made this call a client of that
+   * one. Here the window follows, without closing.
+   *
+   * The session goes first: this window drops every signal of a session other
+   * than its own, and the winner's answer is on its way.
+   */
+  async function switchToClientOf(target: RoleSwitchTarget): Promise<void> {
+    log.info(
+      `Switching to a client of ${target.hostAddr} (session ${target.callSessionId ?? 'n/a'}): `
+        + `that call won a collision with ours`,
+    );
+    if (chat.value) {
+      chat.value = {
+        ...chat.value,
+        direction: 'incoming',
+        hostAddr: target.hostAddr,
+        callSessionId: target.callSessionId,
+      };
+    }
+    streamsStore.callSessionId = target.callSessionId;
+    if (roleSwitchHandler) {
+      roleSwitchHandler(target);
+    } else if (!streamsStore.starConfig) {
+      // No page to say anything yet - the window is still coming up. What the
+      // setup screen reads is enough for its button to say "Join".
+      streamsStore.pendingDirection = 'incoming';
+      streamsStore.pendingHostAddr = target.hostAddr;
+    } else {
+      log.warn(`No handler to switch the running call to ${target.hostAddr}`);
+    }
+  }
+
   function notifyBkgrndInstanceOnCallStart() {
     ctrlObs.value?.next!({ type: 'call-started-event' });
   }
@@ -524,6 +588,7 @@ export function useVideoChatSrv(): VideoChatComponent {
     handleWebRTCSignal,
     notifyOfUndeliveredSignal,
     notifyOfRejoiningPeer,
+    switchToClientOf,
     watchRequests,
     notifyBkgrndInstanceOnCallStart,
   };

@@ -73,6 +73,46 @@ export async function sendSystemMgsAboutDisconnectWebRTC({
 }
 
 /**
+ * Tells the host of a call that ran into ours and never came in that the two
+ * calls did not meet, so that its chat history says so too - its own call went
+ * nowhere either, and from its side that looks like nobody answering.
+ *
+ * A system message rather than a signal: it is a record for the history, not a
+ * step of a call, and the ordinary delivery queue gets it there even when the
+ * rival's app is closed by now. A build that predates the subtype ignores it.
+ */
+export async function sendSystemMsgAboutFailedCallCollision({
+  ownAddr,
+  chatId,
+  rivalHostAddr,
+  callSessionId,
+}: {
+  ownAddr: string;
+  chatId: ChatIdObj;
+  rivalHostAddr: string;
+  /** Our own call, the one that waited for the rival in vain. */
+  callSessionId?: string;
+}) {
+  const chatSystemData: WebRTCMsgBodySysMsgData = {
+    event: 'webrtc-call',
+    value: {
+      sender: ownAddr,
+      subType: 'call-collision-failed',
+      chatId,
+      callSessionId,
+    },
+  };
+
+  const { chatMessageId } = generateChatMessageId();
+  return sendSystemDeletableMessage({
+    chatId,
+    recipients: [rivalHostAddr],
+    chatMessageId,
+    chatSystemData,
+  });
+}
+
+/**
  * Sends a heartbeat message to all peers in a group chat.
  * This is a fire-and-forget message used for the re-join feature:
  * it lets other participants know that a call is still active.
@@ -260,6 +300,52 @@ export async function sendCallDeclined(
     log.debug(`[sendCallDeclined] Sent call-declined to host ${hostAddr}`);
   } else {
     await w3n.log('error', `Fail to deliver call-declined to host ${hostAddr}`, result.err);
+  }
+}
+
+/**
+ * Tells the host of another call in this chat that we are calling too, with the
+ * facts the tie-break needs (see callCollisionWinner in call-state.ts).
+ *
+ * The rival learns most of them from our own 'start' anyway; what it cannot
+ * learn from there is `established` - that someone has answered our call since
+ * - and without it the two hosts could settle on different winners. Confirmed
+ * and retried like 'call-declined': a single message with no other recovery
+ * path, and a lost one leaves both hosts waiting on each other.
+ */
+export async function sendCallCollision(
+  chatId: ChatIdObj,
+  rivalHostAddr: string,
+  ownAddr: string,
+  callSessionId: string | undefined,
+  facts: { startedAt?: number; established: boolean },
+): Promise<void> {
+  const result = await sendWebRTCSignal({
+    chatId,
+    recipient: rivalHostAddr,
+    webrtcMsg: {
+      stage: 'signalling',
+      id: Date.now(),
+      callSessionId,
+      data: {
+        callCollision: {
+          ...((typeof facts.startedAt === 'number') ? { startedAt: facts.startedAt } : {}),
+          established: facts.established,
+        },
+      },
+    },
+    deliveryIdPrefix: 'chat-call-collision',
+    logLabel: '[sendCallCollision]',
+    signalName: 'call-collision',
+    confirm: true,
+    retries: { attempts: DELIVERY_RETRY_ATTEMPTS, delayMillis: DELIVERY_RETRY_DELAY_MILLIS },
+    blindRepeats: { delaysMillis: [BLIND_REPEAT_DELAY_MILLIS] },
+  });
+
+  if (result.ok) {
+    log.debug(`[sendCallCollision] Told ${rivalHostAddr} of our call in the same chat`);
+  } else {
+    await w3n.log('error', `Fail to tell ${rivalHostAddr} of our call in the same chat`, result.err);
   }
 }
 

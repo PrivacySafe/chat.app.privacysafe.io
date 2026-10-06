@@ -28,7 +28,7 @@ import type { StreamStateInfo } from '@video/common/types/star.types';
 import type { ConnectionStatus } from '@video/common/types/peer.types';
 import { PRE_MEDIA_STATUSES } from '@video/common/utils/connection-status-i18n';
 import {
-  reconnectingHintEffect, type ReconnectingHintKind,
+  REJOIN_NOTICE_TTL_MS, reconnectingHintEffect, type ReconnectingHintKind,
 } from '@video/common/services/rejoin-notice';
 import { toCanonicalAddress } from '@shared/address-utils';
 import { notifyPeerLeftCall } from '@video/common/services/video-chat-service/video-chat-srv';
@@ -747,6 +747,43 @@ export function useWebRtcCallbacks(params: UseWebRtcCallbacksParams) {
   }
 
   /**
+   * Statuses an answer moves a peer out of (Host side): still being rung, or
+   * written off as unreachable or silent by a guess the answer has just
+   * disproved. 'declined' is not among them - that is the person's own word.
+   */
+  const ANSWERABLE_STATUSES: ReadonlySet<ConnectionStatus> = new Set([
+    'invited', 'no-answer', 'not-reached', 'timeout',
+  ]);
+
+  /**
+   * Called when an invited peer answers the call (Host side), on the notice it
+   * sends at the moment of answering - ahead of its SDP offer, which comes only
+   * after its window has opened and its camera has started, and is the slowest
+   * message on the ASMail path. Until the offer, the peer stayed 'invited' here:
+   * "waiting for participants" with the ringtone still playing, while the other
+   * end was already in the call.
+   *
+   * The notice promises nothing, so a peer whose offer never follows is written
+   * off again after the same expiry the host's announcement to the others has.
+   */
+  function handlePeerAnswered(peerAddr: string): void {
+    const participant = streams.getParticipant(peerAddr);
+    if (!participant || participant.stream
+      || !ANSWERABLE_STATUSES.has(participant.connectionStatus)) {
+      return;
+    }
+    console.log(`[useInCalls] ${peerAddr} answered the call; waiting for its offer`);
+    applyPeerStatus(peerAddr, 'connecting');
+    setTimeout(() => {
+      const current = streams.getParticipant(peerAddr);
+      if (current && !current.stream && (current.connectionStatus === 'connecting')) {
+        console.warn(`[useInCalls] ${peerAddr} answered ${REJOIN_NOTICE_TTL_MS}ms ago and never arrived`);
+        applyPeerStatus(peerAddr, 'timeout');
+      }
+    }, REJOIN_NOTICE_TTL_MS);
+  }
+
+  /**
    * Called when an invited peer declines the call (Host side).
    */
   function handleCallDeclined(peerAddr: string): void {
@@ -763,6 +800,7 @@ export function useWebRtcCallbacks(params: UseWebRtcCallbacksParams) {
     handleConnectionStateChange,
     handleClientConnectionStateChange,
     handleCallDeclined,
+    handlePeerAnswered,
     handleStreamStateChanged,
     handleRemoteStreamStateChanged,
     handleStreamSenderInfo,

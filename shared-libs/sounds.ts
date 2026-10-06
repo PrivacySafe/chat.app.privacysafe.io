@@ -48,6 +48,10 @@ export class Sound {
     return this.audio.play();
   }
 
+  setVolume(volume: number): void {
+    this.audio.volume = volume;
+  }
+
   stop(): void {
     this.audio.pause();
     this.audio.load();

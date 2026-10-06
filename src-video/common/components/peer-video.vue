@@ -20,6 +20,7 @@
   import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
   import VideoPlaceholder from '@video/common/components/video-placeholder.vue';
   import VideoStream from '@video/common/components/video-stream.vue';
+  import HostBadge from '@video/common/components/host-badge.vue';
   import { makeLogger } from '@shared/logger';
 
   const log = makeLogger('PeerVideo');
@@ -31,6 +32,8 @@
     isVideoOn: boolean;
     isAudioOn: boolean;
     isReconnecting?: boolean;
+    /** This tile is the call host's camera. */
+    isHost?: boolean;
     styleClass?: string | (string | Record<string, boolean>)[] | Record<string, boolean>;
     size?: 'normal' | 'small';
   }>();
@@ -180,6 +183,11 @@
       />
       {{ t('call.text.tap_to_unmute') }}
     </div>
+
+    <host-badge
+      v-if="isHost"
+      :size="size"
+    />
 
     <div
       v-if="!isAudioOn"

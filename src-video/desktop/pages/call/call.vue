@@ -170,6 +170,7 @@
           :is-cam-on="streams.isCamOn"
           :stream="streams.ownVA!.stream"
           :user="ownName"
+          :is-host="streams.isHost"
         />
       </div>
 
@@ -185,6 +186,7 @@
           :stream="peer.vaStream"
           :peer-name="peer.peerName"
           :peer-addr="peer.peerAddr"
+          :is-host="streams.isHostAddr(peer.peerAddr)"
         />
       </div>
     </template>
@@ -208,6 +210,7 @@
               :is-cam-on="streams.isCamOn"
               :stream="streams.ownVA!.stream"
               :user="ownName"
+              :is-host="streams.isHost"
               size="small"
             />
           </div>
@@ -224,6 +227,7 @@
               :stream="peer.vaStream"
               :peer-name="peer.peerName"
               :peer-addr="peer.peerAddr"
+              :is-host="streams.isHostAddr(peer.peerAddr)"
               size="small"
             />
           </div>

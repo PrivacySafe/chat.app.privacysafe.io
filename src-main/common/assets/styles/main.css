@@ -276,22 +276,7 @@ div {
   opacity: 0;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background-color: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  min-height: 24px;
-  background-color: var(--color-bg-control-accent-default);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background-color: var(--color-bg-control-accent-hover);
-  cursor: pointer;
+[data-icon='host-outline-rounded'] {
+  --svg: url('../images/host-outline-rounded.svg');
 }
 

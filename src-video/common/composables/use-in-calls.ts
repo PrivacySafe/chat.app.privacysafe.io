@@ -50,6 +50,7 @@ import {
   registerHostHeartbeatHandler,
   registerUndeliveredInviteHandler,
   registerRejoiningPeerHandler,
+  registerRoleSwitchHandler,
   notifyHostEndedCall,
   type PeerLeftParams,
 } from '@video/common/services/video-chat-service/video-chat-srv';
@@ -67,6 +68,7 @@ import {
 } from '@video/common/utils/no-answer';
 import { useWebRtcCallbacks } from './use-webrtc-callbacks';
 import { useScreenShareUi } from './use-screen-share-ui';
+import { useRingback } from './use-ringback';
 
 /**
  * How long an invited peer can stay silent before the banner marks them as not
@@ -223,6 +225,29 @@ export function useInCalls() {
     connectingPeers.value.filter(p => WAITING_STATUSES.has(p.status)).length,
   );
 
+  /**
+   * The caller hears the ringtone while the people called are still being rung:
+   * someone is still 'invited' and nobody has answered yet. In a group call the
+   * first answer ends it - the call has started by then, and ringing on until
+   * the last invitee makes up their mind would talk over the conversation.
+   */
+  const isRingingOut = computed(() => {
+    if (!streams.isHost) {
+      return false;
+    }
+    const peers = remoteParticipantsList.value.filter(p => !p.addr.startsWith('screen:'));
+    const someoneAnswered = peers.some(
+      p =>
+        !!p.stream ||
+        (!WAITING_STATUSES.has(p.connectionStatus) &&
+          !SETTLED_STATUSES.has(p.connectionStatus) &&
+          !BANNER_HIDDEN_STATUSES.has(p.connectionStatus)),
+    );
+    return !someoneAnswered && peers.some(p => WAITING_STATUSES.has(p.connectionStatus));
+  });
+
+  const { stopRingback } = useRingback(isRingingOut);
+
   // ===========================================================================
   // Peer crash → delayed endCall (1-1 any side; group when host is lost)
   // Bound after endCall is defined; callbacks use this holder (hoisting-safe).
@@ -258,6 +283,7 @@ export function useInCalls() {
     handleConnectionStateChange,
     handleClientConnectionStateChange,
     handleCallDeclined,
+    handlePeerAnswered,
     handleStreamStateChanged,
     handleRemoteStreamStateChanged,
     handleStreamSenderInfo,
@@ -661,16 +687,52 @@ export function useInCalls() {
   const unregisterUndeliveredInviteHandler =
     registerUndeliveredInviteHandler(handleUndeliveredInvite);
 
-  // A peer said it is re-joining, ahead of the SDP offer that is the only other
-  // thing announcing a return - and by far the slowest. Host side only: the
-  // background sends this notice on to the host alone, and only the host
-  // channel can broadcast it to everyone else.
+  // A peer said it is on its way in - re-joining, or answering the call in the
+  // first place - ahead of the SDP offer that is the only other thing
+  // announcing it, and by far the slowest. Host side only: the background sends
+  // this notice on to the host alone, and only the host channel can broadcast it
+  // to everyone else.
   const unregisterRejoiningPeerHandler = registerRejoiningPeerHandler(peerAddr => {
+    handlePeerAnswered(peerAddr);
     if (!hostChannel.value) {
       console.warn(`[useInCalls] Re-join notice from ${peerAddr} with no host channel to announce it on`);
       return;
     }
     hostChannel.value.announceRejoiningPeer(peerAddr);
+  });
+
+  /**
+   * Our call lost a collision with one the other person started at the same
+   * moment (see callCollisionWinner in src-deno/.../utils/call-state.ts), and
+   * the background has already made us a client of theirs. The window stays:
+   * the host channel goes, nobody having answered it, and the client one comes
+   * up in its place through the same watcher on `starConfig` that brought the
+   * host one up - which also sends the offer. The camera and microphone stream
+   * is the one already running; closeAll() does not touch it.
+   */
+  const unregisterRoleSwitchHandler = registerRoleSwitchHandler(({ hostAddr }) => {
+    if (!streams.isHost || !ownVA.value) {
+      console.warn(`[useInCalls] Asked to switch to a client of ${hostAddr}, but not hosting here`);
+      return;
+    }
+    console.log(`[useInCalls] Switching from host to a client of ${hostAddr}`);
+    clearSetupTimeout();
+    if (hostChannel.value) {
+      hostChannel.value.closeAll();
+      hostChannel.value = null;
+    }
+    streams.setHostSignalingChannel(null);
+    // The roster was seeded for a host; the client one is seeded afresh below.
+    for (const participant of [...remoteParticipantsList.value]) {
+      streams.removeRemoteParticipant(participant.addr);
+    }
+    streams.startCall('incoming', hostAddr);
+    armSetupTimeout();
+    notification.$createNotice({
+      type: 'info',
+      content: t('va.text.call_collision_joining', { user: getContactName(hostAddr) }),
+      duration: 7000,
+    });
   });
 
   // ===========================================================================
@@ -797,12 +859,14 @@ export function useInCalls() {
   }
 
   function doBeforeUnmount() {
+    stopRingback();
     document.removeEventListener('fullscreenchange', fullscreenchangeHandler);
     window.removeEventListener('beforeunload', beforeUnloadHandler);
     unregisterFullEndCall();
     unregisterCallDeclinedHandler();
     unregisterUndeliveredInviteHandler();
     unregisterRejoiningPeerHandler();
+    unregisterRoleSwitchHandler();
     unregisterPeerLeftHandler();
     unregisterHostHeartbeatHandler();
     clearPeerCrashEndTimer();

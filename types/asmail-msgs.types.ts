@@ -470,7 +470,17 @@ export interface WebRTCMsgBodySysMsgData {
   event: 'webrtc-call';
   value: {
     sender: string;
-    subType: 'outgoing-call-cancelled' | 'incoming-call-cancelled';
+    /**
+     * - 'outgoing-call-cancelled': the caller withdrew a call before it was
+     *   answered;
+     * - 'incoming-call-cancelled': somebody declined a ringing call;
+     * - 'call-collision-failed': `sender` and the receiver started calls in this
+     *   chat at the same moment, and the two calls never met (see
+     *   callCollisionWinner in video-chat-service/utils/call-state.ts). Sent by
+     *   the host whose call won and waited in vain; `callSessionId` is that
+     *   host's call. Builds that predate it ignore it.
+     */
+    subType: 'outgoing-call-cancelled' | 'incoming-call-cancelled' | 'call-collision-failed';
     chatId: ChatIdObj;
     /**
      * Which call this is about - the same id as `WebRTCMsg.callSessionId`, so
@@ -575,7 +585,8 @@ export interface WebRTCMsg {
   // XXX explicit start and explicit close on non-webrtc will be more reliable
 
   // - stage: start, can be already with candidate(s) in first signalling.
-  //          What happens with collision of simultaneous start?
+  //          Collision of simultaneous starts: see callCollisionWinner in
+  //          src-deno/services/video-chat-service/utils/call-state.ts.
   // - stage: signalling - just pass data
   // - stage: disconnect - close and send all appropriate notifications
 
@@ -721,6 +732,42 @@ export interface WebRTCOffBandMessage {
    */
   relayedRejoin?: {
     byDeviceId: string;
+  };
+  /**
+   * 'start' only: when the host first sent the invitation, by its own clock.
+   *
+   * The tie-break between two calls started in one chat at the same moment
+   * (see callCollisionWinner in call-state.ts) compares these, and it cannot use
+   * `WebRTCMsg.id` instead: every copy of 'start' is stamped afresh, so the
+   * repeats of the earlier call would look later than they are. Optional: a
+   * 'start' without it comes from a build that cannot step aside in a
+   * collision, and the tie-break lets such a call win.
+   */
+  startedAt?: number;
+  /**
+   * "I am calling in this chat too" - sent by a host to the host of another
+   * call in the same chat, as soon as it learns of that call, so that both run
+   * the same tie-break on the same facts. The session id is the sender's own,
+   * in `WebRTCMsg.callSessionId`.
+   *
+   * `established` is what only the sender knows: someone has already answered
+   * its call. Such a call is never the one to give way.
+   */
+  callCollision?: {
+    startedAt?: number;
+    established: boolean;
+  };
+  /**
+   * 'disconnect' only: the host withdraws its call because another call in the
+   * same chat, started at the same moment, won the tie-break. An invitee still
+   * ringing for the withdrawn call rings for this one instead, without waiting
+   * for a repeat of its 'start' - the first copy may well have been refused
+   * while the withdrawn call was ringing.
+   */
+  supersededBy?: {
+    hostAddr: string;
+    callSessionId?: string;
+    startedAt?: number;
   };
 }
 

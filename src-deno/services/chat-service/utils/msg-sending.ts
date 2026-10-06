@@ -37,6 +37,7 @@ import { getEntityStat } from '../../../../shared-libs/get-stats-safely.ts';
 import { folderSizeUpTo } from '../../../../shared-libs/folder-size.ts';
 import { AppSettings } from '../../../utils/app-settings.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
+import { replaceSystemNotification } from '../../../utils/system-notifications.ts';
 import {
   makeMsgRecordPhantom,
   queueSyncPhantom,
@@ -504,9 +505,12 @@ export async function msgSending({
     }
 
     const icon = Uint8Array.from(LOGO_ICON_AS_ARRAY);
-    const notificationTitle = await appSettings.t('app.notification.new_message', { sender });
+    // A one-to-one chat is the sender itself, so naming it would add nothing.
+    const notificationTitle = chat.isGroupChat
+      ? await appSettings.t('app.notification.new_group_message', { sender, chatName: chat.name })
+      : await appSettings.t('app.notification.new_message', { sender });
 
-    await w3n.shell?.userNotifications?.addNotification({
+    await replaceSystemNotification({
       icon,
       title: notificationTitle,
       // A recording carries no text, and a notification with an empty body says

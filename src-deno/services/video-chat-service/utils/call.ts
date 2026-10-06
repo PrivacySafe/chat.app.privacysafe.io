@@ -90,6 +90,18 @@ const IMMEDIATE_HEARTBEAT_DELAYS_MS = [1_500, 4_000, 8_000];
 const DECLINE_TEARDOWN_DELAY_MS = 1500;
 
 /**
+ * How long the host that won a collision of two calls (see callCollisionWinner
+ * in call-state.ts) waits for the other host to come in as a client, before
+ * telling the user that the two calls did not meet.
+ *
+ * The other host learns of the collision from our 'start' or our notice (one
+ * ASMail leg, 7-20 s), then opens a client window and sends a 13-21 KB offer
+ * (another leg, slower for its size). A minute covers both at the measured
+ * latency, and is still well short of the point where the user gives up.
+ */
+const COLLISION_JOIN_TIMEOUT_MS = 60_000;
+
+/**
  * Role in Star architecture
  */
 type StarRole = 'host' | 'client';
@@ -139,6 +151,7 @@ export function callInChat({
   postProcessingForVideoChat,
   notifyUserOnHostEndedCall,
   notifyState,
+  onCollisionUnresolved,
 }: {
   info: ChatInfoForCall;
   sinkGUIEvents: (event: VideoChatEvent) => void;
@@ -172,6 +185,12 @@ export function callInChat({
   notifyUserOnHostEndedCall?: (params: {
     chatId: ChatIdObj; chatName: string; hostAddr: string; hostName: string;
   }) => Promise<void>;
+  /**
+   * Host only: the host of a call that ran into this one and lost never came in
+   * as a client (see noteCollisionWon). Tells the user and puts it into the
+   * chat history, on both sides.
+   */
+  onCollisionUnresolved?: (rival: { hostAddr: string; callSessionId?: string }) => void;
 }): CallInChat {
   let guiInstance: VideoComponentInstance | undefined = undefined;
   /**
@@ -325,11 +344,35 @@ export function callInChat({
    */
   const peersThatAnswered = new Set<string>();
 
+  /**
+   * Host only: when this call's 'start' first went out. Sent in every copy of
+   * 'start' and of the collision notice - the tie-break between two calls
+   * started at the same moment compares it (see callCollisionWinner). Undefined
+   * while the window is still on its media setup screen: nobody has been
+   * invited yet, so such a call gives way to any other without a word.
+   */
+  let startedAt: number | undefined = undefined;
+
+  /**
+   * Host only: the other host whose call ran into this one and lost, and the
+   * timer that says so to the user if it never comes in as a client. See
+   * COLLISION_JOIN_TIMEOUT_MS.
+   */
+  let collisionRival: string | undefined = undefined;
+  let collisionTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+
+  /** Set once this call is being withdrawn in favour of another one; see yieldToRivalCall(). */
+  let yieldedTo: string | undefined = undefined;
+
   /** The gate on the repeats of 'start'; the rule itself is in call-state.ts. */
   function inviteStillPending(peerAddr: string): boolean {
     return invitePendingRule(
       {
-        callIsLive: (callStage === 'calling'),
+        // A call given up for another one (switchToClientOf) goes on as a
+        // client of that one - still 'calling' - but its own invitation is
+        // withdrawn: a repeat of it would ring the withdrawn session again
+        // (live run of 2026-10-06: two copies went out after the switch).
+        callIsLive: (callStage === 'calling') && !yieldedTo,
         answered: peersThatAnswered,
         declined: peersThatDeclined,
       },
@@ -418,14 +461,22 @@ export function callInChat({
       const { type } = request;
       switch (type) {
         case 'call-started-event': {
+          if (yieldedTo) {
+            log.info(
+              `[${info.ownAddr}] Not starting the call in chat ${info.chatId.chatId}: `
+                + `it is being withdrawn in favour of the call of ${yieldedTo}`,
+            );
+            break;
+          }
           // Send 'start' signal to all peers when host confirms call start
           // (user clicked "Start Call" in va-setup.vue)
           if (role === 'host') {
+            startedAt ??= Date.now();
             const startMsg: WebRTCMsg = {
               stage: 'start',
               id: Date.now(),
               callSessionId: info.callSessionId,
-              data: {},
+              data: { startedAt },
             };
             // At `info`: the other end of "did the call even go out" - the
             // recipient's own lifecycle lines say what became of it there.
@@ -726,6 +777,171 @@ export function callInChat({
   }
 
   /**
+   * Host only: withdraws this call in favour of another one started in the same
+   * chat at the same moment, which won the tie-break (callCollisionWinner in
+   * call-state.ts). The caller then joins that call as a client.
+   *
+   * Everyone this call has already invited is told, except the winner's host -
+   * it has its own call, and our 'disconnect' would only reach it as a foreign
+   * session. The 'disconnect' names the winner (`supersededBy`), so an invitee
+   * still ringing for us rings for that call at once rather than on the next
+   * repeat of its 'start'. Before the 'start' went out nobody was invited, and
+   * nothing is sent at all.
+   *
+   * The window is closed and the post-processing skipped, as in
+   * stepAsideForOwnDevice(): this call did not run, and the end of the call the
+   * user is about to join will be recorded by that call.
+   */
+  async function yieldToRivalCall(winner: {
+    hostAddr: string; callSessionId?: string; startedAt?: number;
+  }): Promise<void> {
+    if (callStage === 'done') {
+      return;
+    }
+    // Claimed first: from here on a click on "Start" in the window must not
+    // send a 'start' for a call that is being withdrawn.
+    yieldedTo = winner.hostAddr;
+    reportState('winding-down');
+    log.info(
+      `[${info.ownAddr}] Withdrawing the call in chat ${info.chatId.chatId} `
+        + `(session ${info.callSessionId ?? 'n/a'}) in favour of the call of ${winner.hostAddr} `
+        + `(session ${winner.callSessionId ?? 'n/a'})`,
+    );
+    withdrawInvitations(winner);
+    if (guiInstance) {
+      try {
+        await guiInstance.endCall();
+      } catch (err) {
+        w3n.log('error', `Failed to close the call window when withdrawing the call`, err);
+      }
+    }
+    guiPostProcessDone = true;
+    await end({ silent: true });
+  }
+
+  /**
+   * Host only, and only once: tells everyone this call has invited - except the
+   * winner's host, which has its own call - that it is withdrawn in favour of the
+   * winner's. The 'disconnect' names the winner (`supersededBy`), so an invitee
+   * still ringing for us rings for that call at once. Before our 'start' went
+   * out nobody was invited, and nothing is sent at all.
+   */
+  function withdrawInvitations(winner: {
+    hostAddr: string; callSessionId?: string; startedAt?: number;
+  }): void {
+    if ((role !== 'host') || (startedAt === undefined)) {
+      return;
+    }
+    const disconnectMsg: WebRTCMsg = {
+      stage: 'disconnect',
+      id: Date.now(),
+      callSessionId: info.callSessionId,
+      data: { supersededBy: winner },
+    };
+    for (const peer of info.peers) {
+      if (areAddressesEqual(peer.addr, winner.hostAddr)) {
+        continue;
+      }
+      sendWebRTCMsg(info.chatId, peer.addr, info.ownAddr, disconnectMsg).catch(err => {
+        w3n.log('error', `Failed to withdraw the invitation of ${peer.addr}`, err);
+      });
+    }
+    // Nothing of our own call is left to announce, and this is what keeps a
+    // second call from sending a second set of these.
+    startedAt = undefined;
+  }
+
+  /**
+   * Host only: turns this call - nobody has answered it - into a client of the
+   * call that won a collision with it, keeping the window open (see
+   * VideoChatComponent.switchToClientOf). The window keeps the devices the user
+   * picked, and on the call page swaps its host channel for a client one.
+   *
+   * Returns false when the window cannot be asked - none is open, or it did not
+   * answer - and the caller falls back on closing it and opening a client one,
+   * which is what yieldToRivalCall() does. By then this object already speaks
+   * for the winner's call, so that fallback withdraws nothing a second time.
+   */
+  async function switchToClientOf(winner: {
+    hostAddr: string; callSessionId?: string; startedAt?: number;
+  }): Promise<boolean> {
+    if ((callStage !== 'calling') || (role !== 'host')) {
+      return false;
+    }
+    // Claimed first, like in yieldToRivalCall(): a click on "Start" racing this
+    // switch must not send a 'start' for the call being given up.
+    yieldedTo = winner.hostAddr;
+    log.info(
+      `[${info.ownAddr}] Switching the call in chat ${info.chatId.chatId} to client of `
+        + `${winner.hostAddr} (session ${winner.callSessionId ?? 'n/a'}), giving up our `
+        + `session ${info.callSessionId ?? 'n/a'}`,
+    );
+    withdrawInvitations(winner);
+
+    if (collisionTimer !== undefined) {
+      clearTimeout(collisionTimer);
+      collisionTimer = undefined;
+    }
+    collisionRival = undefined;
+    if (heartbeatInterval !== undefined) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = undefined;
+    }
+    clients.clear();
+    peersThatAnswered.clear();
+    peersThatDeclined.clear();
+
+    // From here on this object serves the winner's call: every signal it sends
+    // and every check of an incoming one goes by these.
+    info.callSessionId = winner.callSessionId;
+    info.direction = 'incoming';
+    info.hostAddr = winner.hostAddr;
+    initializeRole('incoming', winner.hostAddr);
+
+    if (!guiInstance && guiOpening) {
+      await guiOpening;
+    }
+    if (!guiInstance?.switchToClientOf) {
+      return false;
+    }
+    try {
+      await guiInstance.switchToClientOf({
+        hostAddr: winner.hostAddr, callSessionId: winner.callSessionId,
+      });
+      return true;
+    } catch (err) {
+      w3n.log('error', `The call window did not switch to a client of ${winner.hostAddr}`, err);
+      return false;
+    }
+  }
+
+  /**
+   * Host only: another call ran into this one and lost the tie-break, so its
+   * host is expected to come in as a client. If it does not - a build that
+   * cannot step aside, a notice lost on the way - the user is told why the
+   * person they are calling is "not responding": they were calling at the very
+   * same moment.
+   */
+  function noteCollisionWon(rivalHostAddr: string, rivalSessionId?: string): void {
+    if ((callStage === 'done') || (role !== 'host') || collisionRival) {
+      return;
+    }
+    collisionRival = rivalHostAddr;
+    collisionTimer = setTimeout(() => {
+      collisionTimer = undefined;
+      if ((callStage !== 'calling')
+        || Array.from(peersThatAnswered).some(a => areAddressesEqual(a, rivalHostAddr))) {
+        return;
+      }
+      log.info(
+        `[${info.ownAddr}] ${rivalHostAddr}, whose call ran into ours in chat `
+          + `${info.chatId.chatId}, has not come in within ${COLLISION_JOIN_TIMEOUT_MS}ms`,
+      );
+      onCollisionUnresolved?.({ hostAddr: rivalHostAddr, callSessionId: rivalSessionId });
+    }, COLLISION_JOIN_TIMEOUT_MS);
+  }
+
+  /**
    * @param opts.silent ends the call without telling anyone: no 'disconnect' to
    * peers, and never 'rejoinable'. Used when another device of this same user
    * has already answered or declined this call. Peers are keyed by address, so
@@ -780,6 +996,10 @@ export function callInChat({
     if (declineTeardownTimer !== undefined) {
       clearTimeout(declineTeardownTimer);
       declineTeardownTimer = undefined;
+    }
+    if (collisionTimer !== undefined) {
+      clearTimeout(collisionTimer);
+      collisionTimer = undefined;
     }
 
     // How this call ended. Computed before the state-clearing block below nulls
@@ -1392,6 +1612,11 @@ export function callInChat({
     end,
     endCallInGUI,
     stepAsideForOwnDevice,
+    yieldToRivalCall,
+    switchToClientOf,
+    noteCollisionWon,
+    getStartedAt: () => startedAt,
+    isEstablished: () => (peersThatAnswered.size > 0),
     hasPeer,
     handleWebRTCSignalFrom,
     // Star-specific methods

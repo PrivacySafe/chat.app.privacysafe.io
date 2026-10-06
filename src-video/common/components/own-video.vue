@@ -18,16 +18,20 @@
 <script lang="ts" setup>
   import VideoPlaceholder from '@video/common/components/video-placeholder.vue';
   import VideoStream from '@video/common/components/video-stream.vue';
+  import HostBadge from '@video/common/components/host-badge.vue';
 
   const {
     user,
     stream,
     isCamOn,
+    isHost = false,
     size = 'normal',
   } = defineProps<{
     user: string;
     stream: MediaStream;
     isCamOn: boolean;
+    /** We host this call. */
+    isHost?: boolean;
     size?: 'normal' | 'small';
   }>();
 </script>
@@ -45,6 +49,11 @@
       v-else
       :user-name="user"
       :width="size === 'small' ? 72 : 144"
+    />
+
+    <host-badge
+      v-if="isHost"
+      :size="size"
     />
   </div>
 </template>

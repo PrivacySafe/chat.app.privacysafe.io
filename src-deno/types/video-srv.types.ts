@@ -73,6 +73,11 @@ export interface VideoComponentInstance {
    * same reason as the method above.
    */
   notifyOfRejoiningPeer?(peer: string): Promise<void>;
+  /**
+   * Turns the window from the host of our call into a client of the call that
+   * won a collision with it, in place (see VideoChatComponent.switchToClientOf).
+   */
+  switchToClientOf?(target: { hostAddr: string; callSessionId?: string }): Promise<void>;
 }
 
 /**
@@ -107,6 +112,32 @@ export interface CallInChat {
    * here and synchronize it to the device that is actually in the call.
    */
   stepAsideForOwnDevice(): Promise<void>;
+  /**
+   * Host only: withdraws this call in favour of another call started in the
+   * same chat at the same moment, which won the tie-break (callCollisionWinner
+   * in utils/call-state.ts). Closes the window without post-processing; the
+   * caller goes on to join the winner's call as a client.
+   */
+  yieldToRivalCall?(winner: {
+    hostAddr: string; callSessionId?: string; startedAt?: number;
+  }): Promise<void>;
+  /**
+   * Host only: turns this call into a client of the winner's, keeping the window
+   * open. False when the window could not be asked; then yieldToRivalCall() is
+   * the way out.
+   */
+  switchToClientOf?(winner: {
+    hostAddr: string; callSessionId?: string; startedAt?: number;
+  }): Promise<boolean>;
+  /**
+   * Host only: another call ran into this one and lost, so its host is expected
+   * to come in as a client; the user is told if it does not.
+   */
+  noteCollisionWon?(rivalHostAddr: string, rivalSessionId?: string): void;
+  /** Host only: when this call's 'start' first went out; undefined before that. */
+  getStartedAt?(): number | undefined;
+  /** Host only: someone has answered this call. */
+  isEstablished?(): boolean;
   hasPeer(addr: string): boolean;
   handleWebRTCSignalFrom(peer: string, webrtcMsg: WebRTCMsg): boolean;
 

@@ -307,7 +307,9 @@ export interface VideoGUIOpener {
 }
 
 export interface VideoChatEvent {
-  type: 'gui-closed' | 'gui-opened' | 'call-started' | 'call-ended' | 'call-ended-by-host' | 'call-active';
+  type:
+    | 'gui-closed' | 'gui-opened' | 'call-started' | 'call-ended' | 'call-ended-by-host'
+    | 'call-active' | 'call-collision';
   chatId: ChatIdObj;
   peerAddr?: string;
   /**
@@ -337,6 +339,14 @@ export interface VideoChatEvent {
    * hands — a ringtone stopping on its own explains itself, that does not.
    */
   reason?: 'self-left' | 'unanswered-here' | 'answered-elsewhere';
+  /**
+   * 'call-collision' only: `peerAddr` started a call in this chat at the same
+   * moment as we did (see callCollisionWinner in call-state.ts).
+   * - 'joining': theirs won, ours was withdrawn and we are joining theirs;
+   * - 'unresolved': ours won, but they never came in, so the two calls did not
+   *   meet.
+   */
+  collisionOutcome?: 'joining' | 'unresolved';
 }
 
 /**
@@ -388,6 +398,18 @@ export interface VideoChatComponent {
    * already renders as "connecting to the call…".
    */
   notifyOfRejoiningPeer(peerAddr: string): Promise<void>;
+
+  /**
+   * Turns this window - started as the HOST of a call - into a client of
+   * another host's call in the same chat, without closing it.
+   *
+   * Two calls were started in the chat at the same moment and the other one
+   * won (see callCollisionWinner in src-deno/.../utils/call-state.ts). On the
+   * media setup screen this only turns "Start" into "Join"; on the call page the
+   * window drops its host channel and connects to `hostAddr` as a client.
+   * Either way the camera and microphone the user picked stay as they are.
+   */
+  switchToClientOf(target: { hostAddr: string; callSessionId?: string }): Promise<void>;
 
   /**
    * This absorbs different requests from video to gui component, reusing

@@ -48,6 +48,7 @@ import {
   queueSyncPhantom,
 } from '../../mail-sending-service/index.ts';
 import { makeDbRecordException } from '../../../utils/exceptions.ts';
+import { replaceSystemNotification } from '../../../utils/system-notifications.ts';
 import { generateChatMessageId } from '../../../../shared-libs/chat-ids.ts';
 import { includesAddress } from '../../../../shared-libs/address-utils.ts';
 import { toCanonicalAddress } from '../../../../shared-libs/address-utils.ts';
@@ -142,10 +143,14 @@ export async function chatCreation({
     });
   }
 
-  async function showSystemNotification({ sender, chatId }: { sender: string; chatId: ChatIdObj }) {
+  async function showSystemNotification(
+    { sender, chatId, chatName }: { sender: string; chatId: ChatIdObj; chatName?: string },
+  ) {
     const icon = Uint8Array.from(LOGO_ICON_AS_ARRAY);
-    const notificationTitle = await appSettings.t('app.notification.invite', { sender });
-    await w3n.shell?.userNotifications?.addNotification({
+    const notificationTitle = chatName
+      ? await appSettings.t('app.notification.group_invite', { sender, chatName })
+      : await appSettings.t('app.notification.invite', { sender });
+    await replaceSystemNotification({
       icon,
       title: notificationTitle,
       cmd: {
@@ -443,7 +448,11 @@ export async function chatCreation({
 
     await data.addMessage(msg);
     emit.message.added(msg);
-    await showSystemNotification({ sender, chatId: { isGroupChat: true, chatId: chat.chatId } });
+    await showSystemNotification({
+      sender,
+      chatId: { isGroupChat: true, chatId: chat.chatId },
+      chatName: chat.name,
+    });
     await drainOrphanedSyncsOf({ isGroupChat: true, chatId: chat.chatId });
   }
 
