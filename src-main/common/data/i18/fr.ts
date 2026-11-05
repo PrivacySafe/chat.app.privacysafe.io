@@ -577,8 +577,8 @@ export const fr = {
         },
       },
       attachment: {
-        not_available_on_this_device: 'La pièce jointe est uniquement disponible sur l’appareil d’envoi',
-        only_on_sending_device: 'Les fichiers se trouvent uniquement sur l’appareil d’envoi',
+        not_available_on_this_device: 'La pièce jointe n’est pas disponible sur cet appareil',
+        only_on_sending_device: 'Les pièces jointes ne sont pas disponibles sur cet appareil.',
         make_preview: 'Afficher l’aperçu',
       },
       action_message: {

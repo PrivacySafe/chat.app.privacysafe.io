@@ -579,8 +579,8 @@ export const es = {
       },
       attachment: {
         not_available_on_this_device:
-          'El archivo adjunto solo está disponible en el dispositivo desde el que se envió',
-        only_on_sending_device: 'Los archivos solo están disponibles en el dispositivo desde el que se enviaron',
+          'El archivo adjunto no está disponible en este dispositivo',
+        only_on_sending_device: 'Los archivos adjuntos no están disponibles en este dispositivo.',
         make_preview: 'Mostrar vista previa',
       },
       action_message: {
