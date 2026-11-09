@@ -321,6 +321,66 @@ async function createChatFromInvitationSync(
 }
 
 /**
+ * Treats a message the user sent from another device as proof that the chat
+ * was accepted there: a chat in 'invited' status does not let the user send
+ * anything, so such a message can only exist after an acceptance.
+ *
+ * Needed because the 'accept:invitation' phantom is the only other carrier of
+ * that fact, and it can be missing - seen on a reinstalled Android device
+ * (2026-11): the chat was recreated from the peer's invitation still sitting
+ * in the shared inbox, all of the user's own messages came in through their
+ * phantoms, the acceptance did not, and the chat stayed 'invited' for good -
+ * the peer's messages were skipped and sending was blocked.
+ *
+ * Versioned with the message's own token on the chat's 'status' aspect, the
+ * same aspect 'accept:invitation' writes, so any later status change (removal
+ * from the group, say) still wins over this inference.
+ */
+async function acceptChatProvenByOwnMsg(
+  db: DB,
+  emit: ChatSrvEmit,
+  chat: NonNullable<ReturnType<DB['findChat']>>,
+  ownAddr: string,
+  token: SyncToken,
+  chatMessageId: string,
+): Promise<void> {
+  if (chat.status !== 'invited') {
+    return;
+  }
+
+  const chatId: ChatIdObj = chat.isGroupChat
+    ? { isGroupChat: true, chatId: chat.chatId }
+    : { isGroupChat: false, chatId: chat.peerCAddr };
+
+  const applied = await applyIfNewer(
+    { db, entityType: 'chat', entityId: chatEntityId(chatId), aspect: 'status', token },
+    async () => {
+      let updatedChat;
+      if (chat.isGroupChat) {
+        const members = { ...chat.members };
+        if (members[ownAddr]) {
+          members[ownAddr] = { ...members[ownAddr], hasAccepted: true };
+        }
+        updatedChat = await db.updateGroupChatRecord(chat.chatId, { members, status: 'on' });
+      } else {
+        updatedChat = await db.updateOTOChatRecord(chat.peerCAddr, { status: 'on' });
+      }
+      if (updatedChat) {
+        emit.chat.updated(updatedChat);
+      }
+    },
+  );
+
+  if (applied) {
+    await w3n.log(
+      'info',
+      `Chat ${chatId.chatId} was 'invited', but own message ${chatMessageId} came from device `
+        + `${token.deviceId}; taking it as accepted there and switching the chat on`,
+    );
+  }
+}
+
+/**
  * Handles regular message synchronization.
  *
  * Logic:
@@ -366,6 +426,11 @@ async function handleRegularSync({
 
   const syncedStatus = statusForSyncedOutgoingMsg(status);
   const token: SyncToken = { ts: syncMsg.timestamp || Date.now(), deviceId: sourceDeviceId };
+
+  if (!isIncomingMsg) {
+    await acceptChatProvenByOwnMsg(db, emit, chat, ownAddr, token, chatMessageId);
+  }
+
   const existingMsg = await db.getMessage({ chatId, chatMessageId });
 
   if (existingMsg) {

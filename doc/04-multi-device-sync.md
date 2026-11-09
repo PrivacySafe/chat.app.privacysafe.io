@@ -34,7 +34,7 @@ flowchart LR
   токеном изменения, поэтому потерянная отправка повторяется, а не пропадает насовсем (§4.1).
 - **Своё же сообщение из inbox не применяется** (иначе двойное применение), но и не удаляется сразу:
   inbox общий, остальным устройствам оно ещё нужно
-  ([chat-service.ts:206-212](../src-deno/services/chat-service/chat-service.ts#L206-L212)).
+  ([incoming-messages.ts:185-199](../src-deno/services/chat-service/incoming-messages.ts#L185-L199)).
 - **Устройство идентифицируется** `appDeviceId` вида `<formFactor>-<random20>`, созданным один раз
   ([local-data-store.ts:33-38](../src-deno/services/local-data-store/local-data-store.ts#L33-L38)).
 
@@ -123,7 +123,7 @@ isNewerToken(incoming, stored):
 | Функция | Когда вызывается | Тело фантома | Аспект |
 |---|---|---|---|
 | `createSyncMsgBasedOnRegularMsg` | запись обычного сообщения создана ([msg-sending.ts](../src-deno/services/chat-service/utils/msg-sending.ts)) | `regular` + текст, вложения, статус, history | `record` |
-| `makeMsgRecordPhantom` | доставка завершилась / отмена ([handle-regular-sending-progress.ts](../src-deno/services/mail-sending-service/progress-handlers/handle-regular-sending-progress.ts), [chat-service.ts](../src-deno/services/chat-service/chat-service.ts)) | `update:msg-record` (авторитетный статус) | `msg.status` (при завершении доставки) |
+| `makeMsgRecordPhantom` | доставка завершилась / отмена ([handle-regular-sending-progress.ts](../src-deno/services/mail-sending-service/progress-handlers/handle-regular-sending-progress.ts), [local-msg-actions.ts](../src-deno/services/chat-service/local-msg-actions.ts)) | `update:msg-record` (авторитетный статус) | `msg.status` (при завершении доставки) |
 | `makeMsgStatusPhantom` | локальная смена статуса ('read'/'sent') ([msg-status-updating.ts](../src-deno/services/chat-service/utils/msg-status-updating.ts)) | `update:status` | `msg.status` |
 | `makeDeleteMessagePhantom` | любое удаление сообщений ([msg-deletion.ts](../src-deno/services/chat-service/utils/msg-deletion.ts)) | `delete:message` | `msg.deleted` / `chat.historyCleared` |
 | `makeInvitationPhantom` | чат создан / состав обновлён ([chat-creation.ts](../src-deno/services/chat-service/utils/chat-creation.ts)) | `invitation` (+ `status`, `settings`) | `record` |
@@ -132,7 +132,7 @@ isNewerToken(incoming, stored):
 | `makeSystemEventPhantom` | универсальный: переименование, настройки, участники, админы, правка текста, реакции, запись о звонке | соответствующее `system`-событие | по месту вызова |
 
 Отдельно: `syncLocallyMadeSystemEvent()`
-([chat-service.ts](../src-deno/services/chat-service/chat-service.ts)) — для событий, которые
+([local-system-events.ts](../src-deno/services/chat-service/local-system-events.ts)) — для событий, которые
 **никому наружу не отправляются** (запись о звонке, обновление её `endTimestamp`): без явного
 фантома они вообще не попали бы на другие устройства. Его парный метод
 `saveAndSyncLocalSystemMsg()` пишет запись и ставит её фантом одним вызовом, и существует именно
@@ -191,7 +191,7 @@ GUI-сторе через `makeAndSaveMsgToDb()` и оставалась нав�
 это голый INSERT, а на один и тот же id выходят и повторный вход в тот же звонок, и фантом соседнего
 устройства, пришедший раньше. Проверка живёт в `doAfterStartCall`
 ([call-history.ts](../src-deno/services/video-chat-service/call-history.ts)) и в
-`saveAndSyncLocalSystemMsg` ([chat-service.ts](../src-deno/services/chat-service/chat-service.ts)),
+`saveAndSyncLocalSystemMsg` ([local-system-events.ts](../src-deno/services/chat-service/local-system-events.ts)),
 а не у каждого вызывающего.
 
 **Вторая цена — алфавит.** `chatMessageId` в базе непрозрачен, но за её пределами он попадает в два
@@ -452,12 +452,33 @@ Resync-трафик делит ASMail-доставку с сигналингом
 ### 5.3 Создание чата из фантома приглашения
 
 `createChatFromInvitationSync()`
-([handle-incoming-sync.ts:259-290](../src-deno/services/chat-service/utils/handle-incoming-sync.ts#L259-L290)).
+([handle-incoming-sync.ts:290-321](../src-deno/services/chat-service/utils/handle-incoming-sync.ts#L290-L321)).
 Поля `status` и `settings` в теле приглашения заполняются **только для канала своих устройств** и
 никогда не уходят реальному приглашаемому
 ([types/asmail-msgs.types.ts:112-119](../types/asmail-msgs.types.ts#L112-L119),
 [143-150](../types/asmail-msgs.types.ts#L143-L150)) — благодаря этому чат, созданный из фантома,
 повторяет состояние оригинала, а не угадывает его.
+
+#### 5.3.1 Своё сообщение как доказательство принятия
+
+Чат может появиться на устройстве и не из фантома, а из **настоящего** приглашения собеседника:
+оно лежит в общем ящике до 15 дней, и новое устройство (например, после переустановки) создаёт по
+нему чат в статусе `invited`. Перевести такой чат в `on` может только фантом `accept:invitation`.
+Если его нет, чат остаётся `invited` навсегда: свои сообщения приходят фантомами, входящие от
+собеседника пропускаются, отправка заблокирована. Так было на Android-устройстве тестера, 2026-11.
+
+Поэтому фантом **исходящего** сообщения с другого своего устройства считается доказательством
+принятия: из `invited` отправить ничего нельзя. `acceptChatProvenByOwnMsg()`
+([handle-incoming-sync.ts:339-381](../src-deno/services/chat-service/utils/handle-incoming-sync.ts#L339-L381))
+переводит чат в `on` (в группе ещё ставит себе `hasAccepted`). Запись идёт в аспект `status` с
+токеном сообщения, поэтому более позднее изменение статуса её перекрывает.
+
+Пропущенные в статусе `invited` входящие догружаются, когда чат начинает принимать сообщения — по
+этому выводу, по фантому `accept:invitation` или по локальному Accept:
+`catchUpChatOpenedForReceiving()` в
+[incoming-messages.ts](../src-deno/services/chat-service/incoming-messages.ts) запускает
+`forceRefreshChat()` по этому чату. Без этого watermark ушёл бы дальше, и сообщения собеседника
+остались бы в ящике непрочитанными. Спеки — [ci/invitation-sync.test.ts](../ci/invitation-sync.test.ts).
 
 ## 6. Сценарии
 
@@ -554,7 +575,7 @@ sequenceDiagram
    уменьшает число доставок, но каждая уцелевшая строка едет отдельным сообщением. Настоящий батч
    потребовал бы формата, который старая сборка не выбросит из общего ящика: новый
    `chatMessageType` не проходит `checkChatMessageJSON()`, и такое сообщение удаляется **немедленно**
-   ([chat-service.ts](../src-deno/services/chat-service/chat-service.ts)), то есть старое устройство
+   ([incoming-messages.ts](../src-deno/services/chat-service/incoming-messages.ts)), то есть старое устройство
    отняло бы батч у новых.
 
    **Исключение — анонс восстановления** (`restore:snapshot`, §5.1): он везёт много записей в одном
