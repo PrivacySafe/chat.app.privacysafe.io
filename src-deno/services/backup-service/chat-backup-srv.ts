@@ -55,16 +55,14 @@ import {
   tombstoneVerdictForRestore,
   type RestoreSnapshotCtx,
 } from '../chat-service/utils/restore-snapshot.ts';
-import { attachmentsForPhantom } from '../chat-service/utils/_msgs-related-methods.ts';
+import { announceSnapshot } from '../chat-service/utils/snapshot-announce.ts';
 import { chatEntityId, msgEntityId, parseMsgEntityId } from '../chat-service/utils/sync-versions.ts';
 import { isNewerToken } from '../chat-service/utils/sync-versions.ts';
-import { makeSystemEventPhantom, queueSnapshotChunks } from '../mail-sending-service/index.ts';
 import {
   archiveMsgKey,
   chatIdOfChatEntry,
   chatIdOfMsgRow,
   chatRecordForArchive,
-  chunkRestoreSnapshot,
   groupSyncVersions,
   indexArchivedChats,
   indexArchivedMsgs,
@@ -702,69 +700,22 @@ export function chatBackupSrv({
       token: { ts: number; deviceId: string };
     };
   }): Promise<void> {
-    const sourceDeviceId = getAppDeviceId();
     const restoreId = generateFastRandomString(10);
-
-    // The record travels; the bytes do not, and `id` is cut out of every
-    // attachment by the one function that does that for phantoms as well.
-    const wireMsgs: SnapshotMsgEntry[] = msgs.map(msg => {
-      const attachments = attachmentsForPhantom(msg.attachments, sourceDeviceId);
-      return {
-        chatId: msg.chatId,
-        chatMessageId: msg.chatMessageId,
-        record: msg.record,
-        ...(attachments && { attachments }),
-        versions: msg.versions,
-      };
+    const chunks = await announceSnapshot({
+      db,
+      ownAddr,
+      sourceDeviceId: getAppDeviceId(),
+      snapshotId: restoreId,
+      mode,
+      snapshotTs,
+      restoreToken,
+      chats,
+      msgs,
+      deleted,
     });
-
-    const chunks = chunkRestoreSnapshot({ chats, msgs: wireMsgs, deleted });
-    if (chunks.length === 0) {
-      return;
+    if (chunks > 0) {
+      log.info(`Announced restore ${restoreId} to other devices in ${chunks} chunk(s)`);
     }
-
-    const phantoms = chunks.map((chunk, index) => {
-      // chatId of the ENVELOPE is the chat of the chunk's first record, and a
-      // chunk of deletions alone addresses this user's own chats through the
-      // first id it names. Our own branch ignores this field; an older build
-      // uses it only in its `chatRequired` gate, and with a chat that really
-      // exists it goes straight to `default:` - whereas a made-up sentinel
-      // would make it buffer every chunk in orphaned_messages for 15 days.
-      const envelopeChatId =
-        chunk.chats?.[0]?.chatId
-        ?? chunk.msgs?.[0]?.chatId
-        ?? chunk.deleted?.chatIds?.[0]
-        ?? chunk.deleted?.msgIds?.[0]?.chatId
-        ?? { isGroupChat: false, chatId: ownAddr };
-
-      return makeSystemEventPhantom({
-        chatId: envelopeChatId,
-        sourceDeviceId,
-        // Each chunk gets its own stamp: the journal orders rows by ts, and
-        // equal stamps would leave the order of the chunks to the row ids.
-        timestamp: snapshotTs + index,
-        chatSystemData: {
-          event: 'restore:snapshot',
-          value: {
-            mode,
-            snapshotTs,
-            restoreId,
-            part: index + 1,
-            of: chunks.length,
-            // In EVERY chunk, not only where records sit: a neighbour applies
-            // the chunks independently and each one that restores a record has
-            // to stamp it with the same token.
-            ...(restoreToken && { restoreToken }),
-            ...(chunk.chats && { chats: chunk.chats }),
-            ...(chunk.msgs && { msgs: chunk.msgs }),
-            ...(chunk.deleted && { deleted: chunk.deleted }),
-          },
-        },
-      });
-    });
-
-    log.info(`Announcing restore ${restoreId} to other devices in ${phantoms.length} chunk(s)`);
-    await queueSnapshotChunks({ db, ownAddr, restoreId, chunks: phantoms });
   }
 
   return { createBackupPlan, cancelBackupPlan, previewRestore, restoreBackupArchive };

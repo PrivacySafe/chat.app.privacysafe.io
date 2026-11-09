@@ -1,6 +1,6 @@
 {
   "name": "chat.app.privacysafe.io",
-  "version": "0.12.37",
+  "version": "0.12.38",
   "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
@@ -17,6 +17,7 @@
     "test:i18n-keys": "deno test -A --no-check ci/i18n-keys.test.ts",
     "test:blocked-inbox-retention": "deno test -A --no-check ci/blocked-inbox-retention.test.ts",
     "test:invitation-sync": "deno test -A --no-check ci/invitation-sync.test.ts",
+    "test:chats-resync": "deno test -A --no-check ci/chats-resync.test.ts",
     "run:mac:1": "bash ./run-test-mac.sh /Applications/privacysafe.app 2>&1 | tee live-user1-A.log",
     "run:mac:2": "bash ./run-test-mac1.sh /Applications/privacysafe.app 2>&1 | tee live-user1-B.log",
     "run:mac:3": "bash ./run-test-mac2.sh /Applications/privacysafe.app 2>&1 | tee live-user2.log",

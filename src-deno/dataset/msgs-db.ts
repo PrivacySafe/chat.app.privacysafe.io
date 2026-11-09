@@ -1231,6 +1231,31 @@ export async function msgsDb({
   }
 
   /**
+   * Distinct chats that buffered phantoms wait to exist (`targetMessageId` is
+   * NULL). The work-list of the start-up 'resync:chats' ask: each one is a chat
+   * some other device of the user has and this one never got.
+   */
+  function getChatlessOrphanChatIds(): ChatIdObj[] {
+    const [sqlValue] = auxiliarySqlite.db.exec(
+      `--sql
+      SELECT DISTINCT groupChatId, otoPeerCAddr
+      FROM orphaned_messages
+      WHERE targetMessageId IS NULL`,
+    );
+
+    if (!sqlValue) {
+      return [];
+    }
+
+    type ChatRow = { groupChatId: string | null; otoPeerCAddr: string | null };
+    return objectFromQueryExecResult<ChatRow>(sqlValue)
+      .filter(({ groupChatId, otoPeerCAddr }: ChatRow) => !!(groupChatId || otoPeerCAddr))
+      .map(({ groupChatId, otoPeerCAddr }: ChatRow) => (groupChatId
+        ? { isGroupChat: true, chatId: groupChatId }
+        : { isGroupChat: false, chatId: otoPeerCAddr! }));
+  }
+
+  /**
    * How many phantoms wait in the buffer for a chat or a record to appear.
    * Part of the startup diagnostics line: a number that stays high means this
    * device keeps receiving changes whose subject it never gets.
@@ -1672,6 +1697,7 @@ export async function msgsDb({
     getStuckMessagesForTargetMessageId,
     getStuckMessagesWithoutTarget,
     getStuckOrphanTargets,
+    getChatlessOrphanChatIds,
     countOrphanedSyncs,
     deleteOrphanedMessage,
     collectGarbageInAuxiliaryDB,

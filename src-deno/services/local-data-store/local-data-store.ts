@@ -29,6 +29,12 @@ const FOREIGN_INSTANCE_CHECK_MILLIS = 30_000;
  */
 const NOT_FOUND_READS_FOR_VERDICT = 3;
 
+/**
+ * How long an answered 'resync:chats' ask is remembered: longer than the 15
+ * days an ask can stay in the shared inbox and be replayed from there.
+ */
+const ANSWERED_CHATS_RESYNC_KEEP_MILLIS = 20 * 24 * 60 * 60 * 1000;
+
 export async function localDataStore(): Promise<LocalDataStore> {
   const proc = new SingleProc();
 
@@ -57,6 +63,9 @@ export async function localDataStore(): Promise<LocalDataStore> {
       data = {
         appDeviceId,
         lastReceivedMessageTimestamp: 0,
+        // A new device: it asks the user's other devices for every chat they
+        // have (see chat-resync.ts).
+        initialChatsSnapshotPending: true,
       };
     } else {
       data = await file.readJSON<DeliveryServiceData>();
@@ -269,6 +278,36 @@ export async function localDataStore(): Promise<LocalDataStore> {
     return () => clearInterval(interval);
   }
 
+  function isInitialChatsSnapshotPending(): boolean {
+    return !!data.initialChatsSnapshotPending;
+  }
+
+  async function noteInitialChatsSnapshotRequested(): Promise<void> {
+    if (!data.initialChatsSnapshotPending) {
+      return;
+    }
+    delete data.initialChatsSnapshotPending;
+    await saveOrderly();
+  }
+
+  function wasChatsResyncAnswered(requestId: string): boolean {
+    return !!data.answeredChatsResyncs?.[requestId];
+  }
+
+  async function noteChatsResyncAnswered(requestId: string, now = Date.now()): Promise<void> {
+    const answered: Record<string, number> = {};
+    // Pruned on every write: an ask older than this is gone from the shared
+    // inbox, so it cannot be replayed any more.
+    for (const [id, at] of Object.entries(data.answeredChatsResyncs ?? {})) {
+      if ((now - at) < ANSWERED_CHATS_RESYNC_KEEP_MILLIS) {
+        answered[id] = at;
+      }
+    }
+    answered[requestId] = now;
+    data.answeredChatsResyncs = answered;
+    await saveOrderly();
+  }
+
   function getCachedBlacklist(): string[] | undefined {
     return Array.isArray(data.cachedBlacklist) ? [...data.cachedBlacklist] : undefined;
   }
@@ -290,6 +329,10 @@ export async function localDataStore(): Promise<LocalDataStore> {
     hasSeenOtherDevice,
     noteOtherDeviceSeen,
     nextCallSessionId,
+    isInitialChatsSnapshotPending,
+    noteInitialChatsSnapshotRequested,
+    wasChatsResyncAnswered,
+    noteChatsResyncAnswered,
     getCachedBlacklist,
     setCachedBlacklist,
   };

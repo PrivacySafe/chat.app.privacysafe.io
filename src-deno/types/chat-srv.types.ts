@@ -226,6 +226,20 @@ export interface ChatSrv {
   requestResyncForStuckOrphans(): Promise<void>;
 
   /**
+   * Asks the user's other devices for whole chats this device does not have:
+   * all of them on the first run of this device, and the ones buffered orphans
+   * wait for. Run in the same delayed start-up pass as the record asks (see
+   * chat-service/utils/chat-resync.ts).
+   */
+  requestChatsResyncAtStartup(): Promise<void>;
+
+  /**
+   * The first-run ask for all chats, if it is still pending. Called right at
+   * start-up: a new device shows an empty chat list until it is answered.
+   */
+  requestInitialChatsSnapshot(): Promise<void>;
+
+  /**
    * Installs the "a call is going on" check that makes resync asks and answers
    * step aside (see ResyncCtx.isBusy). Called from startup wiring: the video
    * chat service, which owns the answer, starts after this service.

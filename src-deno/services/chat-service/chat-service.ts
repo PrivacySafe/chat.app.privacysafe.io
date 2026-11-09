@@ -29,6 +29,7 @@ import { getIncomingMessage, saveThumbnailWithinLimit } from './utils/_msgs-rela
 import { processOrphanedForChatCreation } from './utils/handle-incoming-sync.ts';
 import { chatBackupSrv } from '../backup-service/chat-backup-srv.ts';
 import { requestResyncForStuckOrphans } from './utils/msg-resync.ts';
+import { requestChatsResyncAtStartup, requestInitialChatsSnapshot } from './utils/chat-resync.ts';
 import type { SyncActivityTracker } from '../../utils/sync-activity.ts';
 import { createChatSrvCtx } from './chat-srv-ctx.ts';
 import { makeIncomingMessages } from './incoming-messages.ts';
@@ -147,6 +148,8 @@ export async function chatService(
     countSyncPhantomsInDelivery: async () => countSyncPhantomsInDelivery(),
     getSyncActivityState: async () => syncActivity.snapshot(),
     requestResyncForStuckOrphans: () => requestResyncForStuckOrphans(resyncCtx),
+    requestChatsResyncAtStartup: () => requestChatsResyncAtStartup(resyncCtx),
+    requestInitialChatsSnapshot: () => requestInitialChatsSnapshot(resyncCtx),
     setResyncBusyCheck: isBusy => {
       resyncCtx.isBusy = isBusy;
     },

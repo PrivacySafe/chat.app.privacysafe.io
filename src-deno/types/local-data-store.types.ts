@@ -36,6 +36,15 @@ export interface LocalDataStore {
   noteOtherDeviceSeen(deviceId: string): Promise<void>;
   nextCallSessionId(hostAddr: string): Promise<string>;
   /**
+   * Whether this device still has to ask its siblings for all of their chats:
+   * true from its first run until that ask is queued (see chat-resync.ts).
+   */
+  isInitialChatsSnapshotPending(): boolean;
+  noteInitialChatsSnapshotRequested(): Promise<void>;
+  /** Whether this device has already answered the 'resync:chats' ask. */
+  wasChatsResyncAnswered(requestId: string): boolean;
+  noteChatsResyncAnswered(requestId: string, now?: number): Promise<void>;
+  /**
    * The blacklist as it was last seen, or undefined when none was ever stored.
    *
    * The two answers must stay distinguishable: an empty list means "nobody was

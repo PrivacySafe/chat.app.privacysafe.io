@@ -158,7 +158,10 @@ chat-backup-0_12_15-2026-09-06_18-20.zip        # точки в версии →
    тронуто, под **свежим** токеном: удаление должно победить на соседях.
 6. `applyRestoreSnapshot(...)`.
 7. `await db.flush()`, затем `announceRestore(...)` — чанк не должен уйти раньше изменения, о
-   котором он говорит.
+   котором он говорит. Нарезка и отправка чанков — общая функция `announceSnapshot()` в
+   [snapshot-announce.ts](../src-deno/services/chat-service/utils/snapshot-announce.ts): тем же
+   носителем устройство отвечает на запрос целых чатов `resync:chats` (режим `merge` +
+   `applyNewerAspects`, см. §5.2.2 в [04-multi-device-sync.md](./04-multi-device-sync.md)).
 8. `finally`: `endBulkReplay()`.
 
 Флага `isRestoreInProgress` в БД, в отличие от inbox, **нет**: там он нужен, потому что restore

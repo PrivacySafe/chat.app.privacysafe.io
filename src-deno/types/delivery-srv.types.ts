@@ -52,6 +52,27 @@ export interface DeliveryServiceData {
     at: number;
   };
   /**
+   * Set when this file is created, i.e. on the first run of this device, and
+   * removed once the 'resync:chats' ask for all chats is in the phantom
+   * journal (from there it is delivered however long that takes).
+   *
+   * A flag that is removed, rather than "the file was new", because the first
+   * run can end before the ask is queued, and the second run must still ask.
+   * A file written by an older build has no flag and never asks: that device
+   * is not new, and its missing chats are asked for one by one as their
+   * phantoms arrive (see chat-resync.ts).
+   */
+  initialChatsSnapshotPending?: true;
+  /**
+   * 'resync:chats' asks this device has answered: requestId -> when.
+   *
+   * Persisted, unlike the per-session dedup of record asks, because an answer
+   * here is the whole history of the chats asked for, and an ask stays in the
+   * shared inbox - and is replayed by catch-up scans - for up to 15 days.
+   * Entries older than that are pruned.
+   */
+  answeredChatsResyncs?: Record<string, number>;
+  /**
    * Cached blacklist of contact email addresses persisted so that Deno can
    * immediately filter incoming messages on startup without waiting for RPC
    * to the contacts app.

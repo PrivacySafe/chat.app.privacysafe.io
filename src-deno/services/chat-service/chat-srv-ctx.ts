@@ -146,7 +146,19 @@ export async function createChatSrvCtx({
    * per-session dedup of asks must be one for all the places that can notice
    * a missing record - incoming sync handling and the start-up pass alike.
    */
-  const resyncCtx = makeResyncCtx({ db: data, ownAddr, getAppDeviceId, nextSyncStamp });
+  const resyncCtx = makeResyncCtx({
+    db: data,
+    ownAddr,
+    getAppDeviceId,
+    nextSyncStamp,
+    // The persisted side of 'resync:chats' (see chat-resync.ts).
+    chatsResyncState: {
+      isInitialPending: () => localDataStoreSrv.isInitialChatsSnapshotPending(),
+      noteInitialRequested: () => localDataStoreSrv.noteInitialChatsSnapshotRequested(),
+      wasAnswered: requestId => localDataStoreSrv.wasChatsResyncAnswered(requestId),
+      noteAnswered: requestId => localDataStoreSrv.noteChatsResyncAnswered(requestId),
+    },
+  });
 
   const chatCreation = await _chatCreation({
     ownAddr,
