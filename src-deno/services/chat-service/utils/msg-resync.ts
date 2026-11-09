@@ -98,10 +98,14 @@ export interface ResyncCtx {
 }
 
 export interface ChatsResyncState {
-  isInitialPending(): boolean;
-  noteInitialRequested(): Promise<void>;
-  wasAnswered(requestId: string): boolean;
-  noteAnswered(requestId: string): Promise<void>;
+  /** This device is new, has had no answer yet, and the last ask is old enough. */
+  isInitialAskDue(): Promise<boolean>;
+  noteInitialAsked(requestId: string): Promise<void>;
+  /** Ends the wait if `requestId` is one of the asks; returns whether it did. */
+  noteInitialAnswered(requestId: string): Promise<boolean>;
+  /** Keys of answered asks: a requestId, or `all@<deviceId>` for an ask for all chats. */
+  wasAnswered(key: string): boolean;
+  noteAnswered(key: string): Promise<void>;
 }
 
 export function makeResyncCtx(

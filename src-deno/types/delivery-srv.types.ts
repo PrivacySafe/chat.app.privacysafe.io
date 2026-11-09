@@ -52,17 +52,29 @@ export interface DeliveryServiceData {
     at: number;
   };
   /**
-   * Set when this file is created, i.e. on the first run of this device, and
-   * removed once the 'resync:chats' ask for all chats is in the phantom
-   * journal (from there it is delivered however long that takes).
-   *
-   * A flag that is removed, rather than "the file was new", because the first
-   * run can end before the ask is queued, and the second run must still ask.
-   * A file written by an older build has no flag and never asks: that device
-   * is not new, and its missing chats are asked for one by one as their
-   * phantoms arrive (see chat-resync.ts).
+   * Written by 0.12.38 on the first run of a device; read only to carry such
+   * a device over into initialChatsSnapshot below.
    */
   initialChatsSnapshotPending?: true;
+  /**
+   * Present while this device - new when this file was created - still waits
+   * for its first answer to the 'resync:chats' ask for all chats. Removed when
+   * an answer to any of its asks arrives, or when the asking window is over.
+   *
+   * Kept until an ANSWER, not until the ask is sent: when the ask goes out,
+   * the other devices may be switched off or on a build that does not know
+   * the ask (2026-11-09: the phone was on an older build, and the desktop's
+   * single ask was never answered). The ask is repeated on later starts (see
+   * chat-resync.ts). A file written by an older build has no such field and
+   * never asks for everything: that device is not new.
+   */
+  initialChatsSnapshot?: {
+    /** When the first ask went out; there are no asks past the window. */
+    firstAskAt?: number;
+    lastAskAt?: number;
+    /** Every ask sent; an answer to any of them ends the wait. */
+    requestIds: string[];
+  };
   /**
    * 'resync:chats' asks this device has answered: requestId -> when.
    *

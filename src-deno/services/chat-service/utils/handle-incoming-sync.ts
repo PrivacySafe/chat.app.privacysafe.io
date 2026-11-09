@@ -50,7 +50,7 @@ import {
   statusForSyncedOutgoingMsg,
 } from './_msgs-related-methods.ts';
 import { requestMsgRecordResync, respondToMsgRecordResync, type ResyncCtx } from './msg-resync.ts';
-import { requestChatsResync, respondToChatsResync } from './chat-resync.ts';
+import { noteChatsResyncAnswer, requestChatsResync, respondToChatsResync } from './chat-resync.ts';
 import { applyRestoreSnapshot } from './restore-snapshot.ts';
 import {
   applyIfNewer,
@@ -971,6 +971,10 @@ async function handleSystemSync({
           + `messages +${applied.messagesCreated}/~${applied.messagesUpdated}, `
           + `${applied.skipped} skipped`,
       );
+      // An answer to this device's ask for all chats ends its repeats.
+      if (value.applyNewerAspects && resync) {
+        await noteChatsResyncAnswer(resync, value.restoreId, sourceDeviceId);
+      }
       break;
     }
 

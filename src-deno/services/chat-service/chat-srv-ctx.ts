@@ -153,10 +153,11 @@ export async function createChatSrvCtx({
     nextSyncStamp,
     // The persisted side of 'resync:chats' (see chat-resync.ts).
     chatsResyncState: {
-      isInitialPending: () => localDataStoreSrv.isInitialChatsSnapshotPending(),
-      noteInitialRequested: () => localDataStoreSrv.noteInitialChatsSnapshotRequested(),
-      wasAnswered: requestId => localDataStoreSrv.wasChatsResyncAnswered(requestId),
-      noteAnswered: requestId => localDataStoreSrv.noteChatsResyncAnswered(requestId),
+      isInitialAskDue: () => localDataStoreSrv.isInitialChatsSnapshotAskDue(),
+      noteInitialAsked: requestId => localDataStoreSrv.noteInitialChatsSnapshotAsked(requestId),
+      noteInitialAnswered: requestId => localDataStoreSrv.noteInitialChatsSnapshotAnswered(requestId),
+      wasAnswered: key => localDataStoreSrv.wasChatsResyncAnswered(key),
+      noteAnswered: key => localDataStoreSrv.noteChatsResyncAnswered(key),
     },
   });
 

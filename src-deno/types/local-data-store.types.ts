@@ -36,11 +36,14 @@ export interface LocalDataStore {
   noteOtherDeviceSeen(deviceId: string): Promise<void>;
   nextCallSessionId(hostAddr: string): Promise<string>;
   /**
-   * Whether this device still has to ask its siblings for all of their chats:
-   * true from its first run until that ask is queued (see chat-resync.ts).
+   * Whether this device should ask its siblings for all of their chats now:
+   * it is new and has had no answer yet, and the last ask is old enough (see
+   * chat-resync.ts). Ends the wait once the asking window is over.
    */
-  isInitialChatsSnapshotPending(): boolean;
-  noteInitialChatsSnapshotRequested(): Promise<void>;
+  isInitialChatsSnapshotAskDue(now?: number): Promise<boolean>;
+  noteInitialChatsSnapshotAsked(requestId: string, now?: number): Promise<void>;
+  /** Ends the wait if `requestId` is one of this device's asks; returns whether it did. */
+  noteInitialChatsSnapshotAnswered(requestId: string): Promise<boolean>;
   /** Whether this device has already answered the 'resync:chats' ask. */
   wasChatsResyncAnswered(requestId: string): boolean;
   noteChatsResyncAnswered(requestId: string, now?: number): Promise<void>;

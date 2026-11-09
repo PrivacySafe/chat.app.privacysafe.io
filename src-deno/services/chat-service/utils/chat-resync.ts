@@ -34,8 +34,11 @@
  * merge rules are the restore's, and there is no second set of them.
  *
  * When this device asks:
- *  - on its first run, for all chats (initialChatsSnapshotPending in the local
- *    data file; kept until the ask is in the phantom journal);
+ *  - while it is new, for all chats: on its first run, and again on later
+ *    starts (at most hourly, for up to 15 days) until an answer to any of its
+ *    asks arrives (initialChatsSnapshot in the local data file). One ask was
+ *    not enough: on 2026-11-09 the only device with chats was on an older
+ *    build when the ask came, and nothing ever asked again;
  *  - when a phantom of a chat it does not have is buffered, for that chat;
  *  - in the start-up pass, for every chat the orphan buffer still waits for.
  */
@@ -52,6 +55,19 @@ import { chatEntityId } from './sync-versions.ts';
 /** Key of the ask for all chats in ResyncCtx.requestedChats. */
 const ALL_CHATS = '*';
 
+/** An answer's snapshot id is this prefix plus the id of the ask it answers. */
+const RESYNC_SNAPSHOT_PREFIX = 'resync-';
+
+/**
+ * Key under which an answer to an ask for ALL chats is remembered, besides
+ * the ask's own id: a new device repeats that ask until it is answered, and
+ * a device that comes online with several of the repeats in its inbox must
+ * not send its whole history once per repeat.
+ */
+function allChatsAnswerKey(askingDeviceId: string): string {
+  return `all@${askingDeviceId}`;
+}
+
 /**
  * Most chats named in one ask. More than this many missing chats is a device
  * that should have asked for all of them; the rest go in the next session.
@@ -65,18 +81,22 @@ const BUSY_ANSWER_RETRY_MILLIS = 5 * 60_000;
  * Asks the user's other devices for the given chats, or - with no list - for
  * all of their chats.
  *
- * Returns false when no ask went out: every chat named is already here, was
- * asked for in this session, or was deleted here (a tombstone would make the
- * answer a no-op anyway); or a call is on, in which case nothing is marked
- * and a later pass asks again. Failures are logged and never thrown - asking
- * must not break the processing that noticed the missing chat.
+ * Returns the id of the ask, or undefined when none went out: every chat
+ * named is already here, was asked for in this session, or was deleted here (a
+ * tombstone would make the answer a no-op anyway); or a call is on, in which
+ * case nothing is marked and a later pass asks again. Failures are logged and
+ * never thrown - asking must not break the processing that noticed the
+ * missing chat.
  */
-export async function requestChatsResync(ctx: ResyncCtx, chatIds?: ChatIdObj[]): Promise<boolean> {
+export async function requestChatsResync(
+  ctx: ResyncCtx,
+  chatIds?: ChatIdObj[],
+): Promise<string | undefined> {
   let wanted: ChatIdObj[] | undefined;
   if (chatIds) {
     if (ctx.requestedChats.has(ALL_CHATS)) {
       // Everything was asked for already in this session.
-      return false;
+      return undefined;
     }
     const seen = new Set<string>();
     wanted = chatIds.filter(chatId => {
@@ -89,14 +109,14 @@ export async function requestChatsResync(ctx: ResyncCtx, chatIds?: ChatIdObj[]):
         && !ctx.db.getSyncVersion('chat', chatEntityId(chatId), 'deleted');
     }).slice(0, MAX_CHATS_PER_RESYNC_ASK);
     if (wanted.length === 0) {
-      return false;
+      return undefined;
     }
   } else if (ctx.requestedChats.has(ALL_CHATS)) {
-    return false;
+    return undefined;
   }
 
   if (ctx.isBusy?.()) {
-    return false;
+    return undefined;
   }
 
   const requestId = generateFastRandomString(12);
@@ -133,27 +153,50 @@ export async function requestChatsResync(ctx: ResyncCtx, chatIds?: ChatIdObj[]):
       wanted
         ? `Asked other devices for ${wanted.length} chat(s) this device does not have `
           + `(${wanted.map(chatIdToString).join(', ')}), request ${requestId}`
-        : `Asked other devices for all of their chats (first run of this device), request ${requestId}`,
+        : `Asked other devices for all of their chats (new device, no answer yet), request ${requestId}`,
     );
-    return true;
+    return requestId;
   } catch (err) {
     await w3n.log('error', `Failed to ask other devices for chats, request ${requestId}`, err);
-    return false;
+    return undefined;
   }
 }
 
 /**
- * The first-run ask for all chats, if it is still pending. The flag is
- * dropped only once the ask is in the journal: a first run that ends earlier
- * leaves it for the next one.
+ * The ask for all chats of a new device, when one is due: no answer has come
+ * to its earlier asks, the last one is old enough, and the asking window is
+ * not over (see isInitialChatsSnapshotAskDue in the local data store).
  */
 export async function requestInitialChatsSnapshot(ctx: ResyncCtx): Promise<void> {
   const state = ctx.chatsResyncState;
-  if (!state?.isInitialPending()) {
+  if (!state || !(await state.isInitialAskDue())) {
     return;
   }
-  if (await requestChatsResync(ctx)) {
-    await state.noteInitialRequested();
+  const requestId = await requestChatsResync(ctx);
+  if (requestId) {
+    await state.noteInitialAsked(requestId);
+  }
+}
+
+/**
+ * Called for every chunk of a snapshot that answers a 'resync:chats' ask:
+ * an answer to one of this device's asks for all chats ends its wait, and no
+ * more such asks go out.
+ */
+export async function noteChatsResyncAnswer(
+  ctx: ResyncCtx,
+  snapshotId: string,
+  answeringDeviceId: string,
+): Promise<void> {
+  if (!snapshotId.startsWith(RESYNC_SNAPSHOT_PREFIX)) {
+    return;
+  }
+  const requestId = snapshotId.substring(RESYNC_SNAPSHOT_PREFIX.length);
+  if (await ctx.chatsResyncState?.noteInitialAnswered(requestId)) {
+    await w3n.log(
+      'info',
+      `Device ${answeringDeviceId} answered the ask for all chats (request ${requestId}); not asking any more`,
+    );
   }
 }
 
@@ -189,6 +232,17 @@ export async function respondToChatsResync(
   if (!requestId || state?.wasAnswered(requestId)) {
     return;
   }
+  // An ask for all chats is repeated by a new device until it is answered;
+  // this device answers that device once.
+  const deviceKey = chatIds ? undefined : allChatsAnswerKey(askingDeviceId);
+  if (deviceKey && state?.wasAnswered(deviceKey)) {
+    await state.noteAnswered(requestId);
+    await w3n.log(
+      'info',
+      `Chats resync ${requestId} of device ${askingDeviceId}: all chats were already sent to that device`,
+    );
+    return;
+  }
 
   if (ctx.isBusy?.()) {
     // A snapshot is many messages; it must not compete with the signalling of
@@ -217,7 +271,7 @@ export async function respondToChatsResync(
         db: ctx.db,
         ownAddr: ctx.ownAddr,
         sourceDeviceId: ctx.getAppDeviceId(),
-        snapshotId: `resync-${requestId}`,
+        snapshotId: `${RESYNC_SNAPSHOT_PREFIX}${requestId}`,
         mode: 'merge',
         snapshotTs: await ctx.nextSyncStamp(),
         applyNewerAspects: true,
@@ -227,8 +281,13 @@ export async function respondToChatsResync(
     }
 
     // Remembered even when this device had nothing to send: the answer to a
-    // replay of the same ask would be the same silence.
+    // replay of the same ask would be the same silence. The device key only
+    // when something was sent - a device that had nothing then may have chats
+    // by the time the next repeat comes.
     await state?.noteAnswered(requestId);
+    if (deviceKey && (chats.length > 0)) {
+      await state?.noteAnswered(deviceKey);
+    }
     await w3n.log(
       'info',
       (chats.length > 0)
