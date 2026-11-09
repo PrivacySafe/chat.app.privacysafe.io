@@ -28,6 +28,8 @@ import {
 import { getIncomingMessage, saveThumbnailWithinLimit } from './utils/_msgs-related-methods.ts';
 import { processOrphanedForChatCreation } from './utils/handle-incoming-sync.ts';
 import { chatBackupSrv } from '../backup-service/chat-backup-srv.ts';
+import { autoBackupService } from '../backup-service/auto-backup.ts';
+import { syncedAutoBackupStorage } from '../backup-service/auto-backup-storage.ts';
 import { requestResyncForStuckOrphans } from './utils/msg-resync.ts';
 import { requestChatsResyncAtStartup, requestInitialChatsSnapshot } from './utils/chat-resync.ts';
 import type { SyncActivityTracker } from '../../utils/sync-activity.ts';
@@ -95,6 +97,22 @@ export async function chatService(
   });
 
   /**
+   * The automatic backup: this device's file in the synced storage, and the
+   * restore of a new installation from the files of all devices. Built here,
+   * started from index.ts (startAutoBackup) once the call check exists.
+   */
+  let autoBackupBusyCheck: (() => boolean) | undefined;
+  const autoBackup = autoBackupService({
+    db: data,
+    storage: syncedAutoBackupStorage(),
+    store: localDataStoreSrv,
+    getAppVersion: () => w3n.myVersion(),
+    isBusy: () => !!autoBackupBusyCheck?.(),
+    restoreFiles: backupSrv.restoreFromAutoBackupFiles,
+    emitInfo: info => emitEventAfterAction.common({ updatedEntityType: 'auto-backup', event: 'changed', info }),
+  });
+
+  /**
    * The main window's log lines, printed through this component so that the
    * whole run reads as one story (see ChatSrv.logFromGui).
    *
@@ -150,6 +168,14 @@ export async function chatService(
     requestResyncForStuckOrphans: () => requestResyncForStuckOrphans(resyncCtx),
     requestChatsResyncAtStartup: () => requestChatsResyncAtStartup(resyncCtx),
     requestInitialChatsSnapshot: () => requestInitialChatsSnapshot(resyncCtx),
+    startAutoBackup: isBusy => {
+      autoBackupBusyCheck = isBusy;
+      autoBackup.start();
+    },
+    getAutoBackupInfo: async () => autoBackup.getInfo(),
+    setAppSettings: autoBackup.setSettings,
+    listAutoBackups: autoBackup.listAutoBackups,
+    restoreFromAutoBackups: autoBackup.restoreFromAutoBackups,
     setResyncBusyCheck: isBusy => {
       resyncCtx.isBusy = isBusy;
     },

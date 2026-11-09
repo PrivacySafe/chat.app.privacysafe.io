@@ -14,6 +14,9 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+import type { AppSettings } from '../../types/auto-backup.types.ts';
+import type { AutoBackupState } from './delivery-srv.types.ts';
+
 export interface LocalDataStore {
   getAppDeviceId(): string;
   /**
@@ -25,6 +28,8 @@ export interface LocalDataStore {
   getLastReceivedMessageTimestamp(): number;
   setLastReceivedMessageTimestamp(ts: number): Promise<void>;
   nextSyncStamp(): Promise<number>;
+  /** The hybrid logical clock as it stands: the greatest stamp issued or seen here. */
+  getSyncClock(): number;
   observeSyncStamp(ts: number): Promise<void>;
   /**
    * Whether a phantom from another device of this user has ever been seen here.
@@ -56,6 +61,11 @@ export interface LocalDataStore {
    * baseline - conflating them would make the first run of a build read every
    * already-blocked contact as blocked just now.
    */
+  /** Settings with the defaults filled in. */
+  getAppSettings(): AppSettings;
+  setAppSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+  getAutoBackupState(): AutoBackupState;
+  setAutoBackupState(state: AutoBackupState): Promise<void>;
   getCachedBlacklist(): string[] | undefined;
   setCachedBlacklist(list: string[]): Promise<void>;
 }

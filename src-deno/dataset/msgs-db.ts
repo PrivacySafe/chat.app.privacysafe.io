@@ -824,25 +824,33 @@ export async function msgsDb({
    * as a row of NULLs instead of null. The GUI then showed a phantom last
    * message with an empty sender for a chat whose history had just been cleared.
    */
-  function getLatestMsgInChat({ chatId }: ChatIdObj): MsgDbEntry | null {
-    const query = `--sql
-      SELECT *, groupChatId || otoPeerCAddr AS chatId
+  // Per-column equality, as getUnreadMsgsCountIn below: the (groupChatId,
+  // timestamp) and (otoPeerCAddr, timestamp) indexes answer it with one seek.
+  // It was a filter on `groupChatId || otoPeerCAddr`, which no index serves -
+  // a scan of the whole table on every findChat, and so a restore of N
+  // messages quadratic in N (50 thousand took minutes; doc/08 §11.7).
+  function getLatestMsgInChat({ isGroupChat, chatId }: ChatIdObj): MsgDbEntry | null {
+    const whereParams = queryParamsFrom<Pick<MsgDbEntry, 'groupChatId' | 'otoPeerCAddr'>>(
+      {
+        groupChatId: isGroupChat ? chatId : null,
+        otoPeerCAddr: !isGroupChat ? chatId : null,
+      },
+      msgsTabFields,
+    );
+    const [sqlValue] = sqlite.db.exec(
+      `--sql
+      SELECT *
       FROM messages
-      WHERE chatId=$chatId
+      WHERE ${andEqualExprFor(whereParams)}
       ORDER BY timestamp DESC
-      LIMIT 1
-    `;
-
-    const [sqlValue] = sqlite.db.exec(query, { $chatId: chatId });
+      LIMIT 1`,
+      whereParams,
+    );
     if (!sqlValue) {
       return null;
     }
-    const [msg] = fromQueryResult<MsgDbEntry & { chatId?: string }>(sqlValue, msgsTabFields);
-    if (!msg) {
-      return null;
-    }
-    delete msg.chatId;
-    return msg;
+    const [msg] = fromQueryResult<MsgDbEntry>(sqlValue, msgsTabFields);
+    return msg ?? null;
   }
 
   function getUnreadMsgsCountIn({ isGroupChat, chatId }: ChatIdObj): number {

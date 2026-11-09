@@ -14,6 +14,31 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+import type { AppSettings } from '../../types/auto-backup.types.ts';
+
+/** This device's side of the automatic backup (see backup-service/auto-backup.ts). */
+export interface AutoBackupState {
+  /** When this device's file was last uploaded (wall clock). */
+  lastAt?: number;
+  /** HLC stamp of the last uploaded file: a greater clock means something changed since. */
+  lastSnapshotTs?: number;
+  /**
+   * Newest incoming message at the last upload. Received messages do not move
+   * the HLC, so the clock alone would miss a day of nothing but incoming mail.
+   */
+  lastIncomingTs?: number;
+  /** The last failure; dropped by the next success. */
+  lastError?: { at: number; message: string };
+  /** When files of dead devices were last looked for. */
+  lastGcAt?: number;
+  /**
+   * Set on a new device (no local data file yet): it restores from the
+   * automatic backups of the user's devices before writing one of its own.
+   * Removed once that restore has run, or found nothing to restore.
+   */
+  restorePending?: true;
+}
+
 export interface DeliveryServiceData {
   appDeviceId: string;
   lastReceivedMessageTimestamp: number;
@@ -84,6 +109,9 @@ export interface DeliveryServiceData {
    * Entries older than that are pruned.
    */
   answeredChatsResyncs?: Record<string, number>;
+  /** Settings of the app on this device; absent fields take APP_SETTINGS_DEFAULT. */
+  appSettings?: Partial<AppSettings>;
+  autoBackup?: AutoBackupState;
   /**
    * Cached blacklist of contact email addresses persisted so that Deno can
    * immediately filter incoming messages on startup without waiting for RPC

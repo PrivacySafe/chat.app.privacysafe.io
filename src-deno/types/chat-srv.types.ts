@@ -52,6 +52,12 @@ import type {
   RestorePreview,
 } from '../../types/backup.types.ts';
 import type { GuiLogLine } from '../../shared-libs/log-relay.ts';
+import type {
+  AppSettings,
+  AutoBackupInfo,
+  AutoBackupListing,
+  AutoBackupRestoreOutcome,
+} from '../../types/auto-backup.types.ts';
 import type { SyncPhantomReleaseResult } from '../services/mail-sending-service/sync-phantoms.ts';
 import type { ChatDbEntry, ChatSettings, GroupChatDbEntry, OTOChatDbEntry } from './chat-db.types.ts';
 import type { MsgDbEntry } from './msgs-db.types.ts';
@@ -238,6 +244,29 @@ export interface ChatSrv {
    * start-up: a new device shows an empty chat list until it is answered.
    */
   requestInitialChatsSnapshot(): Promise<void>;
+
+  /**
+   * Starts the automatic backup (see backup-service/auto-backup.ts): the
+   * first-run restore of a new installation, this device's file every
+   * AUTO_BACKUP_INTERVAL_MILLIS, the removal of dead devices' files. Called
+   * from start-up wiring once the call check below is in place.
+   */
+  startAutoBackup(isBusy: () => boolean): void;
+
+  /** Settings of the app on this device, and where its automatic backup stands. */
+  getAutoBackupInfo(): Promise<AutoBackupInfo>;
+
+  setAppSettings(patch: Partial<AppSettings>): Promise<AutoBackupInfo>;
+
+  /** Every automatic backup in the synced storage, newest first. Reads them all. */
+  listAutoBackups(): Promise<AutoBackupListing>;
+
+  /**
+   * Restores from the automatic backups of other devices - the ones named, or
+   * all of them - as a merge. Progress comes as 'restore-progress' events with
+   * `source: 'auto-backup'`, closed by this component.
+   */
+  restoreFromAutoBackups(deviceIds?: string[]): Promise<AutoBackupRestoreOutcome>;
 
   /**
    * Installs the "a call is going on" check that makes resync asks and answers

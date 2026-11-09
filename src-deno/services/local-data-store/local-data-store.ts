@@ -15,6 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { DELIVERY_SERVICE_DATA_FILE_NAME } from '../../../shared-libs/constants/index.ts';
+import { APP_SETTINGS_DEFAULT } from '../../../shared-libs/constants/auto-backup.ts';
+import type { AppSettings } from '../../../types/auto-backup.types.ts';
+import type { AutoBackupState } from '../../types/delivery-srv.types.ts';
 import { SingleProc } from '../../../shared-libs/processes/single.ts';
 import { randomStr } from '../../../shared-libs/randomStr.ts';
 import type { LocalDataStore, DeliveryServiceData } from '../../types';
@@ -81,6 +84,10 @@ export async function localDataStore(): Promise<LocalDataStore> {
         // A new device: it asks the user's other devices for every chat they
         // have, until one of them answers (see chat-resync.ts).
         initialChatsSnapshot: { requestIds: [] },
+        // ... and restores from the automatic backups the user's devices left
+        // in the synced storage - the only copy of a chat whose device is gone
+        // (see backup-service/auto-backup.ts).
+        autoBackup: { restorePending: true },
       };
     } else {
       data = await file.readJSON<DeliveryServiceData>();
@@ -151,6 +158,10 @@ export async function localDataStore(): Promise<LocalDataStore> {
       data.lastSyncClockTs = ts;
       await saveOrderly();
     }
+  }
+
+  function getSyncClock(): number {
+    return data.lastSyncClockTs ?? 0;
   }
 
   /**
@@ -366,6 +377,25 @@ export async function localDataStore(): Promise<LocalDataStore> {
     await saveOrderly();
   }
 
+  function getAppSettings(): AppSettings {
+    return { ...APP_SETTINGS_DEFAULT, ...(data.appSettings ?? {}) };
+  }
+
+  async function setAppSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+    data.appSettings = { ...(data.appSettings ?? {}), ...patch };
+    await saveOrderly();
+    return getAppSettings();
+  }
+
+  function getAutoBackupState(): AutoBackupState {
+    return { ...(data.autoBackup ?? {}) };
+  }
+
+  async function setAutoBackupState(state: AutoBackupState): Promise<void> {
+    data.autoBackup = { ...state };
+    await saveOrderly();
+  }
+
   function getCachedBlacklist(): string[] | undefined {
     return Array.isArray(data.cachedBlacklist) ? [...data.cachedBlacklist] : undefined;
   }
@@ -383,6 +413,7 @@ export async function localDataStore(): Promise<LocalDataStore> {
     getLastReceivedMessageTimestamp,
     setLastReceivedMessageTimestamp,
     nextSyncStamp,
+    getSyncClock,
     observeSyncStamp,
     hasSeenOtherDevice,
     noteOtherDeviceSeen,
@@ -392,6 +423,10 @@ export async function localDataStore(): Promise<LocalDataStore> {
     noteInitialChatsSnapshotAnswered,
     wasChatsResyncAnswered,
     noteChatsResyncAnswered,
+    getAppSettings,
+    setAppSettings,
+    getAutoBackupState,
+    setAutoBackupState,
     getCachedBlacklist,
     setCachedBlacklist,
   };

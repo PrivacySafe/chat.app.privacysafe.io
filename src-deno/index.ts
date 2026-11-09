@@ -216,6 +216,11 @@ try {
   }, delayMillis);
   scheduleResyncPass(RESYNC_PASS_DELAY_MILLIS);
 
+  // The automatic backup: a new installation restores from the files of the
+  // user's devices, and every device writes its own (see
+  // backup-service/auto-backup.ts). Its writes yield to a call, like resync.
+  chatsSrv.startAutoBackup(() => videoChatSrv.hasAnyCallInProgress());
+
   // A new device asks for all chats right away rather than with the pass above:
   // until it is answered its chat list holds only what the last 15 days of the
   // shared inbox could tell it (see chat-service/utils/chat-resync.ts). The ask

@@ -835,7 +835,7 @@ async function writeAspectTokens(
  * the tokens alone would understate the age of everything an archive holds -
  * and a tombstone older than the archive would win over it.
  */
-function newestToken(
+export function newestToken(
   versions: Partial<Record<SyncAspect, BackedUpSyncToken>>,
   ...wallClockStamps: number[]
 ): SyncToken {
