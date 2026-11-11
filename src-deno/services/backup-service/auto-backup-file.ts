@@ -17,7 +17,12 @@
 // The file of one device's automatic backup: built from the database, turned
 // into bytes and back. Pure apart from the database read, so that the specs
 // can take it apart (ci/auto-backup.test.ts).
-import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
+// 'fflate/browser', not 'fflate': the bundle is built for platform 'node', and
+// there fflate's node entry opens with `import { createRequire } from "module"`.
+// The platform's deno has no node built-ins, so that import failed the whole
+// component at load - nothing got exposed, and the window timed out on
+// AppChatsInternal (0.12.42). The browser entry imports nothing.
+import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate/browser';
 import type { AutoBackupFile } from '../../../types/auto-backup.types.ts';
 import type { BackedUpTombstone, SnapshotMsgEntry } from '../../../types/backup.types.ts';
 import type { DB } from '../../types/index.ts';
